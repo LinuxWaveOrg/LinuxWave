@@ -1,0 +1,5 @@
+des: "lsd - the next generation ls command"
+hom: "https://github.com/lsd-rs/lsd"
+lic: "Apache-2.0"
+aut: "Abin Simon"
+bin_name: "lsd"

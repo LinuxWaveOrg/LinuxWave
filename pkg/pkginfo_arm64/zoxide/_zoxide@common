@@ -1,0 +1,5 @@
+des: "zoxide - a smarter cd command"
+hom: "https://github.com/ajeetdsouza/zoxide"
+lic: "MIT"
+aut: "Ajeet D'Souza"
+bin_name: "zoxide"

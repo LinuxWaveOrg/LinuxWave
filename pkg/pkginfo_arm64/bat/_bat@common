@@ -1,0 +1,5 @@
+des: "bat - a cat clone with syntax highlighting and Git integration"
+hom: "https://github.com/sharkdp/bat"
+lic: "Apache-2.0 OR MIT"
+aut: "David Peter"
+bin_name: "bat"
