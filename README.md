@@ -43,7 +43,7 @@ source ~/.zshrc
 **Requirements: Python (3.13 and above), Xcode Command Line Tools (14.0 and above).**
 
 ## 🌊 Download Directory 
-Installed binaries are stored in:    
+Installed binaries are stored in (options):    
 ```
 1. ~/.local/macwave
 2. /opt/macwave
@@ -105,14 +105,6 @@ wave install <pkgname>@<version>   Download certain version(s) of a package
   <img src="images/demo1.png" alt="demo1" width="80%" style="max-width: 720px;">
 </p>
 
-<p align="center">
-  <img src="images/demo2.png" alt="demo2" width="80%" style="max-width: 720px;">
-</p>
-
-<p align="center">
-  <img src="images/demo3.png" alt="demo" width="80%" style="max-width: 720px;">
-</p>
-
 ## 🌊 Supported Packages
 (Listed in alphabetical order)
 
@@ -123,6 +115,8 @@ ldid          by Jay Freeman (saurik) / Procursus Team
 trollrestore  by JJTech (@JJTech0130)
 wget          by GNU Project
 ffmpeg        by FFmpeg Team
+fd            by David Pete
+rg            by Andrew Gallant
 ```
 ## 🌊 License
 
