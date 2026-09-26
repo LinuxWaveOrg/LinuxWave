@@ -105,6 +105,8 @@ wave install <pkgname>@<version>   Download certain version(s) of a package
   <img src="images/demo1.png" alt="demo1" width="80%" style="max-width: 720px;">
 </p>
 
+> Note: `images/demo2.png` and `images/demo3.png` are deprecated.
+
 ## 🌊 Supported Packages
 (Listed in alphabetical order)
 
