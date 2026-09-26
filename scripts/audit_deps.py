@@ -3,7 +3,8 @@
 # audit_deps.py
 # 依赖数据审计。data 模式查 infosource 数据的引用格式与完整性（不需要安装）；
 # edges 模式查已安装依赖的实测动态库引用是否都被数据声明（需要本机已装依赖）。
-# 用法：python3 scripts/audit_deps.py [data|edges|all] [--data-dir 目录] [--base-dir 目录] [--arch arm64]
+# 用法：python3 scripts/audit_deps.py [data|edges|all] [--data-dir 目录] [--base-dir 目录] [--arch arm64] [--check-urls]
+# data 模式加 --check-urls 会联网确认每个 url 可访问（默认关闭，因为依赖网络）。
 
 import argparse
 import json
@@ -38,6 +39,9 @@ REF_PATTERN = re.compile(r'^[^@\s,]+@[^@\s,]+$')
 MACHO_MAGIC = ('cffaedfe', 'cefaedfe', 'feedfacf', 'feedface', 'cafebabe', 'bebafeca')
 SYSTEM_PREFIXES = ('/usr/lib/', '/System/', '/Library/Apple/')
 CURL_ONLY = False
+URL_TIMEOUT = 20
+URL_WORKERS = 8
+USER_AGENT = 'MacWave-audit'
 
 
 # -------------------- 辅助函数 --------------------
@@ -156,6 +160,29 @@ def fetch_text(url):
     return result.stdout.decode()
 
 
+def head_status(url):
+    # 只取状态码，供 --check-urls 做连通性检查；网络层失败返回 0，由调用方按“需人工确认”处理
+    global CURL_ONLY
+    if not CURL_ONLY:
+        try:
+            request = urllib.request.Request(url, method='HEAD', headers={'User-Agent': USER_AGENT})
+            with urllib.request.urlopen(request, timeout=URL_TIMEOUT) as response:
+                return response.status
+        except urllib.error.HTTPError as error:
+            return error.code
+        except (urllib.error.URLError, TimeoutError):
+            CURL_ONLY = True
+
+    result = subprocess.run(['curl', '-sIL', '--http1.1', '--retry', '2', '--max-time', str(URL_TIMEOUT),
+                             '-o', '/dev/null', '-w', '%{http_code}', url], capture_output=True)
+    if result.returncode != 0:
+        return 0
+    try:
+        return int(result.stdout.decode().strip())
+    except ValueError:
+        return 0
+
+
 def load_remote_data():
     try:
         tree = json.loads(fetch_text(TREE_API))["tree"]
@@ -198,7 +225,7 @@ def resolve_data(data_dir):
 
 # -------------------- data 模式 --------------------
 
-def audit_data(files):
+def audit_data(files, check_urls=False):
     print("🌊 Auditing dependency data...")
 
     version_files = {}
@@ -213,6 +240,7 @@ def audit_data(files):
     problems = []
     warnings = []
     refs = 0
+    url_targets = []
 
     # 文件名（含目录）里有空格时，安装器拼 URL 不会转义，必然 404
     for path in sorted(files):
@@ -227,6 +255,8 @@ def audit_data(files):
         url = (fields.get("url") or [""])[0]
         if not url.startswith("https://"):
             problems.append(f"{label}: url 缺失或跨行损坏（必须单行且带引号）-> {url or '(无)'}")
+        elif check_urls:
+            url_targets.append((label, url))
 
         sha256 = (fields.get("sha256") or [""])[0]
         if not sha256:
@@ -252,6 +282,17 @@ def audit_data(files):
                 problems.append(f"{label}: depsinfo 缺少 {dep_name} 的 @common")
             if version_path not in files:
                 problems.append(f"{label}: depsinfo 缺少 {dep_name}@{dep_version} 的版本文件")
+
+    # 格式合法不代表能取到：实测确认每个 url 可达，避免出现“看着正常但 404”的死链
+    if url_targets:
+        print(f"🌊 Probing {len(url_targets)} url(s) over the network...")
+        with ThreadPoolExecutor(max_workers=URL_WORKERS) as pool:
+            statuses = list(pool.map(lambda target: head_status(target[1]), url_targets))
+        for (label, url), status in zip(url_targets, statuses):
+            if status in (404, 410):
+                problems.append(f"{label}: url 返回 HTTP {status}（资源不存在）-> {url}")
+            elif status != 200:
+                warnings.append(f"{label}: url 返回 HTTP {status or '无响应'}（需人工确认）-> {url}")
 
     for path in sorted(common_paths):
         kind, arch, ref = split_data_path(path)
@@ -367,6 +408,8 @@ def main():
     parser.add_argument("--data-dir", help="infosource 检出的目录（默认：本地有就用，否则从 GitHub 拉取）")
     parser.add_argument("--base-dir", help="MacWave 安装目录（默认读 /opt/macwave_config/config.json）")
     parser.add_argument("--arch", choices=["arm64", "amd64"], help="目标架构（默认本机架构）")
+    parser.add_argument("--check-urls", action="store_true",
+                        help="联网确认每个 url 可访问（默认关闭；依赖网络，按需开启）")
     parser.add_argument("--ignore", action="append", default=[],
                         help="忽略匹配该正则的报告（可重复），用于已知的历史遗留问题")
     args = parser.parse_args()
@@ -379,7 +422,7 @@ def main():
     warnings = []
 
     if args.mode in ("data", "all"):
-        found, notes = audit_data(files)
+        found, notes = audit_data(files, args.check_urls)
         problems += found
         warnings += notes
 
