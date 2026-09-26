@@ -109,14 +109,20 @@ wave install <pkgname>@<version>   Download certain version(s) of a package
 (Listed in alphabetical order)
 
 ```
+bat           by David Peter
 choma         by opa334
+fd            by David Peter
+ffmpeg        by FFmpeg Team
+fzf           by Junegunn Choi
 jq            by Stephen Dolan, Nicolas Williams, et al.
 ldid          by Jay Freeman (saurik) / Procursus Team
+lsd           by Abin Simon
+palera1n      by palera1n Team
+rg            by Andrew Gallant
+tmux          by Nicholas Marriott and contributors
 trollrestore  by JJTech (@JJTech0130)
 wget          by GNU Project
-ffmpeg        by FFmpeg Team
-fd            by David Pete
-rg            by Andrew Gallant
+zoxide        by Ajeet D'Souza
 ```
 ## 🌊 License
 
