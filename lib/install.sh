@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# MacWave 🌊 Official Installer (2.2.0)
+# MacWave 🌊 Official Installer (2.3)
 # This script downloads wave.py, installs dependencies, and configures PATH.
-# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/2.2.0/lib/install.sh)"
+# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/2.3/lib/install.sh)"
 
 set -e
 
-BRANCH="2.2.0"
+BRANCH="2.3"
 BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/$BRANCH"
 
 # ==========================================
@@ -225,10 +225,10 @@ EOF
 
 sudo tee "$VERSION_FILE" > /dev/null << EOF
 {
-  "version": "2.2.0",
+  "version": "2.3",
   "components": {
-    "installer": "2.2.0",
-    "parser": "2.2.0"
+    "installer": "2.3",
+    "parser": "2.3"
   }
 }
 EOF
@@ -272,7 +272,7 @@ if [[ -n "$LEGACY_BINS" ]]; then
     while IFS= read -r legacy_file; do
         run_cmd rm -f "$legacy_file"
     done <<< "$LEGACY_BINS"
-    echo -e "${YELLOW}🌊 2.2.0 keeps packages in bin/{name}@{version}/ directories.${RESET}"
+    echo -e "${YELLOW}🌊 ${BRANCH} keeps packages in bin/{name}@{version}/ directories.${RESET}"
     echo -e "${YELLOW}🌊 Please reinstall the packages: wave install {name}${RESET}"
 fi
 
@@ -304,7 +304,7 @@ UNINSTALLER_URL="$BASE_URL/pkg/uninstaller.py"
 PKGVERSIONPARSER_URL="$BASE_URL/pkg/pkgversionparser.py"
 PKGUNZIP_URL="$BASE_URL/pkg/pkgunzip.sh"
 
-# 依赖处理相关文件全部从 2.2.0 分支拉取
+# 依赖处理相关文件全部从 $BRANCH 分支拉取
 DEPSINSTALLER_URL="$BASE_URL/surfboard/depsinstaller.py"
 DEPSINSTALLER_SH_URL="$BASE_URL/surfboard/depsinstaller.sh"
 DEPSMANAGER_SH_URL="$BASE_URL/surfboard/depsmanager.sh"
