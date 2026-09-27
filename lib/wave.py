@@ -44,12 +44,13 @@ sys.path.insert(0, str(SURFBOARD_DIR))
 # -------------------- 字典定义 --------------------
 
 COMMANDS = {
-    "install":   "pkginstaller",
-    "uninstall": "uninstaller",
-    "list":      "pkginfohelper",
-    "search":    "pkginfohelper",
-    "info":      "pkginfohelper",
-    "version":   "help",
+    "install":    "pkginstaller",
+    "uninstall":  "uninstaller",
+    "list":       "pkginfohelper",
+    "search":     "pkginfohelper",
+    "info":       "pkginfohelper",
+    "version":    "help",
+    "selfupdate": "selfupdate",
 }
 
 ARGUMENTS = {
@@ -103,6 +104,10 @@ def main():
         elif module_name == "help":
             from help import print_version
             print_version()
+
+        elif module_name == "selfupdate":
+            from selfupdate import handle_selfupdate
+            handle_selfupdate(full_input)
 
         # 预留：query
 

@@ -4,7 +4,7 @@
         {
             "label": "Sync to deploy dir",
             "type": "shell",
-            "command": "cp pkg/*.py pkg/*.sh ~/.local/macwave/pkg/ && cp lib/*.py ~/.local/macwave/lib/ && cp lib/wave.py ~/.local/macwave/lib/wave && chmod +x ~/.local/macwave/lib/wave",
+            "command": "cp pkg/*.py pkg/*.sh ~/.local/macwave/pkg/ && cp lib/*.py lib/*.sh ~/.local/macwave/lib/ && cp lib/wave.py ~/.local/macwave/lib/wave && chmod +x ~/.local/macwave/lib/wave ~/.local/macwave/lib/*.sh",
             "problemMatcher": []
         },
         {

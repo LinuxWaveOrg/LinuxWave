@@ -295,6 +295,8 @@ fi
 WAVE_URL="$BASE_URL/lib/wave.py"
 HELP_URL="$BASE_URL/lib/help.py"
 CONFIGERROR_URL="$BASE_URL/lib/configerror.py"
+SELFUPDATE_URL="$BASE_URL/lib/selfupdate.py"
+SELFUPDATE_SH_URL="$BASE_URL/lib/selfupdate.sh"
 PKGINSTALLER_URL="$BASE_URL/pkg/pkginstaller.py"
 PKGINSTALLER_SH_URL="$BASE_URL/pkg/pkginstaller.sh"
 PKGINFOHELPER_URL="$BASE_URL/pkg/pkginfohelper.py"
@@ -324,6 +326,13 @@ run_cmd curl -fsSL -o "$LIB_DIR/help.py" "$HELP_URL"
 
 echo "🌊 Downloading configerror.py..."
 run_cmd curl -fsSL -o "$LIB_DIR/configerror.py" "$CONFIGERROR_URL"
+
+echo "🌊 Downloading selfupdate.py..."
+run_cmd curl -fsSL -o "$LIB_DIR/selfupdate.py" "$SELFUPDATE_URL"
+
+echo "🌊 Downloading selfupdate.sh..."
+run_cmd curl -fsSL -o "$LIB_DIR/selfupdate.sh" "$SELFUPDATE_SH_URL"
+run_cmd chmod +x "$LIB_DIR/selfupdate.sh"
 
 echo "🌊 Downloading pkginstaller.py..."
 run_cmd curl -fsSL -o "$REPO_DIR/pkginstaller.py" "$PKGINSTALLER_URL"

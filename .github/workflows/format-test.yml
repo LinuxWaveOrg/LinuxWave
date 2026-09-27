@@ -2,9 +2,9 @@ name: Format Test
 
 on:
   push:
-    branches: [2.1.0, main, 2.2.0]
+    branches: [2.1.0, main, 2.2.0, 2.3]
   pull_request:
-    branches: [2.1.0, main, 2.2.0]
+    branches: [2.1.0, main, 2.2.0, 2.3]
   workflow_dispatch:
 
 jobs:
