@@ -1,6 +1,4 @@
 version: "2.3"
 release_date: "2026-09-27"
 build_number: "270G1201"
-version_type: "Official"
-tap: "None"
 branch: "main"
