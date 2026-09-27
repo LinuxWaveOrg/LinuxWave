@@ -37,7 +37,7 @@ def print_custom_help():
     print(f"{PURPLE}usage: {ORANGE}wave <command> [package] [flags]{RESET}")
     print()
     print(f"MacWave {version} 🌊")
-    print("A package manager for macOS jailbreak developers.")
+    print("A package manager for macOS software developers.")
     print()
     print(f"{PURPLE}Commands:{RESET}")
     print(f"  {GREEN}install{RESET}               Install a package (latest version)")
