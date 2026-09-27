@@ -39,6 +39,7 @@ REF_PATTERN = re.compile(r'^[^@\s,]+@[^@\s,]+$')
 MACHO_MAGIC = ('cffaedfe', 'cefaedfe', 'feedfacf', 'feedface', 'cafebabe', 'bebafeca')
 SYSTEM_PREFIXES = ('/usr/lib/', '/System/', '/Library/Apple/')
 CURL_ONLY = False
+FETCH_TIMEOUT = 30
 URL_TIMEOUT = 20
 URL_WORKERS = 8
 USER_AGENT = 'MacWave-audit'
@@ -144,17 +145,38 @@ class FetchError(Exception):
     pass
 
 
+def request_headers(url):
+    # api.github.com 未认证时只有 60 次/小时，而 CI Runner 共用出口 IP，很容易被限流；
+    # 带上 token 后配额提到 5000 次/小时（raw.githubusercontent.com 不需要）
+    if 'api.github.com' not in url:
+        return {}
+    token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    return {'Authorization': f'Bearer {token}'} if token else {}
+
+
 def fetch_text(url):
     # 优先用标准库；本地 Python 缺根证书（macOS 常见）时改走 curl，且不再重复尝试
     global CURL_ONLY
+    headers = request_headers(url)
+
     if not CURL_ONLY:
         try:
-            with urllib.request.urlopen(url, timeout=30) as response:
+            request = urllib.request.Request(url, headers={**headers, 'User-Agent': USER_AGENT})
+            with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT) as response:
                 return response.read().decode()
-        except (urllib.error.URLError, UnicodeDecodeError):
+        except urllib.error.HTTPError as error:
+            # 服务端已经明确回应了（比如 403 限流），直接带原因报错
+            raise FetchError(f"{url} -> HTTP {error.code}")
+        except (urllib.error.URLError, TimeoutError, UnicodeDecodeError):
             CURL_ONLY = True
 
-    result = subprocess.run(['curl', '-fsSL', '--max-time', '30', url], capture_output=True)
+    command = ['curl', '-fsSL', '--http1.1', '--retry', '3', '--retry-delay', '2',
+               '--retry-all-errors', '--max-time', str(FETCH_TIMEOUT)]
+    for key, value in headers.items():
+        command += ['-H', f'{key}: {value}']
+    command.append(url)
+
+    result = subprocess.run(command, capture_output=True)
     if result.returncode != 0:
         raise FetchError(url)
     return result.stdout.decode()
@@ -186,8 +208,13 @@ def head_status(url):
 def load_remote_data():
     try:
         tree = json.loads(fetch_text(TREE_API))["tree"]
-    except (ValueError, KeyError, FetchError):
-        fail(f"Cannot fetch the data tree from GitHub ({TREE_API}).")
+    except FetchError as error:
+        fail(f"Cannot fetch the data tree from GitHub: {error}\n"
+             "🌊 With no token, api.github.com allows only 60 requests per hour and CI runners share their "
+             "IP, so this is often a rate limit. Set GH_TOKEN, or pass --data-dir with a local checkout "
+             "of the 'infosource' branch.")
+    except (ValueError, KeyError):
+        fail(f"Cannot parse the data tree returned by GitHub ({TREE_API}).")
 
     paths = []
     for item in tree:

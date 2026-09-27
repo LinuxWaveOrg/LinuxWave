@@ -14,6 +14,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 审计需要 infosource 分支的数据。直接检出本地副本，不走 api.github.com：
+      # 未认证只有 60 次/小时，而 Runner 共用出口 IP，很容易被限流。
+      - name: Checkout infosource data
+        uses: actions/checkout@v4
+        with:
+          ref: infosource
+          path: infosource-data
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -47,7 +55,7 @@ jobs:
 
       - name: Audit dependency data
         run: |
-          python3 scripts/audit_deps.py data
+          python3 scripts/audit_deps.py data --data-dir infosource-data
 
       - name: Run format tests
         run: |
