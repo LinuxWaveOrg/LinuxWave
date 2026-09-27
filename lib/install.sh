@@ -1,12 +1,16 @@
 #!/bin/bash
 
-# MacWave 🌊 Official Installer (2.3.1)
+# MacWave 🌊 Official Installer
 # This script downloads wave.py, installs dependencies, and configures PATH.
-# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/2.3/lib/install.sh)"
+# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/main/lib/install.sh)"
 
 set -e
 
 BRANCH="main"
+
+# 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
+MACWAVE_VERSION="2.3.1"
+
 BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/$BRANCH"
 
 # ==========================================
@@ -84,7 +88,7 @@ validate_custom_dir() {
 # 显示欢迎信息
 # ==========================================
 
-echo "🌊 Welcome to MacWave 2.3.1!"
+echo "🌊 Welcome to MacWave $MACWAVE_VERSION!"
 echo ""
 
 # ==========================================
@@ -224,10 +228,10 @@ EOF
 
 sudo tee "$VERSION_FILE" > /dev/null << EOF
 {
-  "version": "2.3.1",
+  "version": "$MACWAVE_VERSION",
   "components": {
-    "installer": "2.3.1",
-    "parser": "2.3.1"
+    "installer": "$MACWAVE_VERSION",
+    "parser": "$MACWAVE_VERSION"
   }
 }
 EOF
