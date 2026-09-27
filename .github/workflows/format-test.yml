@@ -41,8 +41,9 @@ jobs:
           chmod +x /tmp/macwave-test/surfboard/*.sh
           mkdir -p /tmp/macwave-test/lib
           cp lib/*.py /tmp/macwave-test/lib/
+          cp lib/*.sh /tmp/macwave-test/lib/
           cp lib/wave.py /tmp/macwave-test/lib/wave
-          chmod +x /tmp/macwave-test/lib/wave
+          chmod +x /tmp/macwave-test/lib/wave /tmp/macwave-test/lib/*.sh
 
       - name: Audit dependency data
         run: |
@@ -55,3 +56,8 @@ jobs:
       - name: Run dependency chain test
         run: |
           bash scripts/deps_test.sh
+
+      # 会真的按 configdata 的 update_command 更新一遍安装目录，所以放最后
+      - name: Run selfupdate test
+        run: |
+          bash scripts/selfupdate_test.sh
