@@ -30,7 +30,6 @@ CONFIG_DIR="/opt/macwave_config"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
 
-echo "🌊 Welcome to the MacWave self updater!"
 echo "🌊 Updating from branch: $BRANCH"
 echo ""
 
