@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# MacWave 🌊 Official Installer (2.3)
+# MacWave 🌊 Official Installer (2.3.1)
 # This script downloads wave.py, installs dependencies, and configures PATH.
 # Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/2.3/lib/install.sh)"
 
@@ -225,10 +225,10 @@ EOF
 
 sudo tee "$VERSION_FILE" > /dev/null << EOF
 {
-  "version": "2.3",
+  "version": "2.3.1",
   "components": {
-    "installer": "2.3",
-    "parser": "2.3"
+    "installer": "2.3.1",
+    "parser": "2.3.1"
   }
 }
 EOF

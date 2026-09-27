@@ -29,7 +29,7 @@ README.md     用户文档
 | 文件 | 作用 |
 | --- | --- |
 | `wave.py` | 主入口。读 `/opt/macwave_config/config.json` 的 `base_dir`，把 `lib/`、`pkg/`、`surfboard/` 注入 `sys.path`；用 `COMMANDS` 字典把 `install / uninstall / list / search / info / version / selfupdate` 分发到对应模块，`ARGUMENTS` 处理 `-h/--help/-V/--version` |
-| `help.py` | 帮助与版本文本：`print_custom_help`（简短用法）、`print_detailed_help`（详细命令）、`print_version`、`print_error_help` |
+| `help.py` | 帮助与版本文本：`print_custom_help`（`-h` / `--help` 的用法，命令与旗标列表与 README 的 Command Reference 对齐）、`print_version`、`print_error_help`（未知命令时先报错再打帮助） |
 | `install.sh` | 官方安装脚本：选安装目录、`sudo` 提权、建运行时目录（`bin` / `links` / `deps` / `pkg` / `surfboard` / `lib` / `downloads/tmp`）、写 `config.json` / `VERSION.json`、把 `lib/`、`pkg/`、`surfboard/` 下的程序文件全部拉下来、安装 Python 依赖（requests / packaging / rich）、把 `bin/` + `links/` + `lib/` 写入 PATH（升级时替换旧版只含 `bin`/`lib` 的行）、清理旧版平铺 `bin/` 文件、检查 Xcode 命令行工具（`otool` / `install_name_tool` / `codesign`）、许可协议确认（直接回车视为同意） |
 | `uninstall.sh` | 卸载 MacWave 本体：读配置定位 `BASE_DIR`（失败则遍历候选路径）、二次确认后删除安装目录与配置目录、清掉 rc 文件里的 PATH 行、最后自删 |
 | `selfupdate.py` | `wave selfupdate`：拉 `configdata` 分支的 `versiondata/latest_version`，取其 `version` 与 `/opt/macwave_config/VERSION.json` 比较（只比数字段，`2.3` == `2.3.0`）；已是最新则直接返回，否则把 `update_command` 中 `<<<` / `>>>` 之间的内容交给 `/bin/bash -c` 执行（用环境变量 `MACWAVE_UPDATE_VERSION` / `MACWAVE_UPDATE_BRANCH` 把目标版本与分支传下去）。因为 `bash -c "$(curl …)"` 在 curl 失败时仍返回 0，执行完会**回读 `VERSION.json` 复核**，没变就报错 |
