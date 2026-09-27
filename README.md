@@ -81,7 +81,7 @@ Commands:
   list        List installed packages
   search      Search for a package in the index
   info        Display detailed information about a package
-  selfupdate  Updates MacWave itself
+  selfupdate  Update MacWave itself
 
 
 Flags:
