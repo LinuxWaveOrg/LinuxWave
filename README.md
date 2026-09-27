@@ -21,7 +21,7 @@ MacWave is a **package manager** that runs on **macOS/Linux**, designed to host 
 1. **One command, install common packages.** No more scattered download links.
 2. **Mandatory `@version`.** Every binary is stored as `package@version`, so multiple versions can coexist without conflicting with system tools.
 3. **No cache, always up to date.** Package metadata is fetched live from the `infosource` branch.
-4. **8 archive formats, CI-verified.** Supports no-extension binaries, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar`, `.gz`, `.bz2`.
+4. **9 archive formats, CI-verified.** Supports no-extension binaries, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar`, `.gz`, `.bz2`, `.xz`.
 5. **Verify first, extract later.** SHA256 is checked before extraction.
 6. **Resumable downloads.** Interrupted? Resume with `-C`.
 7. **Lightweight and transparent.** Pure Python + Shell. No heavy runtime, no hidden behavior.
