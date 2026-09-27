@@ -2,3 +2,4 @@ version: "2.3"
 release_date: "2026-09-27"
 build_number: "270G1201"
 branch: "main"
+update_command: <<< /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/main/lib/install.sh)" >>>
