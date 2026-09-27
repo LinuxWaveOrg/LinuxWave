@@ -6,7 +6,7 @@
 
 set -e
 
-BRANCH="2.3"
+BRANCH="main"
 BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/$BRANCH"
 
 # ==========================================
@@ -84,8 +84,7 @@ validate_custom_dir() {
 # 显示欢迎信息
 # ==========================================
 
-echo "🌊 Welcome to MacWave $BRANCH!"
-echo "🌊 Installing from branch: $BRANCH"
+echo "🌊 Welcome to MacWave 2.3.1!"
 echo ""
 
 # ==========================================
