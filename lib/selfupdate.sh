@@ -99,84 +99,111 @@ fi
 echo "🌊 Updating MacWave to $VERSION"
 
 # ==========================================
-# 更新 lib/
+# 文件清单（configdata/versiondata/files_info）
+# ==========================================
+#
+# 要更新哪些文件不再写死在本脚本里，而是去 configdata 分支读一份清单。
+# 清单内容**只表示仓库里的路径**，写法：
+#
+#     /                      单独一个 / 表示安装根（等价于 BASE_DIR）
+#         lib/               以 / 结尾 → 目录，只创建不下载
+#             wave.py        其它 → 文件
+#         pkg/linker.py      也可以行内直接写完整路径，代替缩进
+#             # 以 # 开头的是注释，空行忽略
+#
+# 缩进每层 4 个空格，Tab 与 4 个空格等价，两种可以混用。
+# 每个文件都从 "$BASE_URL/<仓库路径>" 下载，落到 "$BASE_DIR" 下的同名位置。
+# 唯一的特例：lib/wave.py 装成可执行的 lib/wave（它是 PATH 里的入口名）。
+# 以后新增文件只要改 configdata 的这份清单，不用再动本脚本。
+
+FILES_INFO_URL="https://raw.githubusercontent.com/$REPO/configdata/versiondata/files_info"
+FILES_INFO_TMP="$(mktemp)"
+
+cleanup_files_info() {
+    rm -f "$FILES_INFO_TMP"
+}
+trap cleanup_files_info EXIT
+
+echo "🌊 Fetching the file list..."
+
+if ! curl -fsSL --max-time 30 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
+    echo -e "${RED_BOLD}🌊 Error: Cannot fetch versiondata/files_info from the configdata branch.${RESET}"
+    exit 1
+fi
+
+parse_files_info() {
+    # 把缩进树解析成 "<仓库路径>\t<本地相对路径>\t<是否需要 +x>"，一行一个文件
+    python3 - "$1" <<'PY'
+import sys
+
+stack = []   # [(缩进宽度, 目录名)]：当前所在目录的祖先链
+lines = []
+
+for raw in open(sys.argv[1], encoding="utf-8"):
+    line = raw.rstrip("\n")
+    if not line.strip() or line.lstrip().startswith("#"):
+        continue
+
+    # 缩进按 4 个空格算，Tab 等价于 4 个空格（两者可以混用）
+    expanded = line.expandtabs(4)
+    indent = len(expanded) - len(expanded.lstrip(" "))
+    name = line.strip()
+
+    while stack and stack[-1][0] >= indent:   # 缩进回退：弹掉不比当前行浅的祖先
+        stack.pop()
+
+    if name == "/":                 # 单独一个 /：安装根，等价于 BASE_DIR
+        stack = []
+        continue
+
+    if name.endswith("/"):          # 以 / 结尾 → 目录：只记层次，不下载
+        stack.append((indent, name.rstrip("/")))
+        continue
+
+    if "/" in name:                 # 行内直接写完整路径（可代替缩进）
+        repo_path = name.strip("/")
+    else:
+        repo_path = "/".join([directory for _, directory in stack] + [name])
+
+    if repo_path == "lib/wave.py":
+        local_path, executable = "lib/wave", 1
+    else:
+        local_path, executable = repo_path, int(repo_path.endswith(".sh"))
+
+    lines.append(f"{repo_path}\t{local_path}\t{executable}")
+
+print("\n".join(lines))
+PY
+}
+
+FILE_ENTRIES="$(parse_files_info "$FILES_INFO_TMP")"
+
+if [[ -z "$FILE_ENTRIES" ]]; then
+    echo -e "${RED_BOLD}🌊 Error: The file list is empty, nothing to update.${RESET}"
+    exit 1
+fi
+
+FILE_COUNT=$(printf '%s\n' "$FILE_ENTRIES" | wc -l | tr -d ' ')
+echo "🌊 Updating $FILE_COUNT file(s) from branch: $BRANCH"
+echo ""
+
+# ==========================================
+# 按清单更新
 # ==========================================
 
-run_cmd mkdir -p "$LIB_DIR"
+while IFS=$'\t' read -r repo_path local_path executable; do
+    if [[ -z "$repo_path" ]]; then
+        continue
+    fi
 
-echo "🌊 Updating wave.py..."
-run_cmd curl -fsSL -o "$LIB_DIR/wave" "$BASE_URL/lib/wave.py"
-run_cmd chmod +x "$LIB_DIR/wave"
+    echo "🌊 Updating $repo_path..."
+    run_cmd mkdir -p "$(dirname "$BASE_DIR/$local_path")"
+    run_cmd curl -fsSL -o "$BASE_DIR/$local_path" "$BASE_URL/$repo_path"
 
-echo "🌊 Updating help.py..."
-run_cmd curl -fsSL -o "$LIB_DIR/help.py" "$BASE_URL/lib/help.py"
-
-echo "🌊 Updating configerror.py..."
-run_cmd curl -fsSL -o "$LIB_DIR/configerror.py" "$BASE_URL/lib/configerror.py"
-
-echo "🌊 Updating selfupdate.py..."
-run_cmd curl -fsSL -o "$LIB_DIR/selfupdate.py" "$BASE_URL/lib/selfupdate.py"
-
-echo "🌊 Updating selfupdate.sh..."
-run_cmd curl -fsSL -o "$LIB_DIR/selfupdate.sh" "$BASE_URL/lib/selfupdate.sh"
-run_cmd chmod +x "$LIB_DIR/selfupdate.sh"
-
-# ==========================================
-# 更新 pkg/
-# ==========================================
-
-run_cmd mkdir -p "$PKG_DIR"
-
-echo "🌊 Updating pkginstaller.py..."
-run_cmd curl -fsSL -o "$PKG_DIR/pkginstaller.py" "$BASE_URL/pkg/pkginstaller.py"
-
-echo "🌊 Updating pkginstaller.sh..."
-run_cmd curl -fsSL -o "$PKG_DIR/pkginstaller.sh" "$BASE_URL/pkg/pkginstaller.sh"
-run_cmd chmod +x "$PKG_DIR/pkginstaller.sh"
-
-echo "🌊 Updating pkginfohelper.py..."
-run_cmd curl -fsSL -o "$PKG_DIR/pkginfohelper.py" "$BASE_URL/pkg/pkginfohelper.py"
-
-echo "🌊 Updating uninstaller.py..."
-run_cmd curl -fsSL -o "$PKG_DIR/uninstaller.py" "$BASE_URL/pkg/uninstaller.py"
-
-echo "🌊 Updating pkgversionparser.py..."
-run_cmd curl -fsSL -o "$PKG_DIR/pkgversionparser.py" "$BASE_URL/pkg/pkgversionparser.py"
-
-echo "🌊 Updating pkgunzip.sh..."
-run_cmd curl -fsSL -o "$PKG_DIR/pkgunzip.sh" "$BASE_URL/pkg/pkgunzip.sh"
-run_cmd chmod +x "$PKG_DIR/pkgunzip.sh"
-
-# ==========================================
-# 更新 surfboard/
-# ==========================================
-
-run_cmd mkdir -p "$SURFBOARD_DIR"
-
-echo "🌊 Updating depsinstaller.py..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/depsinstaller.py" "$BASE_URL/surfboard/depsinstaller.py"
-
-echo "🌊 Updating depsinstaller.sh..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/depsinstaller.sh" "$BASE_URL/surfboard/depsinstaller.sh"
-run_cmd chmod +x "$SURFBOARD_DIR/depsinstaller.sh"
-
-echo "🌊 Updating depsmanager.sh..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/depsmanager.sh" "$BASE_URL/surfboard/depsmanager.sh"
-run_cmd chmod +x "$SURFBOARD_DIR/depsmanager.sh"
-
-echo "🌊 Updating depsversionparser.py..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/depsversionparser.py" "$BASE_URL/surfboard/depsversionparser.py"
-
-echo "🌊 Updating querier.py..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/querier.py" "$BASE_URL/surfboard/querier.py"
-
-echo "🌊 Updating tagger.sh..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/tagger.sh" "$BASE_URL/surfboard/tagger.sh"
-run_cmd chmod +x "$SURFBOARD_DIR/tagger.sh"
-
-echo "🌊 Updating transfer.sh..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/transfer.sh" "$BASE_URL/surfboard/transfer.sh"
-run_cmd chmod +x "$SURFBOARD_DIR/transfer.sh"
+    if [[ "$executable" == "1" ]]; then
+        run_cmd chmod +x "$BASE_DIR/$local_path"
+    fi
+done <<< "$FILE_ENTRIES"
 
 # ==========================================
 # 清理旧的字节码缓存
