@@ -102,6 +102,12 @@ def linked_version(name):
     return version if dir_name == name else None
 
 
+def is_dangling(name):
+    # links/{名称} 是不是指向一个已经不存在的版本（已卸载，或目录被手动删掉）
+    version = linked_version(name)
+    return version is not None and version not in installed_versions(name)
+
+
 def unversioned_links():
     # links/ 下所有不带版本号的软链接（带版本号的链接名里一定有 @）
     if not LINKS_DIR.is_dir():
@@ -268,11 +274,14 @@ def handle_linkquery_command(input_string=""):
     for target in targets:
         name = target.partition("@")[0]
         version = linked_version(name)
-        if version:
-            print(f"🌊 {name}@{version}")
-        else:
+        if version is None:
             print(f"{YELLOW}🌊 {name} is not linked.{RESET}")
             missing += 1
+        elif version not in installed_versions(name):
+            print(f"{RED_BOLD}🌊 Error: {name} points to {name}@{version}, which is not installed.{RESET}")
+            missing += 1
+        else:
+            print(f"🌊 {name}@{version}")
 
     sys.exit(1 if missing else 0)
 

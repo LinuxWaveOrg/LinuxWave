@@ -48,7 +48,7 @@ TAGGER_SCRIPT = Path(__file__).resolve().parent.parent / "surfboard" / "tagger.s
 # -------------------- 依赖库检查 --------------------
 
 try:
-    from pkgversionparser import sort_versions
+    from pkgversionparser import get_max_version, sort_versions
 except ImportError:
     print(f"{RED_BOLD}🌊 Error: 'pkgversionparser' module is not available.{RESET}")
     sys.exit(1)
@@ -244,29 +244,60 @@ def remove_one(pkg_name, version, installed):
     return False
 
 
+# -------------------- 软件包链接联动 --------------------
+
+def _import_linker():
+    # linker.py 与 uninstaller.py 同在 pkg/ 下；缺了也不影响卸载本身
+    try:
+        import linker
+        return linker
+    except ImportError:
+        return None
+
+
 def refresh_link(pkg_name):
     # 卸载后同步不带版本号的软链接：还有别的版本就改指最高的，一个不剩就删掉。
     # 本来就没链接过的（用户手动 unlink 过）不重新建。
-    try:
-        from linker import create_link, installed_versions, linked_version, remove_link
-        from pkgversionparser import get_max_version
-    except ImportError:
+    # 链接已经是悬空的（指向被删掉的版本）时，也会在这里被治好。
+    linker = _import_linker()
+    if linker is None:
         return
 
-    if linked_version(pkg_name) is None:
+    if linker.linked_version(pkg_name) is None:
         return
 
-    versions = installed_versions(pkg_name)
+    versions = linker.installed_versions(pkg_name)
     if versions:
         version = get_max_version(versions)
-        create_link(pkg_name, version)
+        linker.create_link(pkg_name, version)
         print(f"🌊 Unversioned link now points to {pkg_name}@{version}")
     else:
-        remove_link(pkg_name)
+        linker.remove_link(pkg_name)
         print(f"🌊 Removed the unversioned link for {pkg_name}")
 
 
+def broken_link_target(pkg_name, versions):
+    # --unlink 会把不带版本号的链接留在「指向已卸载版本」的坏状态上吗？
+    # 是则返回那个版本号。链接只能指向存在的版本，否则宁可报错让用户自己决定。
+    linker = _import_linker()
+    if linker is None:
+        return None
+
+    target = linker.linked_version(pkg_name)
+    if target is not None and target in versions:
+        return target
+    return None
+
+
 def uninstall_versions(pkg_name, versions, keep_link=False):
+    if keep_link:
+        broken = broken_link_target(pkg_name, versions)
+        if broken:
+            print(f"{RED_BOLD}🌊 Error: links/{pkg_name} points to {pkg_name}@{broken}, which is being uninstalled.{RESET}")
+            print(f"{RED_BOLD}🌊 --unlink would leave that link broken, so nothing was uninstalled.{RESET}")
+            print(f"{RED_BOLD}🌊 Drop --unlink (the link then falls back to the next installed version), or run 'wave unlink {pkg_name}' first.{RESET}")
+            sys.exit(1)
+
     installed = load_installed()
     changed = False
     for version in versions:
@@ -314,7 +345,7 @@ def select_versions(pkg_name, versions):
 def handle_uninstall(input_string):
     parts = input_string.split()
 
-    # 先剥出 flag：--unlink 表示“删掉这个版本的链接，但不要把不带版本号的链接降级到其他版本”
+    # 先剥出 flag：--unlink 表示“不动这个包不带版本号的链接”
     flags = {word for word in parts[2:] if word.startswith("-")}
     operands = [word for word in parts[2:] if not word.startswith("-")]
     keep_link = "--unlink" in flags

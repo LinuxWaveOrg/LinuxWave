@@ -105,7 +105,7 @@ Global Flags (can be used with any command):
 
 Special Flags:
 wave install <pkgname>@<version>   Download certain version(s) of a package
-    --unlink                       Skip the unversioned link when installing or uninstalling
+    --unlink                       Leave the unversioned link alone (install / uninstall)
     --all, -a                      Apply to every installed package (link / unlink / linkquery)
 
 Unversioned Links:
@@ -114,6 +114,10 @@ wave linkquery <name>              Show what <name> is linked to (e.g. 🌊 ffmp
 wave unlink <name>                 Remove that link
 
 ```
+
+Uninstalling a version re-points the link to the next highest one, and removes the link
+when no version is left. `uninstall --unlink` keeps the link as-is, and **refuses to run**
+when that would leave the link pointing at the version you are removing.
 ## 🌊 Demo Pictures
 
 <p align="center">

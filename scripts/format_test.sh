@@ -76,6 +76,13 @@ for entry in "${PKGS[@]}"; do
         continue
     fi
 
+    if [[ ! -L "$LINKS_DIR/${pkg}" ]]; then
+        echo -e "${RED_BOLD}🌊 FAIL: install did not create the unversioned link ${pkg}${RESET}"
+        FAILED=$((FAILED + 1))
+        python3 "$WAVE_BIN" uninstall "${pkg}@1.0" || true
+        continue
+    fi
+
     OUTPUT=$("$BIN_DIR/${pkg}@1.0/${pkg}")
     if [[ "$OUTPUT" != *"Test Successful! ($fmt)"* ]]; then
         echo -e "${RED_BOLD}🌊 FAIL: unexpected output: $OUTPUT${RESET}"
@@ -89,9 +96,26 @@ for entry in "${PKGS[@]}"; do
 done
 
 echo ""
+echo "========== install --unlink =========="
+if python3 "$WAVE_BIN" install "test_bin_zip@1.0" --unlink </dev/null >/dev/null 2>&1; then
+    if [[ -L "$LINKS_DIR/test_bin_zip" ]]; then
+        echo -e "${RED_BOLD}🌊 FAIL: install --unlink created links/test_bin_zip${RESET}"
+        FAILED=$((FAILED + 1))
+    else
+        echo -e "${GREEN}🌊 PASS: install --unlink skipped the unversioned link${RESET}"
+        PASSED=$((PASSED + 1))
+    fi
+    python3 "$WAVE_BIN" uninstall "test_bin_zip@1.0" >/dev/null 2>&1 || true
+else
+    echo -e "${RED_BOLD}🌊 FAIL: install test_bin_zip@1.0 --unlink${RESET}"
+    FAILED=$((FAILED + 1))
+fi
+
+echo ""
 echo "=========================================="
-echo "🌊 Passed: $PASSED / ${#PKGS[@]}"
-echo "🌊 Failed: $FAILED / ${#PKGS[@]}"
+TOTAL=$(( ${#PKGS[@]} + 1 ))
+echo "🌊 Passed: $PASSED / $TOTAL"
+echo "🌊 Failed: $FAILED / $TOTAL"
 echo "=========================================="
 
 if [[ "$FAILED" -gt 0 ]]; then
