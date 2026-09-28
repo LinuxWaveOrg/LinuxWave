@@ -1,0 +1,5 @@
+des: "ncdu - NCurses Disk Usage"
+hom: "https://dev.yorhel.nl/ncdu"
+lic: "MIT"
+aut: "Yoran Heling"
+bin_name: "ncdu"

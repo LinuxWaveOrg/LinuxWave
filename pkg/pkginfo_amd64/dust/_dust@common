@@ -1,0 +1,5 @@
+des: "dust - a more intuitive version of du in Rust"
+hom: "https://github.com/bootandy/dust"
+lic: "Apache-2.0"
+aut: "bootandy"
+bin_name: "dust"
