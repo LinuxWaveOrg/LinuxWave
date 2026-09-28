@@ -178,6 +178,94 @@ else
 fi
 
 # ==========================================
+# 4. 清单里列出的文件必须都落到了安装目录
+#    2.4 就是漏在这一点上：代码里加了 pkg/linker.py，
+#    但 selfupdate.sh 自带的文件清单没同步，自更新后 wave link 直接 ImportError。
+# ==========================================
+
+echo "========== every listed file landed =========="
+
+BASE_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['base_dir'])")
+
+FILES_INFO_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata/versiondata/files_info"
+FILES_INFO_TMP="$(mktemp)"
+PARSER_TMP="$(mktemp)"
+
+if ! curl -fsSL --max-time 60 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
+    echo -e "${RED_BOLD}🌊 FAIL: cannot fetch versiondata/files_info${RESET}"
+    FAILED=$((FAILED + 1))
+else
+    # 抽出 selfupdate.sh 里真正的解析器，保证测的是实现本身而不是另一份复制品
+    sed -n '/^parse_files_info() {/,/^}$/p' "$SELFUPDATE_SH" > "$PARSER_TMP"
+
+    FILE_COUNT=0
+    MISSING=0
+    while IFS=$'\t' read -r repo_path local_path executable; do
+        if [[ -z "$repo_path" ]]; then
+            continue
+        fi
+        FILE_COUNT=$((FILE_COUNT + 1))
+        if [[ ! -e "$BASE_DIR/$local_path" ]]; then
+            echo -e "${RED_BOLD}🌊 FAIL: $repo_path was not installed to $local_path${RESET}"
+            MISSING=$((MISSING + 1))
+        fi
+    done < <(bash -c "source '$PARSER_TMP'; parse_files_info '$FILES_INFO_TMP'")
+
+    if [[ "$FILE_COUNT" -eq 0 ]]; then
+        echo -e "${RED_BOLD}🌊 FAIL: the file list parsed to nothing${RESET}"
+        FAILED=$((FAILED + 1))
+    elif [[ "$MISSING" -gt 0 ]]; then
+        echo -e "${RED_BOLD}🌊 FAIL: $MISSING of $FILE_COUNT listed file(s) are missing${RESET}"
+        FAILED=$((FAILED + 1))
+    else
+        echo -e "${GREEN}🌊 OK: all $FILE_COUNT listed file(s) landed${RESET}"
+    fi
+fi
+
+rm -f "$FILES_INFO_TMP" "$PARSER_TMP"
+
+# ==========================================
+# 5. wave.py 里每个命令都要有对应的模块文件
+#    这一条独立于清单：即使清单漏写，只要 wave.py 引用了就会报出来
+# ==========================================
+
+echo "========== every command resolves to a module =========="
+
+if python3 - "$BASE_DIR" << 'PYEOF'
+import os
+import re
+import sys
+
+base_dir = sys.argv[1]
+with open(os.path.join(base_dir, 'lib', 'wave'), encoding='utf-8') as handle:
+    source = handle.read()
+
+block = source.split('COMMANDS = {', 1)[1].split('}', 1)[0]
+commands = re.findall(r'"(\w+)"\s*:\s*"(\w+)"', block)
+if not commands:
+    print('🌊 Error: could not read any entry from COMMANDS')
+    sys.exit(1)
+
+missing = []
+for command, module in commands:
+    if not any(os.path.exists(os.path.join(base_dir, folder, module + '.py'))
+               for folder in ('lib', 'pkg', 'surfboard')):
+        missing.append(f'{command} -> {module}.py')
+
+if missing:
+    print('🌊 Error: these commands have no module file: ' + ', '.join(missing))
+    sys.exit(1)
+
+print(f'🌊 All {len(commands)} command(s) resolve to a module file')
+PYEOF
+then
+    echo -e "${GREEN}🌊 OK: every command module exists${RESET}"
+else
+    echo -e "${RED_BOLD}🌊 FAIL: a command module is missing after selfupdate${RESET}"
+    FAILED=$((FAILED + 1))
+fi
+
+# ==========================================
 # 汇总
 # ==========================================
 
