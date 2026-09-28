@@ -244,13 +244,39 @@ def remove_one(pkg_name, version, installed):
     return False
 
 
-def uninstall_versions(pkg_name, versions):
+def refresh_link(pkg_name):
+    # 卸载后同步不带版本号的软链接：还有别的版本就改指最高的，一个不剩就删掉。
+    # 本来就没链接过的（用户手动 unlink 过）不重新建。
+    try:
+        from linker import create_link, installed_versions, linked_version, remove_link
+        from pkgversionparser import get_max_version
+    except ImportError:
+        return
+
+    if linked_version(pkg_name) is None:
+        return
+
+    versions = installed_versions(pkg_name)
+    if versions:
+        version = get_max_version(versions)
+        create_link(pkg_name, version)
+        print(f"🌊 Unversioned link now points to {pkg_name}@{version}")
+    else:
+        remove_link(pkg_name)
+        print(f"🌊 Removed the unversioned link for {pkg_name}")
+
+
+def uninstall_versions(pkg_name, versions, keep_link=False):
     installed = load_installed()
     changed = False
     for version in versions:
         changed = remove_one(pkg_name, version, installed) or changed
     if changed:
         save_installed(installed)
+    if keep_link:
+        print(f"🌊 Left the unversioned link for {pkg_name} untouched")
+    else:
+        refresh_link(pkg_name)
     for version in versions:
         print(f"{GREEN}🌊 Successfully uninstalled {pkg_name}@{version}.{RESET}")
 
@@ -287,11 +313,20 @@ def select_versions(pkg_name, versions):
 
 def handle_uninstall(input_string):
     parts = input_string.split()
-    if len(parts) < 3:
+
+    # 先剥出 flag：--unlink 表示“删掉这个版本的链接，但不要把不带版本号的链接降级到其他版本”
+    flags = {word for word in parts[2:] if word.startswith("-")}
+    operands = [word for word in parts[2:] if not word.startswith("-")]
+    keep_link = "--unlink" in flags
+
+    for unknown in sorted(flags - {"--unlink"}):
+        print(f"{YELLOW}🌊 Warning: unknown flag '{unknown}' ignored.{RESET}")
+
+    if not operands:
         print(f"{RED_BOLD}🌊 Error: Missing package name.{RESET}")
         sys.exit(1)
 
-    raw_pkg = parts[2]
+    raw_pkg = operands[0]
 
     # 1. 不带 @：列出所有版本让用户选择
     if '@' not in raw_pkg:
@@ -300,7 +335,7 @@ def handle_uninstall(input_string):
         if not versions:
             print(f"{RED_BOLD}🌊 Error: Package '{pkg_name}' is not installed.{RESET}")
             sys.exit(1)
-        uninstall_versions(pkg_name, select_versions(pkg_name, versions))
+        uninstall_versions(pkg_name, select_versions(pkg_name, versions), keep_link)
         return
 
     # 2. 带 @：拆分包名与版本号
@@ -317,7 +352,7 @@ def handle_uninstall(input_string):
         if not versions:
             print(f"{RED_BOLD}🌊 Error: Package '{pkg_name}' is not installed.{RESET}")
             sys.exit(1)
-        uninstall_versions(pkg_name, versions)
+        uninstall_versions(pkg_name, versions, keep_link)
         return
 
     # 2.2 指定一个或多个版本：批量删除
@@ -332,7 +367,7 @@ def handle_uninstall(input_string):
     for version in missing:
         print(f"{YELLOW}🌊 Warning: {pkg_name}@{version} is not installed, skipping.{RESET}")
 
-    uninstall_versions(pkg_name, targets)
+    uninstall_versions(pkg_name, targets, keep_link)
 
 
 if __name__ == "__main__":

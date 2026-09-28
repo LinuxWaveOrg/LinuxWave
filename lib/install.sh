@@ -9,7 +9,7 @@ set -e
 BRANCH="main"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-MACWAVE_VERSION="2.3.1"
+MACWAVE_VERSION="2.4"
 
 BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/$BRANCH"
 
@@ -306,6 +306,7 @@ PKGINFOHELPER_URL="$BASE_URL/pkg/pkginfohelper.py"
 UNINSTALLER_URL="$BASE_URL/pkg/uninstaller.py"
 PKGVERSIONPARSER_URL="$BASE_URL/pkg/pkgversionparser.py"
 PKGUNZIP_URL="$BASE_URL/pkg/pkgunzip.sh"
+LINKER_URL="$BASE_URL/pkg/linker.py"
 
 # 依赖处理相关文件全部从 $BRANCH 分支拉取
 DEPSINSTALLER_URL="$BASE_URL/surfboard/depsinstaller.py"
@@ -352,6 +353,9 @@ run_cmd curl -fsSL -o "$REPO_DIR/uninstaller.py" "$UNINSTALLER_URL"
 
 echo "🌊 Downloading pkgversionparser.py..."
 run_cmd curl -fsSL -o "$REPO_DIR/pkgversionparser.py" "$PKGVERSIONPARSER_URL"
+
+echo "🌊 Downloading linker.py..."
+run_cmd curl -fsSL -o "$REPO_DIR/linker.py" "$LINKER_URL"
 
 echo "🌊 Downloading pkgunzip.sh..."
 run_cmd curl -fsSL -o "$REPO_DIR/pkgunzip.sh" "$PKGUNZIP_URL"

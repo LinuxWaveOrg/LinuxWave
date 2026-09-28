@@ -51,6 +51,9 @@ COMMANDS = {
     "info":       "pkginfohelper",
     "version":    "help",
     "selfupdate": "selfupdate",
+    "link":       "linker",
+    "unlink":     "linker",
+    "linkquery":  "linker",
 }
 
 ARGUMENTS = {
@@ -108,6 +111,15 @@ def main():
         elif module_name == "selfupdate":
             from selfupdate import handle_selfupdate
             handle_selfupdate(full_input)
+
+        elif module_name == "linker":
+            from linker import handle_link_command, handle_linkquery_command, handle_unlink_command
+            if FirstWord == "link":
+                handle_link_command(full_input)
+            elif FirstWord == "linkquery":
+                handle_linkquery_command(full_input)
+            else:
+                handle_unlink_command(full_input)
 
         # 预留：query
 

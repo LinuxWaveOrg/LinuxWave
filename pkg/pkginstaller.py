@@ -18,6 +18,7 @@ from pathlib import Path
 
 RED_BOLD = '\033[1;31m'
 GREEN = '\033[32m'
+YELLOW = '\033[33m'
 RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
@@ -117,7 +118,7 @@ def _check_disk_space(path: Path, required_bytes: int = 10 * 1024 * 1024) -> boo
 ALLOWED_FLAGS = {
     "-v", "-C",
     "--verbose", "--skip-ssl", "--continue",
-    "--limit-rate", "--proxy"
+    "--limit-rate", "--proxy", "--unlink"
 }
 
 def parse_flags(input_string):
@@ -153,6 +154,23 @@ def parse_flags(input_string):
             sys.exit(1)
 
     return flags
+
+
+def first_package_token(input_string):
+    # 取第一个真正的包名（跳过 flag 和 --limit-rate / --proxy 后面的值），
+    # 这样 `wave install --unlink wget@1.25.0` 与 `wave install wget@1.25.0 --unlink` 等价
+    skip_next = False
+    for word in input_string.split()[2:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if word in ("--limit-rate", "--proxy"):
+            skip_next = True
+            continue
+        if word.startswith("-"):
+            continue
+        return word
+    return None
 
 
 def handle_download_args(input_string):
@@ -383,10 +401,8 @@ def handle_install(input_string):
     config = handle_download_args(input_string)
 
     # 1. 解析包名
-    parts = input_string.split()
-    if len(parts) >= 3:
-        raw_pkg = parts[2]
-    else:
+    raw_pkg = first_package_token(input_string)
+    if not raw_pkg:
         print(f"{RED_BOLD}🌊 Error: Invalid package name{RESET}")
         sys.exit(1)
 
@@ -405,14 +421,14 @@ def handle_install(input_string):
         print(f"{RED_BOLD}🌊 Error: Unknown Arch!{RESET}")
         sys.exit(1)
 
-    # 3. 解析版本号
+    # 3. 解析版本号（只看包名 token，避免 --proxy 里的 user:pass@host 被误认）
     ParsePkgVersion = None
-    if "@" in input_string:
+    if "@" in raw_pkg:
         if "--ver" in input_string:
             print(f"{RED_BOLD}🌊 Error: Repeated Version Number{RESET}")
             sys.exit(1)
         else:
-            ParsePkgVersion = input_string.split("@")[1].split(" ")[0].strip()
+            ParsePkgVersion = raw_pkg.split("@", 1)[1].strip()
     elif "--ver" in input_string:
         ParsePkgVersion = input_string.split("--ver")[1].strip().split(" ")[0]
     else:
@@ -524,6 +540,15 @@ def handle_install(input_string):
     # 11. 路径替换：依赖与软件包都就位后统一做一遍
     #     （必须放最后：先装的依赖可能引用后装的依赖，提前替换会解析不到）
     transfer_installed_artifacts(target_dir)
+
+    # 12. 把不带版本号的软链接指到刚装好的版本（--unlink 可跳过）
+    if "--unlink" not in input_string:
+        try:
+            from linker import link_package
+            if link_package(bin_name, ParsePkgVersion):
+                print(f"🌊 Linked {bin_name} -> {bin_name}@{ParsePkgVersion}")
+        except Exception as error:
+            print(f"{YELLOW}🌊 Warning: could not create the unversioned link ({error}).{RESET}")
 
 
 if __name__ == "__main__":

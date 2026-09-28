@@ -2,9 +2,9 @@ name: Format Test
 
 on:
   push:
-    branches: [2.1.0, main, 2.2.0, 2.3]
+    branches: [2.1.0, main, 2.2.0, 2.3, 2.4]
   pull_request:
-    branches: [2.1.0, main, 2.2.0, 2.3]
+    branches: [2.1.0, main, 2.2.0, 2.3, 2.4]
   workflow_dispatch:
 
 jobs:
@@ -64,6 +64,10 @@ jobs:
       - name: Run dependency chain test
         run: |
           bash scripts/deps_test.sh
+
+      - name: Run unversioned link test
+        run: |
+          bash scripts/link_test.sh
 
       # 会真的按 configdata 的 update_command 更新一遍安装目录，所以放最后
       - name: Run selfupdate test
