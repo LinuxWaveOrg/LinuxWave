@@ -292,99 +292,112 @@ else
 fi
 
 # ==========================================
-# 文件 URL
+# 文件清单（configdata/versiondata/files_info）
 # ==========================================
+#
+# 要下载哪些文件不写死在本脚本里，而是去 configdata 分支读一份清单，
+# 这样新增文件只要改那份清单，不必再同步修改安装脚本与自更新脚本。
+# 清单内容**只表示仓库里的路径**，写法：
+#
+#     /                      单独一个 / 表示安装根（等价于 BASE_DIR）
+#         lib/               以 / 结尾 → 目录，只创建不下载
+#             wave.py        其它 → 文件
+#         pkg/linker.py      也可以行内直接写完整路径，代替缩进
+#             # 以 # 开头的是注释，空行忽略
+#
+# 缩进每层 4 个空格，Tab 与 4 个空格等价，两种可以混用。
+# 每个文件都从 "$BASE_URL/<仓库路径>" 下载，落到 "$BASE_DIR" 下的同名位置。
+# 唯一的特例：lib/wave.py 装成可执行的 lib/wave（它是 PATH 里的入口名）。
 
-WAVE_URL="$BASE_URL/lib/wave.py"
-HELP_URL="$BASE_URL/lib/help.py"
-CONFIGERROR_URL="$BASE_URL/lib/configerror.py"
-SELFUPDATE_URL="$BASE_URL/lib/selfupdate.py"
-SELFUPDATE_SH_URL="$BASE_URL/lib/selfupdate.sh"
-PKGINSTALLER_URL="$BASE_URL/pkg/pkginstaller.py"
-PKGINSTALLER_SH_URL="$BASE_URL/pkg/pkginstaller.sh"
-PKGINFOHELPER_URL="$BASE_URL/pkg/pkginfohelper.py"
-UNINSTALLER_URL="$BASE_URL/pkg/uninstaller.py"
-PKGVERSIONPARSER_URL="$BASE_URL/pkg/pkgversionparser.py"
-PKGUNZIP_URL="$BASE_URL/pkg/pkgunzip.sh"
-LINKER_URL="$BASE_URL/pkg/linker.py"
+CONFIGDATA_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata"
+FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
+FILES_INFO_TMP="$(mktemp)"
 
-# 依赖处理相关文件全部从 $BRANCH 分支拉取
-DEPSINSTALLER_URL="$BASE_URL/surfboard/depsinstaller.py"
-DEPSINSTALLER_SH_URL="$BASE_URL/surfboard/depsinstaller.sh"
-DEPSMANAGER_SH_URL="$BASE_URL/surfboard/depsmanager.sh"
-DEPSVERSIONPARSER_URL="$BASE_URL/surfboard/depsversionparser.py"
-QUERIER_URL="$BASE_URL/surfboard/querier.py"
-TAGGER_SH_URL="$BASE_URL/surfboard/tagger.sh"
-TRANSFER_SH_URL="$BASE_URL/surfboard/transfer.sh"
+cleanup_files_info() {
+    rm -f "$FILES_INFO_TMP"
+}
+trap cleanup_files_info EXIT
+
+echo "🌊 Fetching the file list..."
+
+if ! curl -fsSL --max-time 30 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
+    echo -e "${RED_BOLD}🌊 Error: Cannot fetch versiondata/files_info from the configdata branch.${RESET}"
+    exit 1
+fi
+
+parse_files_info() {
+    # 把缩进树解析成 "<仓库路径>\t<本地相对路径>\t<是否需要 +x>"，一行一个文件
+    python3 - "$1" <<'PY'
+import sys
+
+stack = []   # [(缩进宽度, 目录名)]：当前所在目录的祖先链
+lines = []
+
+for raw in open(sys.argv[1], encoding="utf-8"):
+    line = raw.rstrip("\n")
+    if not line.strip() or line.lstrip().startswith("#"):
+        continue
+
+    # 缩进按 4 个空格算，Tab 等价于 4 个空格（两者可以混用）
+    expanded = line.expandtabs(4)
+    indent = len(expanded) - len(expanded.lstrip(" "))
+    name = line.strip()
+
+    while stack and stack[-1][0] >= indent:   # 缩进回退：弹掉不比当前行浅的祖先
+        stack.pop()
+
+    if name == "/":                 # 单独一个 /：安装根，等价于 BASE_DIR
+        stack = []
+        continue
+
+    if name.endswith("/"):          # 以 / 结尾 → 目录：只记层次，不下载
+        stack.append((indent, name.rstrip("/")))
+        continue
+
+    if "/" in name:                 # 行内直接写完整路径（可代替缩进）
+        repo_path = name.strip("/")
+    else:
+        repo_path = "/".join([directory for _, directory in stack] + [name])
+
+    if repo_path == "lib/wave.py":
+        local_path, executable = "lib/wave", 1
+    else:
+        local_path, executable = repo_path, int(repo_path.endswith(".sh"))
+
+    lines.append(f"{repo_path}\t{local_path}\t{executable}")
+
+print("\n".join(lines))
+PY
+}
+
+FILE_ENTRIES="$(parse_files_info "$FILES_INFO_TMP")"
+
+if [[ -z "$FILE_ENTRIES" ]]; then
+    echo -e "${RED_BOLD}🌊 Error: The file list is empty, nothing to download.${RESET}"
+    exit 1
+fi
+
+FILE_COUNT=$(printf '%s\n' "$FILE_ENTRIES" | wc -l | tr -d ' ')
+echo "🌊 Downloading $FILE_COUNT file(s) from branch: $BRANCH"
+echo ""
 
 # ==========================================
 # 下载文件
 # ==========================================
 
-echo "🌊 Downloading wave..."
-run_cmd curl -fsSL -o "$LIB_DIR/wave" "$WAVE_URL"
-run_cmd chmod +x "$LIB_DIR/wave"
+while IFS=$'\t' read -r repo_path local_path executable; do
+    if [[ -z "$repo_path" ]]; then
+        continue
+    fi
 
-echo "🌊 Downloading help.py..."
-run_cmd curl -fsSL -o "$LIB_DIR/help.py" "$HELP_URL"
+    echo "🌊 Downloading $repo_path..."
+    run_cmd mkdir -p "$(dirname "$BASE_DIR/$local_path")"
+    run_cmd curl -fsSL -o "$BASE_DIR/$local_path" "$BASE_URL/$repo_path"
 
-echo "🌊 Downloading configerror.py..."
-run_cmd curl -fsSL -o "$LIB_DIR/configerror.py" "$CONFIGERROR_URL"
-
-echo "🌊 Downloading selfupdate.py..."
-run_cmd curl -fsSL -o "$LIB_DIR/selfupdate.py" "$SELFUPDATE_URL"
-
-echo "🌊 Downloading selfupdate.sh..."
-run_cmd curl -fsSL -o "$LIB_DIR/selfupdate.sh" "$SELFUPDATE_SH_URL"
-run_cmd chmod +x "$LIB_DIR/selfupdate.sh"
-
-echo "🌊 Downloading pkginstaller.py..."
-run_cmd curl -fsSL -o "$REPO_DIR/pkginstaller.py" "$PKGINSTALLER_URL"
-
-echo "🌊 Downloading pkginstaller.sh..."
-run_cmd curl -fsSL -o "$REPO_DIR/pkginstaller.sh" "$PKGINSTALLER_SH_URL"
-run_cmd chmod +x "$REPO_DIR/pkginstaller.sh"
-
-echo "🌊 Downloading pkginfohelper.py..."
-run_cmd curl -fsSL -o "$REPO_DIR/pkginfohelper.py" "$PKGINFOHELPER_URL"
-
-echo "🌊 Downloading uninstaller.py..."
-run_cmd curl -fsSL -o "$REPO_DIR/uninstaller.py" "$UNINSTALLER_URL"
-
-echo "🌊 Downloading pkgversionparser.py..."
-run_cmd curl -fsSL -o "$REPO_DIR/pkgversionparser.py" "$PKGVERSIONPARSER_URL"
-
-echo "🌊 Downloading linker.py..."
-run_cmd curl -fsSL -o "$REPO_DIR/linker.py" "$LINKER_URL"
-
-echo "🌊 Downloading pkgunzip.sh..."
-run_cmd curl -fsSL -o "$REPO_DIR/pkgunzip.sh" "$PKGUNZIP_URL"
-run_cmd chmod +x "$REPO_DIR/pkgunzip.sh"
-
-echo "🌊 Downloading surfboard/depsinstaller.py..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/depsinstaller.py" "$DEPSINSTALLER_URL"
-
-echo "🌊 Downloading surfboard/depsinstaller.sh..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/depsinstaller.sh" "$DEPSINSTALLER_SH_URL"
-run_cmd chmod +x "$SURFBOARD_DIR/depsinstaller.sh"
-
-echo "🌊 Downloading surfboard/depsmanager.sh..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/depsmanager.sh" "$DEPSMANAGER_SH_URL"
-run_cmd chmod +x "$SURFBOARD_DIR/depsmanager.sh"
-
-echo "🌊 Downloading surfboard/depsversionparser.py..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/depsversionparser.py" "$DEPSVERSIONPARSER_URL"
-
-echo "🌊 Downloading surfboard/querier.py..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/querier.py" "$QUERIER_URL"
-
-echo "🌊 Downloading surfboard/tagger.sh..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/tagger.sh" "$TAGGER_SH_URL"
-run_cmd chmod +x "$SURFBOARD_DIR/tagger.sh"
-
-echo "🌊 Downloading surfboard/transfer.sh..."
-run_cmd curl -fsSL -o "$SURFBOARD_DIR/transfer.sh" "$TRANSFER_SH_URL"
-run_cmd chmod +x "$SURFBOARD_DIR/transfer.sh"
+    if [[ "$executable" == "1" ]]; then
+        run_cmd chmod +x "$BASE_DIR/$local_path"
+    fi
+done <<< "$FILE_ENTRIES"
 
 # ==========================================
 # 把所有权交还给用户（下载后再次确保）
