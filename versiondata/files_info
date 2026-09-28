@@ -1,5 +1,30 @@
+# 要更新/下载的文件清单，只写仓库里的路径。
+# 缩进每层 4 个空格（Tab 等价），以 / 结尾表示目录（只创建不下载），
+# # 开头是注释；也可以行内直接写完整路径（如 pkg/linker.py）代替缩进。
+# 新增文件时在这里加一行即可，install.sh 与 selfupdate.sh 都按它下载。
+
 /
     lib/
         wave.py
         help.py
-        # 这是注释
+        configerror.py
+        selfupdate.py
+        selfupdate.sh
+
+    pkg/
+        pkginstaller.py
+        pkginstaller.sh
+        pkginfohelper.py
+        uninstaller.py
+        pkgversionparser.py
+        pkgunzip.sh
+        linker.py
+
+    surfboard/
+        depsinstaller.py
+        depsinstaller.sh
+        depsmanager.sh
+        depsversionparser.py
+        querier.py
+        tagger.sh
+        transfer.sh
