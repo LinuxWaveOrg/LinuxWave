@@ -130,12 +130,14 @@ when that would leave the link pointing at the version you are removing.
 ```
 bat           by David Peter
 choma         by opa334
+dust          by bootandy
 fd            by David Peter
 ffmpeg        by FFmpeg Team
 fzf           by Junegunn Choi
 jq            by Stephen Dolan, Nicolas Williams, et al.
 ldid          by Jay Freeman (saurik) / Procursus Team
 lsd           by Abin Simon
+ncdu          by Yoran Heling
 palera1n      by palera1n Team
 rg            by Andrew Gallant
 tmux          by Nicholas Marriott and contributors
