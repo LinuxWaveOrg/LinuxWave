@@ -126,8 +126,21 @@ trap cleanup_files_info EXIT
 
 echo "🌊 Fetching the file list..."
 
-if ! curl -fsSL --max-time 30 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
+FILES_INFO_ATTEMPTS=3
+FILES_INFO_OK=false
+for attempt in $(seq 1 "$FILES_INFO_ATTEMPTS"); do
+    if curl -fsSL --max-time 60 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
+        FILES_INFO_OK=true
+        break
+    fi
+    if [[ "$attempt" -lt "$FILES_INFO_ATTEMPTS" ]]; then
+        echo -e "${YELLOW}🌊 Retrying the file list ($((attempt + 1))/$FILES_INFO_ATTEMPTS)...${RESET}"
+    fi
+done
+
+if [[ "$FILES_INFO_OK" != "true" ]]; then
     echo -e "${RED_BOLD}🌊 Error: Cannot fetch versiondata/files_info from the configdata branch.${RESET}"
+    echo -e "${RED_BOLD}🌊 Nothing was updated. Check your network or proxy, then try again.${RESET}"
     exit 1
 fi
 

@@ -192,6 +192,56 @@ if [[ "$NEED_SUDO" == "true" ]]; then
 fi
 
 # ==========================================
+# 文件清单（configdata/versiondata/files_info）
+# ==========================================
+#
+# 要下载哪些文件不写死在本脚本里，而是去 configdata 分支读一份清单，
+# 这样新增文件只要改那份清单，不必再同步修改安装脚本与自更新脚本。
+# 清单内容**只表示仓库里的路径**，写法：
+#
+#     /                      单独一个 / 表示安装根（等价于 BASE_DIR）
+#         lib/               以 / 结尾 → 目录，只创建不下载
+#             wave.py        其它 → 文件
+#         pkg/linker.py      也可以行内直接写完整路径，代替缩进
+#             # 以 # 开头的是注释，空行忽略
+#
+# 缩进每层 4 个空格，Tab 与 4 个空格等价，两种可以混用。
+# 每个文件都从 "$BASE_URL/<仓库路径>" 下载，落到 "$BASE_DIR" 下的同名位置。
+# 唯一的特例：lib/wave.py 装成可执行的 lib/wave（它是 PATH 里的入口名）。
+#
+# 这一步刻意放在「建目录 / 写配置 / 清旧版」之前：连不上 configdata 就直接退出，
+# 不会留下一个配置已写好、文件却一个都没下的半成品安装。
+
+CONFIGDATA_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata"
+FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
+FILES_INFO_TMP="$(mktemp)"
+FILES_INFO_ATTEMPTS=3
+
+cleanup_files_info() {
+    rm -f "$FILES_INFO_TMP"
+}
+trap cleanup_files_info EXIT
+
+echo "🌊 Fetching the file list..."
+
+FILES_INFO_OK=false
+for attempt in $(seq 1 "$FILES_INFO_ATTEMPTS"); do
+    if curl -fsSL --max-time 60 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
+        FILES_INFO_OK=true
+        break
+    fi
+    if [[ "$attempt" -lt "$FILES_INFO_ATTEMPTS" ]]; then
+        echo -e "${YELLOW}🌊 Retrying the file list ($((attempt + 1))/$FILES_INFO_ATTEMPTS)...${RESET}"
+    fi
+done
+
+if [[ "$FILES_INFO_OK" != "true" ]]; then
+    echo -e "${RED_BOLD}🌊 Error: Cannot fetch versiondata/files_info from the configdata branch.${RESET}"
+    echo -e "${RED_BOLD}🌊 Nothing was installed. Check your network or proxy, then run the installer again.${RESET}"
+    exit 1
+fi
+
+# ==========================================
 # 创建目录
 # ==========================================
 
@@ -292,38 +342,9 @@ else
 fi
 
 # ==========================================
-# 文件清单（configdata/versiondata/files_info）
+# 解析文件清单
 # ==========================================
-#
-# 要下载哪些文件不写死在本脚本里，而是去 configdata 分支读一份清单，
-# 这样新增文件只要改那份清单，不必再同步修改安装脚本与自更新脚本。
-# 清单内容**只表示仓库里的路径**，写法：
-#
-#     /                      单独一个 / 表示安装根（等价于 BASE_DIR）
-#         lib/               以 / 结尾 → 目录，只创建不下载
-#             wave.py        其它 → 文件
-#         pkg/linker.py      也可以行内直接写完整路径，代替缩进
-#             # 以 # 开头的是注释，空行忽略
-#
-# 缩进每层 4 个空格，Tab 与 4 个空格等价，两种可以混用。
-# 每个文件都从 "$BASE_URL/<仓库路径>" 下载，落到 "$BASE_DIR" 下的同名位置。
-# 唯一的特例：lib/wave.py 装成可执行的 lib/wave（它是 PATH 里的入口名）。
-
-CONFIGDATA_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata"
-FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
-FILES_INFO_TMP="$(mktemp)"
-
-cleanup_files_info() {
-    rm -f "$FILES_INFO_TMP"
-}
-trap cleanup_files_info EXIT
-
-echo "🌊 Fetching the file list..."
-
-if ! curl -fsSL --max-time 30 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
-    echo -e "${RED_BOLD}🌊 Error: Cannot fetch versiondata/files_info from the configdata branch.${RESET}"
-    exit 1
-fi
+# 清单已在上面取回（连不上就直接退出了，没动过任何东西），这里只做解析。
 
 parse_files_info() {
     # 把缩进树解析成 "<仓库路径>\t<本地相对路径>\t<是否需要 +x>"，一行一个文件
