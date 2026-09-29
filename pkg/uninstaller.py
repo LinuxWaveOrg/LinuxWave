@@ -359,13 +359,16 @@ def handle_uninstall(input_string):
 
     raw_pkg = operands[0]
 
-    # 1. 不带 @：列出所有版本让用户选择
+    # 1. 不带 @：只有一个版本就直接卸，多个版本才让用户选
     if '@' not in raw_pkg:
         pkg_name = raw_pkg
         versions = find_installed_versions(pkg_name)
         if not versions:
             print(f"{RED_BOLD}🌊 Error: Package '{pkg_name}' is not installed.{RESET}")
             sys.exit(1)
+        if len(versions) == 1:
+            uninstall_versions(pkg_name, versions, keep_link)
+            return
         uninstall_versions(pkg_name, select_versions(pkg_name, versions), keep_link)
         return
 

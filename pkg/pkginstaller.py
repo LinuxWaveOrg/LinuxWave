@@ -464,7 +464,9 @@ def handle_install(input_string):
                 print(f"{RED_BOLD}🌊 Error: Can't find parse package version.\n🌊 If you certain this version is existent, Please contact the administrator.{RESET}")
                 sys.exit(1)
             else:
-                print(f"{RED_BOLD}🌊 Error: Service unavailable, Please contact the administrator.{RESET}")
+                print(f"{RED_BOLD}🌊 Error: GitHub returned HTTP {resp.status_code} for the package data.{RESET}")
+                print(f"{RED_BOLD}🌊   {pkg_version_url}{RESET}")
+                print(f"{RED_BOLD}🌊 This is usually a network hiccup. Check your network or proxy, then run the command again.{RESET}")
                 sys.exit(1)
     except Exception as e:
         print(f"{RED_BOLD}🌊 Error: {e}{RESET}")

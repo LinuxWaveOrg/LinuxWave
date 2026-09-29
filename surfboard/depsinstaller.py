@@ -118,15 +118,27 @@ def get_deps(fields):
 
 # -------------------- 远程数据 --------------------
 
-def fetch_text(url):
+def fetch_text(url, attempts=3):
 
-    # 返回 (状态码, 文本)，网络异常记状态码 0。
+    # 返回 (状态码, 文本)。网络异常与 5xx 会重试（GitHub raw 会间歇性地
+    # 抽风，用户网络也可能抖动），404 与 200 直接返回，不浪费时间重试。
+    # 重试用尽后：网络异常记状态码 0，服务端错误记最后一次的状态码。
 
-    try:
-        response = requests.get(url, timeout=30)
-        return response.status_code, response.text
-    except Exception:
-        return 0, ""
+    last_status = 0
+
+    for _ in range(attempts):
+        try:
+            response = requests.get(url, timeout=30)
+        except Exception:
+            last_status = 0
+            continue
+
+        if response.status_code in (200, 404):
+            return response.status_code, response.text
+
+        last_status = response.status_code
+
+    return last_status, ""
 
 
 def dep_common_url(dep_name, arch):
@@ -148,9 +160,17 @@ def report_not_found(dep_ref):
     sys.exit(1)
 
 
-def report_service_unavailable():
+def report_service_unavailable(url, status=0):
 
-    print(f"{RED_BOLD}🌊 Error: Service unavailable, Please contact the administrator.{RESET}")
+    # 以前这里只有一句“Service unavailable, Please contact the administrator.”，
+    # 网络抖动时用户根本看不出发生了什么、也不知道该不该重试。
+
+    if status:
+        print(f"{RED_BOLD}🌊 Error: GitHub returned HTTP {status} for the dependency data.{RESET}")
+    else:
+        print(f"{RED_BOLD}🌊 Error: Cannot reach GitHub for the dependency data.{RESET}")
+    print(f"{RED_BOLD}🌊   {url}{RESET}")
+    print(f"{RED_BOLD}🌊 This is usually a network hiccup. Check your network or proxy, then run the command again.{RESET}")
     sys.exit(1)
 
 
@@ -307,13 +327,14 @@ def ensure_dependency(dep_ref, arch, config, input_string, depender, visited=Non
     # 已安装的依赖也要按数据检查一遍它自己的依赖：新补上的依赖边或上次中断的安装
     # 都在这里补齐，否则运行时可能缺库（只多一次版本文件请求，不会重新下载）
     if already_installed:
-        status, version_text = fetch_text(dep_version_url(dep_name, dep_version, arch))
+        own_version_url = dep_version_url(dep_name, dep_version, arch)
+        status, version_text = fetch_text(own_version_url)
         if status == 404:
             print(f"{YELLOW}🌊 Warning: {dep_name}@{dep_version} has no version file, "
                   f"skipping its own dependencies.{RESET}")
             return
         if status != 200:
-            report_service_unavailable()
+            report_service_unavailable(own_version_url, status)
         child_refs = get_deps(parse_common_fields(version_text))
         if child_refs:
             install_dependencies(child_refs, arch, config, input_string,
@@ -321,21 +342,23 @@ def ensure_dependency(dep_ref, arch, config, input_string, depender, visited=Non
         return
 
     # 2. 拉取 @common，拿依赖的真实名字（dep_name）
-    status, common_text = fetch_text(dep_common_url(dep_name, arch))
+    common_url = dep_common_url(dep_name, arch)
+    status, common_text = fetch_text(common_url)
     if status == 404:
         report_not_found(dep_ref)
     elif status != 200:
-        report_service_unavailable()
+        report_service_unavailable(common_url, status)
 
     fields = parse_common_fields(common_text)
     dep_display_name = get_field(fields, "dep_name", dep_name)
 
     # 3. 拉取版本文件，拿下载地址、校验值，以及它自己的 deps
-    status, version_text = fetch_text(dep_version_url(dep_name, dep_version, arch))
+    version_url = dep_version_url(dep_name, dep_version, arch)
+    status, version_text = fetch_text(version_url)
     if status == 404:
         report_not_found(dep_ref)
     elif status != 200:
-        report_service_unavailable()
+        report_service_unavailable(version_url, status)
 
     version_fields = parse_common_fields(version_text)
     dep_url = get_field(version_fields, "url")
