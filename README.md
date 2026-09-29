@@ -10,7 +10,7 @@ A package manager for macOS software developers.
 macOS Sonoma14 and above
 ## 🌊 Latest Version
 
-2.4, Release on 2026-09-28
+2.4.1, Release on 2026-09-29
 
 ## 🌊 What is MacWave?
 
@@ -22,7 +22,7 @@ MacWave is a **package manager** that runs on **macOS/Linux**, designed to host 
 2. **Versioned storage.** Every binary is stored as `package@version`, so multiple versions can coexist without conflicting with system tools.
 3. **Optional unversioned links.** `wave link <package>` creates a plain `package` shortcut pointing at the highest installed version, and it re-points itself whenever you install or remove versions.
 4. **No cache, always up to date.** Package metadata is fetched live from the `infosource` branch.
-5. **9 archive formats, CI-verified.** Supports no-extension binaries, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar`, `.gz`, `.xz`, `.bz2`.
+5. **10 archive formats, CI-verified.** Supports no-extension binaries, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar`, `.gz`, `.xz`, `.bz2`, `.conda`.
 6. **Verify first, extract later.** SHA256 is checked before extraction.
 7. **Resumable downloads.** Interrupted? Resume with `-C`.
 8. **Lightweight and transparent.** Pure Python + Shell. No heavy runtime, no hidden behavior.
@@ -41,7 +41,7 @@ source ~/.zshrc
 
 (If you are using bash instead of zsh, run ```source ~/.bashrc```)
 
-**Requirements: Python (3.13 and above), Xcode Command Line Tools (14.0 and above).**
+**Requirements: Python (3.14 and above), Xcode Command Line Tools (14.0 and above).**
 
 ## 🌊 Download Directory 
 Installed binaries are stored in (options):    

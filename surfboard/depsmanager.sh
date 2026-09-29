@@ -147,7 +147,7 @@ mw_extract_binary() {
     local bin_name="$4"
 
     case "$original_file" in
-        *.zip|*.tar.gz|*.tgz|*.tar.bz2|*.tbz2|*.tar.xz|*.txz|*.tar|*.gz|*.bz2|*.xz)
+        *.zip|*.tar.gz|*.tgz|*.tar.bz2|*.tbz2|*.tar.xz|*.txz|*.tar|*.gz|*.bz2|*.xz|*.conda)
             mkdir -p "$extract_dir"
 
             # 解压脚本的输出全部转 stderr，保证本函数的 stdout 只有二进制路径
@@ -205,7 +205,7 @@ mw_extract_all() {
     local unzip_script="$3"
 
     case "$original_file" in
-        *.zip|*.tar.gz|*.tgz|*.tar.bz2|*.tbz2|*.tar.xz|*.txz|*.tar|*.gz|*.bz2|*.xz)
+        *.zip|*.tar.gz|*.tgz|*.tar.bz2|*.tbz2|*.tar.xz|*.txz|*.tar|*.gz|*.bz2|*.xz|*.conda)
             mkdir -p "$extract_dir"
 
             # 解压脚本的输出全部转 stderr，保证本函数的 stdout 只有目录路径

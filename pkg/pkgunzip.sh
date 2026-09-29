@@ -59,6 +59,38 @@ with lzma.open(sys.argv[1], 'rb') as source, open(sys.argv[2], 'wb') as target:
     shutil.copyfileobj(source, target)
 PYEOF
         ;;
+    *.conda)
+        # .conda 是 conda 的第二种包格式：本质是个 zip，里面装两个 zstd 压缩的 tar，
+        # pkg-*.tar.zst 才是要落盘的载荷，info-*.tar.zst 只是元数据。
+        # zstd 用 Python 3.14 的标准库 compression.zstd（macOS 不自带 zstd 命令）。
+        python3 - "$ARCHIVE_PATH" "$EXTRACT_DIR" << 'PYEOF'
+import os
+import sys
+import tarfile
+import zipfile
+
+try:
+    from compression import zstd
+except ImportError:
+    print("🌊 Error: .conda packages need Python 3.14 or newer.", file=sys.stderr)
+    sys.exit(1)
+
+archive_path, extract_dir = sys.argv[1], sys.argv[2]
+
+with zipfile.ZipFile(archive_path) as archive:
+    payloads = [name for name in archive.namelist()
+                if os.path.basename(name).startswith('pkg-') and name.endswith('.tar.zst')]
+    if not payloads:
+        print("🌊 Error: no pkg-*.tar.zst found inside the .conda archive.", file=sys.stderr)
+        sys.exit(1)
+
+    with archive.open(payloads[0]) as raw:
+        with zstd.ZstdFile(raw, 'rb') as decompressed:
+            # filter='tar'：保留符号链接（conda 包里大量使用），仍会挡掉危险项
+            with tarfile.open(fileobj=decompressed, mode='r|') as tar:
+                tar.extractall(extract_dir, filter='tar')
+PYEOF
+        ;;
     *)
         echo -e "${RED_BOLD}🌊 Error: Unsupported archive format: $ARCHIVE_PATH${RESET}"
         exit 1

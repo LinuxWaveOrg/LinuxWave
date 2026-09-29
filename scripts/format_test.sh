@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # format_test.sh
-# 对 9 种格式的测试包逐个跑：install → 执行 → uninstall
+# 对 10 种格式的测试包逐个跑：install → 执行 → uninstall
 
 set -e
 
@@ -39,6 +39,7 @@ PKGS=(
     "test_bin_gz|.gz"
     "test_bin_bz2|.bz2"
     "test_bin_xz|.xz"
+    "test_bin_conda|.conda"
 )
 
 FAILED=0

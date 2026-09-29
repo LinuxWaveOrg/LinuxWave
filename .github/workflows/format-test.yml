@@ -25,7 +25,8 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          # .conda 包需要 Python 3.14 的 compression.zstd
+          python-version: '3.14'
 
       - name: Install Python dependencies
         run: pip install requests packaging rich
