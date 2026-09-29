@@ -53,9 +53,11 @@ TREE_FILE="$(mktemp -t macwave-tree)"
 UNRESOLVED_FILE="$(mktemp -t macwave-unresolved)"
 MISSING_FILE="$(mktemp -t macwave-missing)"
 EXTERNAL_FILE="$(mktemp -t macwave-external)"
+FAILED_FILE="$(mktemp -t macwave-failed)"
+ERROR_FILE="$(mktemp -t macwave-error)"
 
 cleanup() {
-    rm -f "$MAP_FILE" "$TREE_FILE" "$UNRESOLVED_FILE" "$MISSING_FILE" "$EXTERNAL_FILE"
+    rm -f "$MAP_FILE" "$TREE_FILE" "$UNRESOLVED_FILE" "$MISSING_FILE" "$EXTERNAL_FILE" "$FAILED_FILE" "$ERROR_FILE"
 }
 trap cleanup EXIT
 
@@ -219,8 +221,12 @@ while IFS= read -r file; do
             continue
         fi
 
-        if install_name_tool -change "$old_path" "$new_path" "$file" 2>/dev/null; then
+        if install_name_tool -change "$old_path" "$new_path" "$file" 2>"$ERROR_FILE"; then
             modified=1
+        else
+            # 不要静默：改不动的话这个二进制运行时一定加载失败（最常见的原因是
+            # 它没预留 headerpad，装不下更长的路径），必须让用户当场知道
+            echo "$file|$old_path|$(head -n 1 "$ERROR_FILE")" >> "$FAILED_FILE"
         fi
     done <<< "$otool_output"
 
@@ -230,8 +236,10 @@ while IFS= read -r file; do
     if [[ "$file" == *.dylib ]]; then
         current_id="$(otool -D "$file" 2>/dev/null | sed -n '2p' || true)"
         if [[ -n "$current_id" && "$current_id" != "$file" ]]; then
-            if install_name_tool -id "$file" "$file" 2>/dev/null; then
+            if install_name_tool -id "$file" "$file" 2>"$ERROR_FILE"; then
                 modified=1
+            else
+                echo "$file|(install name)|$(head -n 1 "$ERROR_FILE")" >> "$FAILED_FILE"
             fi
         fi
     fi
@@ -248,6 +256,18 @@ done < <(find "$TARGET_DIR" -type f 2>/dev/null)
 
 if [[ "$CHANGED" -gt 0 ]]; then
     echo "🌊 Relocated $CHANGED Mach-O file(s) in ${TARGET_DIR#"$BASE_DIR"/}"
+fi
+
+if [[ -s "$FAILED_FILE" ]]; then
+    failed_count="$(wc -l < "$FAILED_FILE" | tr -d ' ')"
+    echo -e "${YELLOW}🌊 Warning: $failed_count library reference(s) could not be rewritten:${RESET}"
+    while IFS='|' read -r failed_file failed_ref failed_reason; do
+        echo -e "${YELLOW}🌊   ${failed_file#"$BASE_DIR"/}: $failed_ref${RESET}"
+        if [[ -n "$failed_reason" ]]; then
+            echo -e "${YELLOW}🌊     $failed_reason${RESET}"
+        fi
+    done < <(sort -u "$FAILED_FILE" | head -10)
+    echo -e "${YELLOW}🌊 This binary will fail to load them at runtime. It was most likely built without header space for a longer path (no -headerpad), so it cannot be relocated in place.${RESET}"
 fi
 
 if [[ -s "$UNRESOLVED_FILE" ]]; then
