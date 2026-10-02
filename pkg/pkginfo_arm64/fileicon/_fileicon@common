@@ -1,0 +1,5 @@
+des: "fileicon - a macOS CLI for managing custom icons for files and folders"
+hom: "https://github.com/mklement0/fileicon"
+lic: "MIT"
+aut: "Michael Klement"
+bin_name: "fileicon"
