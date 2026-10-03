@@ -1,0 +1,5 @@
+des: "htop - an interactive process viewer"
+hom: "https://htop.dev"
+lic: "GPL-2.0"
+aut: "Hisham Muhammad and the htop team"
+bin_name: "htop"

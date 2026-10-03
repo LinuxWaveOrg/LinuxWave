@@ -1,0 +1,5 @@
+des: "btop - a resource monitor, nicely displayed"
+hom: "https://github.com/aristocratos/btop"
+lic: "Apache-2.0"
+aut: "Aristocratos"
+bin_name: "btop"

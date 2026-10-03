@@ -1,0 +1,5 @@
+des: "pandoc - a universal document converter"
+hom: "https://pandoc.org"
+lic: "GPL-2.0-or-later"
+aut: "John MacFarlane"
+bin_name: "pandoc"
