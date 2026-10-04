@@ -33,7 +33,7 @@ README.md     用户文档
 | `configpaths.py` | **配置目录解析**（`find_config_dir` / `load_base_dir` / `CONFIG_FILE` / `VERSION_FILE`）：系统级 `/opt/macwave_config` 优先，其次用户级 `~/.config/macwave_config`；系统级配置损坏或缺 `base_dir` 时也回落用户级。其余模块都从这里取配置，不再各自写死路径 |
 | `configerror.py` | 启动前的环境自检：只要两处配置目录里有一处装了 MacWave 就放行；都没装且在 git 仓库里时，报错并提示用 `lib/install.sh` 正式安装 |
 | `help.py` | 帮助与版本文本：`print_custom_help`（`-h` / `--help` 的用法，命令与旗标列表与 README 的 Command Reference 对齐）、`print_version`、`print_error_help`（未知命令时先报错再打帮助） |
-| `install.sh` | 官方安装脚本：选安装目录、`sudo` 提权、建运行时目录（`bin` / `links` / `deps` / `pkg` / `surfboard` / `lib` / `downloads/tmp`）、写 `config.json` / `VERSION.json`（**系统目录→`/opt/macwave_config`，用户目录→`~/.config/macwave_config`**）、**按 configdata 的 `versiondata/files_info` 清单拉取全部程序文件**（与 `selfupdate.sh` 共用同一份清单，解析逻辑也相同）、安装 Python 依赖（requests / packaging / rich）、把 `bin/` + `links/` + `lib/` 写入 PATH（升级时替换旧版只含 `bin`/`lib` 的行）、清理旧版平铺 `bin/` 文件、检查 Xcode 命令行工具（`otool` / `install_name_tool` / `codesign`）、许可协议确认（直接回车视为同意）。注意 `MACWAVE_VERSION` 仍**按分支写死**在脚本里，不能从 configdata 取 —— 否则用旧分支安装会写成新版本号 |
+| `install.sh` | 官方安装脚本：选安装目录、`sudo` 提权、建运行时目录（`bin` / `links` / `deps` / `pkg` / `surfboard` / `lib` / `downloads/tmp`）、写 `config.json` / `VERSION.json`（**系统目录→`/opt/macwave_config`，用户目录→`~/.config/macwave_config`**）、**用户级安装时把 2.5 之前的旧系统级配置 `/opt/macwave_config` 迁走**（否则它会因系统级优先而盖住新配置）、**按 configdata 的 `versiondata/files_info` 清单拉取全部程序文件**（与 `selfupdate.sh` 共用同一份清单，解析逻辑也相同）、安装 Python 依赖（requests / packaging / rich）、把 `bin/` + `links/` + `lib/` 写入 PATH（升级时替换旧版只含 `bin`/`lib` 的行）、清理旧版平铺 `bin/` 文件、检查 Xcode 命令行工具（`otool` / `install_name_tool` / `codesign`）、许可协议确认（直接回车视为同意）。注意 `MACWAVE_VERSION` 仍**按分支写死**在脚本里，不能从 configdata 取 —— 否则用旧分支安装会写成新版本号 |
 | `uninstall.sh` | 卸载 MacWave 本体：读两处配置定位 `BASE_DIR`（都读不到则遍历候选路径）、二次确认后删除安装目录与两处配置目录、清掉 rc 文件里的 PATH 行、最后自删 |
 | `selfupdate.py` | `wave selfupdate`：拉 `configdata` 分支的 `versiondata/latest_version`，取其 `version` 与当前生效的 `VERSION.json` 比较（只比数字段，`2.3` == `2.3.0`）；已是最新则直接返回，否则把 `update_command` 中 `<<<` / `>>>` 之间的内容交给 `/bin/bash -c` 执行（用环境变量 `MACWAVE_UPDATE_VERSION` / `MACWAVE_UPDATE_BRANCH` 把目标版本与分支传下去）。因为 `bash -c "$(curl …)"` 在 curl 失败时仍返回 0，执行完会**回读 `VERSION.json` 复核**，没变就报错 |
 | `selfupdate.sh` | 自更新脚本，由 `latest_version` 的 `update_command` 调用（也可 `bash lib/selfupdate.sh [分支]`）：按「系统级 → 用户级」定位配置目录与 `BASE_DIR` → 拉 `configdata/versiondata/files_info`（一份**只写仓库路径**的缩进树，`/` 开头是安装根、以 `/` 结尾表示目录、`#` 开始是注释；缩进每层 4 空格，Tab 与之等价，也可行内直接写 `pkg/linker.py` 这样的完整路径）→ **用脚本内置的 `python3` 解析它**（不能做成单独的 `.py` 文件，否则新文件本身又得先被下载 —— 鸡生蛋）→ 逐个从 `$BRANCH` 下载并复位可执行位（`lib/wave.py` 特例装成可执行的 `lib/wave`；其余 `*.sh` 加 +x）→ 清掉 `__pycache__` → 重写 `VERSION.json`。**以后新增文件只改 configdata 的 files_info，不用再动本脚本** |
@@ -79,6 +79,8 @@ README.md     用户文档
 `BASE_DIR` 取自生效的 `config.json` 的 `base_dir`（系统级 `/opt/macwave_config` 优先，其次用户级 `~/.config/macwave_config`；默认安装 `~/.local/macwave`）。
 
 配置目录的归属由安装位置决定：装到需要 `sudo` 的目录（`/opt/macwave`、`/usr/local/macwave`、自定义的系统路径）→ `/opt/macwave_config`；装到无需 `sudo` 的目录（`~/.local/macwave`、家目录下的自定义路径）→ `~/.config/macwave_config`。两处都存在时程序一律先用系统级。
+
+**迁移**：2.5 之前不分系统级/用户级，配置一律写在 `/opt/macwave_config`。所以用户级安装时，`install.sh` 会读 `/opt/macwave_config/VERSION.json`，只要版本低于 `2.5`（读不到也视为旧版）就把它删掉，配置重新落到 `~/.config/macwave_config`；`2.5` 及以后的系统级配置不动。
 
 ```
 BASE_DIR/bin/{可执行文件名}@{版本}/            软件包：二进制 + _DEPS

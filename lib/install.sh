@@ -275,6 +275,59 @@ run_cmd mkdir -p "$CONFIG_DIR"
 run_cmd chmod 755 "$CONFIG_DIR"
 
 # ==========================================
+# 迁移 2.5 之前的系统级配置
+# ==========================================
+#
+# 2.5 之前所有安装的配置都写在 /opt/macwave_config（不分系统级/用户级）。
+# 用户级安装如果把它留着，会因为「系统级优先」一直读到旧安装的 base_dir，
+# 新装的这份就永远用不上。所以用户级安装时，只要旧配置是 2.5 之前的版本，
+# 就把它删掉，让配置随下面「写入配置文件」落到 ~/.config/macwave_config。
+# 2.5 及以后的系统级配置不动 —— 那可能是另一份还在用的系统级 MacWave。
+
+LEGACY_CONFIG_DIR="/opt/macwave_config"
+
+legacy_config_is_old() {
+    # 参数是旧 VERSION.json 的路径；读不到文件或 version 字段时保守视为旧版
+    python3 - "$1" <<'PY'
+import json
+import re
+import sys
+
+try:
+    with open(sys.argv[1]) as handle:
+        version = json.load(handle).get("version", "")
+except Exception:
+    version = ""
+
+
+def key(value):
+    parts = [int(part) for part in re.findall(r"\d+", str(value))]
+    while len(parts) < 2:
+        parts.append(0)
+    return parts[:2]
+
+
+sys.exit(0 if key(version) < key("2.5") else 1)
+PY
+}
+
+if [[ "$NEED_SUDO" == "false" && -d "$LEGACY_CONFIG_DIR" ]]; then
+    if legacy_config_is_old "$LEGACY_CONFIG_DIR/VERSION.json"; then
+        echo -e "${YELLOW}🌊 Found a pre-2.5 configuration in $LEGACY_CONFIG_DIR.${RESET}"
+        echo -e "${YELLOW}🌊 Migrating it to $CONFIG_DIR...${RESET}"
+
+        rm -rf "$LEGACY_CONFIG_DIR" 2>/dev/null || true
+        if [[ -d "$LEGACY_CONFIG_DIR" ]]; then
+            sudo rm -rf "$LEGACY_CONFIG_DIR" || {
+                echo -e "${RED_BOLD}🌊 Error: Cannot remove the old configuration at $LEGACY_CONFIG_DIR.${RESET}"
+                echo -e "${RED_BOLD}🌊 Please remove it manually (sudo rm -rf $LEGACY_CONFIG_DIR) and run the installer again.${RESET}"
+                exit 1
+            }
+        fi
+    fi
+fi
+
+# ==========================================
 # 写入配置文件
 # ==========================================
 
