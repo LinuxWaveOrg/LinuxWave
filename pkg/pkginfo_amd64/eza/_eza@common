@@ -1,0 +1,5 @@
+des: "eza - a modern, maintained replacement for ls"
+hom: "https://github.com/eza-community/eza"
+lic: "EUPL-1.2"
+aut: "Christina Sørensen and the eza community"
+bin_name: "eza"
