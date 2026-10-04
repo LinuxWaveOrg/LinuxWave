@@ -8,6 +8,7 @@
         wave.py
         help.py
         configerror.py
+        configpaths.py
         selfupdate.py
         selfupdate.sh
 
