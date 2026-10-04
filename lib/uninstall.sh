@@ -2,19 +2,22 @@
 # MacWave Uninstaller
 # 卸载 MacWave 及清理环境配置
 
-CONFIG_DIR="/opt/macwave_config"
+SYSTEM_CONFIG_DIR="/opt/macwave_config"
+USER_CONFIG_DIR="$HOME/.config/macwave_config"
 ARCH=$(uname -m)
 
 # 默认尝试删除的路径列表
 BASE_DIRS=()
 
-# 1. 如果配置文件存在，优先读取
-if [ -f "$CONFIG_DIR/config.json" ]; then
-    READ_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_DIR/config.json')).get('base_dir', ''))" 2>/dev/null)
-    if [ -n "$READ_DIR" ]; then
-        BASE_DIRS+=("$READ_DIR")
+# 1. 如果配置文件存在，优先读取（系统级与用户级都读，两边都卸干净）
+for CONFIG_DIR in "$SYSTEM_CONFIG_DIR" "$USER_CONFIG_DIR"; do
+    if [ -f "$CONFIG_DIR/config.json" ]; then
+        READ_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_DIR/config.json')).get('base_dir', ''))" 2>/dev/null)
+        if [ -n "$READ_DIR" ]; then
+            BASE_DIRS+=("$READ_DIR")
+        fi
     fi
-fi
+done
 
 # 2. 如果读取失败（或文件不存在），把所有可能的路径都加入列表
 if [ ${#BASE_DIRS[@]} -eq 0 ]; then
@@ -48,11 +51,18 @@ for DIR in "${BASE_DIRS[@]}"; do
     fi
 done
 
-# 删除配置目录
-if [ -d "$CONFIG_DIR" ]; then
-    echo "🌊 Removing $CONFIG_DIR..."
-    sudo rm -rf "$CONFIG_DIR"
-fi
+# 删除配置目录（系统级与用户级都可能存在）
+for CONFIG_DIR in "$SYSTEM_CONFIG_DIR" "$USER_CONFIG_DIR"; do
+    if [ -d "$CONFIG_DIR" ]; then
+        if [[ "$CONFIG_DIR" == "$HOME"* ]]; then
+            echo "🌊 Removing $CONFIG_DIR..."
+            rm -rf "$CONFIG_DIR"
+        else
+            echo "🌊 Removing $CONFIG_DIR (with sudo)..."
+            sudo rm -rf "$CONFIG_DIR"
+        fi
+    fi
+done
 
 # 清理 PATH 配置（含自定义安装目录：删掉“# MacWave”注释行与紧跟在它后面的 PATH 行）
 for RC_FILE in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do

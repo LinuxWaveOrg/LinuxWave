@@ -7,10 +7,8 @@
 # 装完软件包后会自动改指到最高版本；早期装的包可以用 `wave link` 补上，
 # 用 `wave unlink` 撤掉。
 
-import json
 import os
 import sys
-from pathlib import Path
 
 
 # -------------------- 颜色定义 --------------------
@@ -23,24 +21,10 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
-CONFIG_FILE = Path("/opt/macwave_config/config.json")
+from configpaths import load_base_dir
 
 
-def load_config():
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                base_dir = json.load(f).get("base_dir")
-                if base_dir:
-                    return Path(base_dir)
-        except Exception:
-            pass
-    print(f"{RED_BOLD}🌊 Error: Configuration file not found or invalid.{RESET}")
-    print(f"{RED_BOLD}🌊 Please run the install script again to reinstall MacWave.{RESET}")
-    sys.exit(1)
-
-
-BASE_DIR = load_config()
+BASE_DIR = load_base_dir()
 BIN_DIR = BASE_DIR / "bin"
 LINKS_DIR = BASE_DIR / "links"
 

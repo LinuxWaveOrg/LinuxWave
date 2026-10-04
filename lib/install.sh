@@ -252,7 +252,15 @@ SURFBOARD_DIR="$BASE_DIR/surfboard"
 LIB_DIR="$BASE_DIR/lib"
 DEPS_DIR="$BASE_DIR/deps"
 DOWNLOAD_DIR="$BASE_DIR/downloads/tmp"
-CONFIG_DIR="/opt/macwave_config"
+
+# 配置文件目录：装到系统目录（需要 sudo）时用 /opt/macwave_config，
+# 装到用户目录（无需 sudo）时用 ~/.config/macwave_config。
+# 读取时系统级优先，所以系统级 MacWave 总是盖过用户级的。
+if [[ "$NEED_SUDO" == "true" ]]; then
+    CONFIG_DIR="/opt/macwave_config"
+else
+    CONFIG_DIR="$HOME/.config/macwave_config"
+fi
 CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
 
@@ -263,20 +271,20 @@ run_cmd mkdir -p "$SURFBOARD_DIR"
 run_cmd mkdir -p "$LIB_DIR"
 run_cmd mkdir -p "$DEPS_DIR"
 run_cmd mkdir -p "$DOWNLOAD_DIR"
-sudo mkdir -p "$CONFIG_DIR"
-sudo chmod 755 "$CONFIG_DIR"
+run_cmd mkdir -p "$CONFIG_DIR"
+run_cmd chmod 755 "$CONFIG_DIR"
 
 # ==========================================
 # 写入配置文件
 # ==========================================
 
-sudo tee "$CONFIG_FILE" > /dev/null << EOF
+run_cmd tee "$CONFIG_FILE" > /dev/null << EOF
 {
   "base_dir": "$BASE_DIR"
 }
 EOF
 
-sudo tee "$VERSION_FILE" > /dev/null << EOF
+run_cmd tee "$VERSION_FILE" > /dev/null << EOF
 {
   "version": "$MACWAVE_VERSION",
   "components": {
@@ -294,13 +302,15 @@ if [[ "$NEED_SUDO" == "true" ]]; then
     sudo chown -R "$CURRENT_USER": "$BASE_DIR"
 fi
 
-sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
-sudo chmod 755 "$CONFIG_DIR"
-sudo chmod 644 "$CONFIG_FILE"
-sudo chmod 644 "$VERSION_FILE"
+if [[ "$NEED_SUDO" == "true" ]]; then
+    sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
+fi
+run_cmd chmod 755 "$CONFIG_DIR"
+run_cmd chmod 644 "$CONFIG_FILE"
+run_cmd chmod 644 "$VERSION_FILE"
 
-echo "🌊 Configuration saved to /opt/macwave_config/config.json"
-echo "🌊 Version saved to /opt/macwave_config/VERSION.json"
+echo "🌊 Configuration saved to $CONFIG_FILE"
+echo "🌊 Version saved to $VERSION_FILE"
 
 # ==========================================
 # 删除旧版 repo.json

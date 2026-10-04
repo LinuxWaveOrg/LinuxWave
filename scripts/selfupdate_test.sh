@@ -23,12 +23,21 @@ if [[ ! -f "$WAVE_BIN" ]]; then
     exit 1
 fi
 
-CONFIG_DIR="/opt/macwave_config"
+# 配置目录：系统级优先，其次用户级
+if [[ -f /opt/macwave_config/config.json ]]; then
+    CONFIG_DIR="/opt/macwave_config"
+elif [[ -f "$HOME/.config/macwave_config/config.json" ]]; then
+    CONFIG_DIR="$HOME/.config/macwave_config"
+else
+    echo -e "${RED_BOLD}🌊 Error: MacWave not installed (config not found).${RESET}"
+    exit 1
+fi
+
 CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
 
-if [[ ! -f "$CONFIG_FILE" || ! -f "$VERSION_FILE" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: MacWave not installed (config not found).${RESET}"
+if [[ ! -f "$VERSION_FILE" ]]; then
+    echo -e "${RED_BOLD}🌊 Error: MacWave not installed (VERSION.json not found).${RESET}"
     exit 1
 fi
 

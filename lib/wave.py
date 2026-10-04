@@ -12,26 +12,9 @@ check_environment()
 
 # -------------------- 配置与模块路径 --------------------
 
-CONFIG_FILE = Path("/opt/macwave_config/config.json")
-VERSION_FILE = Path("/opt/macwave_config/VERSION.json")
+from configpaths import load_base_dir
 
-
-def load_config():
-    import json
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                config = json.load(f)
-                base_dir = config.get("base_dir")
-                if base_dir:
-                    return Path(base_dir)
-        except Exception:
-            pass
-    print("🌊 Error: Configuration file not found or invalid.")
-    sys.exit(1)
-
-
-BASE_DIR = load_config()
+BASE_DIR = load_base_dir()
 LIB_DIR = BASE_DIR / "lib"
 PKG_DIR = BASE_DIR / "pkg"
 SURFBOARD_DIR = BASE_DIR / "surfboard"

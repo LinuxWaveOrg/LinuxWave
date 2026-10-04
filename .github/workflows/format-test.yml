@@ -54,6 +54,10 @@ jobs:
           cp lib/wave.py /tmp/macwave-test/lib/wave
           chmod +x /tmp/macwave-test/lib/wave /tmp/macwave-test/lib/*.sh
 
+      - name: Run config path test
+        run: |
+          bash scripts/configpath_test.sh
+
       - name: Audit dependency data
         run: |
           python3 scripts/audit_deps.py data --data-dir infosource-data

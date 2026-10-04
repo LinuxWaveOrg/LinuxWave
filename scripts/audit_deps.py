@@ -33,7 +33,10 @@ RESET = '\033[0m'
 BRANCH = "infosource"
 RAW_BASE = f"https://raw.githubusercontent.com/Sha0huaZhang/MacWave/{BRANCH}"
 TREE_API = f"https://api.github.com/repos/Sha0huaZhang/MacWave/git/trees/{BRANCH}?recursive=1"
-CONFIG_FILE = Path("/opt/macwave_config/config.json")
+CONFIG_FILES = (
+    Path("/opt/macwave_config/config.json"),          # 系统级优先
+    Path.home() / ".config" / "macwave_config" / "config.json",
+)
 DATA_GROUPS = ("pkg", "surfboard")
 REF_PATTERN = re.compile(r'^[^@\s,]+@[^@\s,]+$')
 MACHO_MAGIC = ('cffaedfe', 'cefaedfe', 'feedfacf', 'feedface', 'cafebabe', 'bebafeca')
@@ -346,13 +349,18 @@ def audit_data(files, check_urls=False):
 def resolve_base_dir(base_dir):
     if base_dir:
         root = Path(base_dir).expanduser()
-    elif CONFIG_FILE.exists():
-        try:
-            root = Path(json.loads(CONFIG_FILE.read_text())["base_dir"])
-        except (ValueError, KeyError):
-            return None
     else:
-        return None
+        root = None
+        for config_file in CONFIG_FILES:      # 系统级优先，其次用户级
+            if not config_file.exists():
+                continue
+            try:
+                root = Path(json.loads(config_file.read_text())["base_dir"])
+                break
+            except (ValueError, KeyError, OSError):
+                continue
+        if root is None:
+            return None
 
     return root if root.is_dir() else None
 
@@ -433,7 +441,7 @@ def main():
     parser.add_argument("mode", nargs="?", default="all", choices=["data", "edges", "all"],
                         help="data: 只查数据；edges: 只查本机依赖边；all: 两者都查（默认）")
     parser.add_argument("--data-dir", help="infosource 检出的目录（默认：本地有就用，否则从 GitHub 拉取）")
-    parser.add_argument("--base-dir", help="MacWave 安装目录（默认读 /opt/macwave_config/config.json）")
+    parser.add_argument("--base-dir", help="MacWave 安装目录（默认按系统级 → 用户级读 config.json）")
     parser.add_argument("--arch", choices=["arm64", "amd64"], help="目标架构（默认本机架构）")
     parser.add_argument("--check-urls", action="store_true",
                         help="联网确认每个 url 可访问（默认关闭；依赖网络，按需开启）")

@@ -23,8 +23,8 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
-CONFIG_FILE = Path("/opt/macwave_config/config.json")
-VERSION_FILE = Path("/opt/macwave_config/VERSION.json")
+from configpaths import VERSION_FILE, load_base_dir
+
 
 def get_version():
     if VERSION_FILE.exists():
@@ -36,21 +36,8 @@ def get_version():
             pass
     return "unknown"
 
-def load_config():
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                config = json.load(f)
-                base_dir = config.get("base_dir")
-                if base_dir:
-                    return Path(base_dir)
-        except Exception:
-            pass
-    print(f"{RED_BOLD}🌊 Error: Configuration file not found or invalid.{RESET}")
-    print(f"{RED_BOLD}🌊 Please run the install script again to reinstall MacWave.{RESET}")
-    sys.exit(1)
 
-BASE_DIR = load_config()
+BASE_DIR = load_base_dir()
 DOWNLOAD_TMP = BASE_DIR / "downloads" / "tmp"
 
 # -------------------- 依赖库检查 --------------------

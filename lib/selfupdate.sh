@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # MacWave 🌊 Self Updater
-# Re-downloads every MacWave code file and refreshes /opt/macwave_config/VERSION.json.
+# Re-downloads every MacWave code file and refreshes VERSION.json in the
+# active config dir (/opt/macwave_config or ~/.config/macwave_config).
 # Invoked by `wave selfupdate` through the update_command field in
 # configdata/versiondata/latest_version, or directly:
 #   bash lib/selfupdate.sh [branch]
@@ -26,9 +27,32 @@ BRANCH="${MACWAVE_UPDATE_BRANCH:-${1:-main}}"
 BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH"
 VERSION_DATA_URL="https://raw.githubusercontent.com/$REPO/configdata/versiondata/latest_version"
 
-CONFIG_DIR="/opt/macwave_config"
+# 配置目录：系统级优先，其次用户级（与 lib/configpaths.py 的规则一致）
+SYSTEM_CONFIG_DIR="/opt/macwave_config"
+USER_CONFIG_DIR="$HOME/.config/macwave_config"
+
+CONFIG_DIR=""
+for candidate in "$SYSTEM_CONFIG_DIR" "$USER_CONFIG_DIR"; do
+    if [[ -f "$candidate/config.json" ]]; then
+        CONFIG_DIR="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$CONFIG_DIR" ]]; then
+    echo -e "${RED_BOLD}🌊 Error: MacWave is not installed (no config.json in $SYSTEM_CONFIG_DIR or $USER_CONFIG_DIR).${RESET}"
+    echo -e "${RED_BOLD}🌊 Install it first with lib/install.sh.${RESET}"
+    exit 1
+fi
+
 CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
+
+if [[ "$CONFIG_DIR" == "$HOME"* ]]; then
+    CONFIG_NEED_SUDO=false
+else
+    CONFIG_NEED_SUDO=true
+fi
 
 echo "🌊 Updating from branch: $BRANCH"
 echo ""
@@ -36,12 +60,6 @@ echo ""
 # ==========================================
 # 读取安装目录
 # ==========================================
-
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: MacWave is not installed (missing $CONFIG_FILE).${RESET}"
-    echo -e "${RED_BOLD}🌊 Install it first with lib/install.sh.${RESET}"
-    exit 1
-fi
 
 BASE_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['base_dir'])")
 
@@ -74,7 +92,17 @@ run_cmd() {
     fi
 }
 
-if [[ "$NEED_SUDO" == "true" ]]; then
+# 安装目录与配置目录未必同级：用户级安装也可能读系统级配置（系统级优先），
+# 所以配置目录单独判断权限。
+config_cmd() {
+    if [[ "$CONFIG_NEED_SUDO" == "true" ]]; then
+        sudo "$@"
+    else
+        "$@"
+    fi
+}
+
+if [[ "$NEED_SUDO" == "true" || "$CONFIG_NEED_SUDO" == "true" ]]; then
     echo -e "${YELLOW}🌊 Requesting temporary administrator access for the update...${RESET}"
     sudo -v
 fi
@@ -233,9 +261,9 @@ done
 # 写入新的版本号
 # ==========================================
 
-run_cmd mkdir -p "$CONFIG_DIR"
+config_cmd mkdir -p "$CONFIG_DIR"
 
-run_cmd tee "$VERSION_FILE" > /dev/null << EOF
+config_cmd tee "$VERSION_FILE" > /dev/null << EOF
 {
   "version": "$VERSION",
   "components": {
@@ -245,12 +273,12 @@ run_cmd tee "$VERSION_FILE" > /dev/null << EOF
 }
 EOF
 
-if [[ "$NEED_SUDO" == "true" ]]; then
+if [[ "$CONFIG_NEED_SUDO" == "true" ]]; then
     sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
 fi
 
-run_cmd chmod 755 "$CONFIG_DIR"
-run_cmd chmod 644 "$CONFIG_FILE" "$VERSION_FILE"
+config_cmd chmod 755 "$CONFIG_DIR"
+config_cmd chmod 644 "$CONFIG_FILE" "$VERSION_FILE"
 
 echo "🌊 Version saved to $VERSION_FILE"
 exit 0

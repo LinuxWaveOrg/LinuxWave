@@ -48,9 +48,10 @@ Installed binaries are stored in (options):
 3. /usr/local/macwave (Only Intel Mac)
 4. Custom
 ```
-Config file is stored in:
+Config file is stored in (a system-level install always takes priority):
 ```
-/opt/macwave_config
+1. /opt/macwave_config          system-level install (needs sudo)
+2. ~/.config/macwave_config     user-level install (no sudo)
 ```
 ## Uninstall MacWave
 

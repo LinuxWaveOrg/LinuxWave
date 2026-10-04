@@ -5,7 +5,8 @@ MacWave Help Module
 """
 
 import json
-from pathlib import Path
+
+from configpaths import VERSION_FILE
 
 # 颜色定义
 RED = '\033[31m'
@@ -17,7 +18,6 @@ BOLD = '\033[1m'
 PURPLE = '\033[35m'
 ORANGE = '\033[38;5;197m'
 
-VERSION_FILE = Path("/opt/macwave_config/VERSION.json")
 
 def get_project_version():
     """从 VERSION.json 获取主程序版本号"""

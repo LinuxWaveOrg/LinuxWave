@@ -9,7 +9,6 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from pathlib import Path
 
 
 # -------------------- 颜色定义 --------------------
@@ -22,9 +21,8 @@ RESET = '\033[0m'
 
 # -------------------- 常量 --------------------
 
-CONFIG_DIR = Path("/opt/macwave_config")
-CONFIG_FILE = CONFIG_DIR / "config.json"
-VERSION_FILE = CONFIG_DIR / "VERSION.json"
+from configpaths import CONFIG_FILE, VERSION_FILE
+
 VERSION_DATA_URL = "https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata/versiondata/latest_version"
 FETCH_TIMEOUT = 30
 UPDATE_TIMEOUT = 1800

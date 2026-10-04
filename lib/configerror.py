@@ -4,7 +4,8 @@
 
 import sys
 import subprocess
-from pathlib import Path
+
+from configpaths import config_dir_candidates, find_config_dir
 
 
 # -------------------- 颜色定义 --------------------
@@ -18,11 +19,11 @@ RESET = '\033[0m'
 def check_environment():
     
     # 检测当前环境
-    # - 如果 /opt/macwave_config/config.json 存在，说明已正式安装，正常继续。
-    # - 如果不存在，且当前在 git 仓库里，报错并退出。
-    
-    config_file = Path("/opt/macwave_config/config.json")
-    if config_file.exists():
+    # - 如果 /opt/macwave_config/config.json 或 ~/.config/macwave_config/config.json
+    #   存在，说明已正式安装，正常继续。
+    # - 如果都不存在，且当前在 git 仓库里，报错并退出。
+
+    if find_config_dir() is not None:
         return
 
     try:
@@ -58,8 +59,10 @@ def check_environment():
     else:
         print(f"{RED_BOLD}🌊 Error: MacWave is a git clone!{RESET}")
 
+    config_paths = " or ".join(str(directory / "config.json") for directory in config_dir_candidates())
+
     print("")
-    print("MacWave is not distributed as a shallow clone. Instead, it uses install.sh to download various files to their corresponding locations. Among other things, install.sh writes a configuration file to /opt/macwave_config. This configuration file records a large amount of information, including the location where you downloaded MacWave, and it is called by many programs. Without it, many programs will not be able to find the directories.")
+    print(f"MacWave is not distributed as a shallow clone. Instead, it uses install.sh to download various files to their corresponding locations. Among other things, install.sh writes a configuration file to {config_paths}. This configuration file records a large amount of information, including the location where you downloaded MacWave, and it is called by many programs. Without it, many programs will not be able to find the directories.")
     print("")
     if is_shallow:
         print("We have detected that you are using a shallow clone, which will cause MacWave to fail to work properly. To continue using it, please run $ /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/HEAD/lib/install.sh)\" and select the directory you want to install to. You can also run $ bash " + repo_root + "/lib/install.sh or $ /bin/bash " + repo_root + "/lib/install.sh and select the directory you want to install to in order to fully install MacWave.")
