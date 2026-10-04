@@ -52,8 +52,11 @@ echo "========== parse version data =========="
 if python3 - "$SELFUPDATE_PY" << 'PYEOF'
 import importlib.util
 import sys
+from pathlib import Path
 
-spec = importlib.util.spec_from_file_location('selfupdate_module', sys.argv[1])
+selfupdate_py = Path(sys.argv[1])
+sys.path.insert(0, str(selfupdate_py.parent))   # selfupdate.py 会 import configpaths
+spec = importlib.util.spec_from_file_location('selfupdate_module', selfupdate_py)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 

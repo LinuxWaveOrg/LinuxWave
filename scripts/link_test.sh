@@ -150,7 +150,7 @@ echo ""
 echo "========== 6. 安装器接受 --unlink（离线）=========="
 FLAG_CHECK=$(cd "$BASE_DIR" && python3 -c "
 import sys
-sys.path[:0] = ['pkg', 'surfboard']
+sys.path[:0] = ['lib', 'pkg', 'surfboard']
 import pkginstaller as p
 ok = '--unlink' in p.ALLOWED_FLAGS and '--unlink' in p.parse_flags('wave install test_bin_zip@1.0 --unlink')
 print('yes' if ok else 'no')
