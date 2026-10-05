@@ -382,12 +382,12 @@ fi
 # 检查动态库路径替换所需的工具
 # ==========================================
 
-if command -v otool > /dev/null 2>&1 && command -v install_name_tool > /dev/null 2>&1 && command -v codesign > /dev/null 2>&1; then
-    echo "🌊 Xcode Command Line Tools detected (otool / install_name_tool / codesign)."
+if command -v patchelf > /dev/null 2>&1; then
+    echo "🌊 patchelf detected (dependency library relocation enabled)."
 else
-    echo -e "${YELLOW}🌊 Warning: Xcode Command Line Tools not found.${RESET}"
+    echo -e "${YELLOW}🌊 Warning: patchelf not found.${RESET}"
     echo -e "${YELLOW}🌊 Dependency libraries cannot be relocated, so some packages may fail to run.${RESET}"
-    echo "🌊 You can install them later with: xcode-select --install"
+    echo "🌊 You can install it later with: sudo apt install patchelf   (or: sudo dnf install patchelf)"
 fi
 
 # ==========================================

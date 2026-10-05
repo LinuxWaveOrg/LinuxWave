@@ -124,7 +124,11 @@ mw_verify_sha256() {
 
     echo "🌊 Verifying SHA256..."
     local actual_sha256
-    actual_sha256=$(shasum -a 256 "$original_file" | awk '{print $1}')
+    if command -v sha256sum > /dev/null 2>&1; then
+        actual_sha256=$(sha256sum "$original_file" | awk '{print $1}')
+    else
+        actual_sha256=$(shasum -a 256 "$original_file" | awk '{print $1}')
+    fi
 
     if [[ "$actual_sha256" != "$expected_sha256" ]]; then
         echo -e "${RED_BOLD}🌊 Error: SHA256 verification failed. Removing corrupted file.${RESET}"

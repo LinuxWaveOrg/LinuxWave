@@ -217,7 +217,7 @@ def download_dependency(dep_url, dep_display_name, config, input_string):
 def transfer_paths(target_dir):
 
     # 路径替换（Homebrew 式）：交给 surfboard/transfer.sh，
-    # 把产物里 Mach-O 的动态库引用与 install name 改成 BASE_DIR 下的实际位置。
+    # 把产物里 ELF 的 RPATH/RUNPATH 改写成指向依赖 lib/ 的 $ORIGIN 相对路径。
 
     result = subprocess.run(
         ['bash', str(TRANSFER_SCRIPT), str(target_dir), str(BASE_DIR)],
@@ -234,7 +234,7 @@ def transfer_installed_artifacts(*extra_dirs):
 
     # 统一收尾的路径替换：等所有依赖与软件包都落到磁盘上再做，
     # 否则“先装的依赖引用了后装的依赖”（例如 libidn2 → libunistring）会解析不到，
-    # 留下 @rpath 引用导致运行时 dyld 加载失败。
+    # 留下未解析引用导致运行时 ld.so 加载失败。
     # 每个目录单独处理，解析时优先该产物自己的 lib/。
 
     deps_root = BASE_DIR / "deps"

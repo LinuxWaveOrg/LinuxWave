@@ -11,6 +11,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -39,8 +40,7 @@ CONFIG_FILES = (
 )
 DATA_GROUPS = ("pkg", "surfboard")
 REF_PATTERN = re.compile(r'^[^@\s,]+@[^@\s,]+$')
-MACHO_MAGIC = ('cffaedfe', 'cefaedfe', 'feedfacf', 'feedface', 'cafebabe', 'bebafeca')
-SYSTEM_PREFIXES = ('/usr/lib/', '/System/', '/Library/Apple/')
+ELF_MAGIC = '7f454c46'
 CURL_ONLY = False
 FETCH_TIMEOUT = 30
 URL_TIMEOUT = 20
@@ -104,21 +104,29 @@ def get_deps(fields):
     return [value for value in fields.get("deps", []) if str(value).strip()]
 
 
-def is_macho(path):
+def is_elf(path):
     try:
         with open(path, 'rb') as f:
-            return f.read(4).hex() in MACHO_MAGIC
+            return f.read(4).hex() == ELF_MAGIC
     except OSError:
         return False
 
 
-def macho_refs(path):
-    result = subprocess.run(['otool', '-L', str(path)], capture_output=True, text=True)
+def elf_needed(path):
+    # ELF 的 DT_NEEDED 只记库名（不含路径），运行期靠 RPATH/RUNPATH 解析。
+    # 优先用 patchelf，没有就退回 binutils 的 readelf。
+    if shutil.which('patchelf'):
+        result = subprocess.run(['patchelf', '--print-needed', str(path)],
+                                capture_output=True, text=True)
+        if result.returncode == 0:
+            return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+    result = subprocess.run(['readelf', '-d', str(path)], capture_output=True, text=True)
     refs = []
-    for line in result.stdout.splitlines()[1:]:
-        ref = line.split(" (")[0].strip()
-        if ref and not ref.startswith(SYSTEM_PREFIXES):
-            refs.append(ref)
+    for line in result.stdout.splitlines():
+        match = re.search(r'\(NEEDED\).*\[(.*?)\]', line)
+        if match:
+            refs.append(match.group(1).strip())
     return refs
 
 
@@ -158,7 +166,7 @@ def request_headers(url):
 
 
 def fetch_text(url):
-    # 优先用标准库；本地 Python 缺根证书（macOS 常见）时改走 curl，且不再重复尝试
+    # 优先用标准库；本地 Python 缺根证书时改走 curl，且不再重复尝试
     global CURL_ONLY
     headers = request_headers(url)
 
@@ -371,8 +379,8 @@ def audit_edges(files, base_dir, arch):
         print(f"{YELLOW}🌊 No installed dependencies in {deps_root}, skipping the edge audit.{RESET}")
         return [], []
 
-    if subprocess.run(['which', 'otool'], capture_output=True).returncode != 0:
-        fail("'otool' not found. Install the Xcode Command Line Tools: xcode-select --install")
+    if not (shutil.which('patchelf') or shutil.which('readelf')):
+        fail("neither 'patchelf' nor 'readelf' found. Install patchelf (apt install patchelf) or binutils.")
 
     print(f"🌊 Auditing dependency edges in {deps_root}...")
 
@@ -417,9 +425,9 @@ def audit_edges(files, base_dir, arch):
 
             referenced = set()
             for path in list(version_dir.rglob("lib/*")) + list(version_dir.rglob("bin/*")):
-                if not path.is_file() or not is_macho(path):
+                if not path.is_file() or not is_elf(path):
                     continue
-                for ref in macho_refs(path):
+                for ref in elf_needed(path):
                     owner = provider.get(os.path.basename(ref))
                     if owner and owner != name:
                         referenced.add(owner)

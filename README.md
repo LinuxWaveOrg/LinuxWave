@@ -1,20 +1,20 @@
 ## 🌊 LinuxWave
 
-A package manager for macOS software developers.
+A package manager for Linux software developers.
 
 ## 🌊 Official Website
 
 [linuxwave.macwave.org](https://linuxwave.macwave.org)
 
-## 🌊 Supported macOS Version
-macOS Sonoma14 and above
+## 🌊 Supported Platform
+Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
 2.5, Release on 2026-10-05
 
 ## 🌊 What is LinuxWave?
 
-LinuxWave is a **package manager** that runs on **macOS/Linux**, designed to host common software packages for macOS software developers.
+LinuxWave is a **package manager** that runs on **Linux**, designed to host common software packages for Linux software developers.
 
 ## 🌊 Why LinuxWave
 
@@ -38,14 +38,14 @@ In the terminal, run:
 
 (If you are using bash instead of zsh, run ```source ~/.bashrc```)
 
-**Requirements: Python (3.14 and above), Xcode Command Line Tools (14.0 and above).**
+**Requirements: Python (3.14 and above), patchelf (for dependency library relocation).**
 
 ## 🌊 Download Directory 
 Installed binaries are stored in (options):    
 ```
 1. ~/.local/linuxwave
 2. /opt/linuxwave
-3. /usr/local/linuxwave (Only Intel Mac)
+3. /usr/local/linuxwave (x86_64 only)
 4. Custom
 ```
 Config file is stored in (a system-level install always takes priority):

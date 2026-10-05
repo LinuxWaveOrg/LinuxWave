@@ -49,7 +49,7 @@ case "$ARCHIVE_PATH" in
         bzip2 -dk "$ARCHIVE_PATH" -c > "$EXTRACT_DIR/$(basename "${ARCHIVE_PATH%.bz2}")"
         ;;
     *.xz)
-        # macOS 不自带 xz 命令，改用 Python 标准库 lzma（裸 .xz，非 .tar.xz）
+        # 不依赖系统装有 xz 命令，改用 Python 标准库 lzma（裸 .xz，非 .tar.xz）
         python3 - "$ARCHIVE_PATH" "$EXTRACT_DIR/$(basename "${ARCHIVE_PATH%.xz}")" << 'PYEOF'
 import lzma
 import shutil
@@ -62,7 +62,7 @@ PYEOF
     *.conda)
         # .conda 是 conda 的第二种包格式：本质是个 zip，里面装两个 zstd 压缩的 tar，
         # pkg-*.tar.zst 才是要落盘的载荷，info-*.tar.zst 只是元数据。
-        # zstd 用 Python 3.14 的标准库 compression.zstd（macOS 不自带 zstd 命令）。
+        # zstd 用 Python 3.14 的标准库 compression.zstd（不依赖系统装有 zstd 命令）。
         python3 - "$ARCHIVE_PATH" "$EXTRACT_DIR" << 'PYEOF'
 import os
 import sys

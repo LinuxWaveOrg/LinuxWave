@@ -1,19 +1,22 @@
 #!/bin/bash
 
 # transfer.sh
-# LinuxWave 🌊 路径替换 ：把安装好的产物里所有 Mach-O 文件的
-# 动态库引用（LC_LOAD_DYLIB）与自身 install name（LC_ID_DYLIB）改写成
-# BASE_DIR 下的绝对路径，让运行时 dyld 能真正加载依赖包里的库。
+# LinuxWave 🌊 路径替换（ELF 版）：把安装好的产物里所有 ELF 文件的
+# RPATH/RUNPATH 改写成 $ORIGIN 相对路径，指向产物自己的 lib/ 与 _DEPS
+# 列出的依赖的 lib/，让运行时 ld.so 真正找得到依赖包里的共享库。
 #
 # 用法: bash transfer.sh <目标目录> <BASE_DIR> 或 /bin/bash bash transfer.sh <目标目录> <BASE_DIR>
 #
 # 解析优先级：
-#   1. 目标目录内部的库（产物自己的 lib/，含子目录）
-#   2. _DEPS 里列出的依赖所提供的库（deps/{依赖名}/{依赖名}@{版本号}/lib）
+#   1. 目标目录内部（产物自己的 lib/ lib64/）
+#   2. _DEPS 里列出的依赖（deps/{依赖名}/{依赖名}@{版本号}/lib[64]）
 #   3. 其余已安装依赖的 lib（兜底，用于传递依赖）
 #
-# 只处理 Mach-O；系统库（/usr/lib、/System、/Library/Apple）不动。
-# 改过的文件会重新做 ad-hoc 签名——Apple Silicon 上这是必须的，否则无法运行。
+# 与 Mach-O 版的区别：ELF 的 DT_NEEDED 只记库名、不含路径，运行期完全靠
+# RPATH/RUNPATH 搜索，所以这里重写的就是搜索路径本身；另外 ELF 没有代码签名，
+# 改完即用。路径一律写成 $ORIGIN 相对形式，即使整个 BASE_DIR 被搬走也依然有效。
+#
+# 只处理 ELF（魔数 \x7fELF）：静态链接、无 .dynamic 的 ELF 在此直接跳过。
 
 set -e
 
@@ -39,82 +42,45 @@ if [[ ! -d "$TARGET_DIR" ]]; then
     exit 1
 fi
 
-for tool in otool install_name_tool codesign; do
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        echo -e "${YELLOW}🌊 Warning: '$tool' not found, skipping path transfer.${RESET}"
-        exit 0
-    fi
-done
+if ! command -v patchelf >/dev/null 2>&1; then
+    echo -e "${YELLOW}🌊 Warning: 'patchelf' not found, skipping path transfer.${RESET}"
+    exit 0
+fi
 
-# -------------------- 库索引（名字 -> 绝对路径） --------------------
+# -------------------- 临时文件 --------------------
 
-MAP_FILE="$(mktemp -t linuxwave-transfer)"
-TREE_FILE="$(mktemp -t linuxwave-tree)"
-UNRESOLVED_FILE="$(mktemp -t linuxwave-unresolved)"
-MISSING_FILE="$(mktemp -t linuxwave-missing)"
-EXTERNAL_FILE="$(mktemp -t linuxwave-external)"
-FAILED_FILE="$(mktemp -t linuxwave-failed)"
-ERROR_FILE="$(mktemp -t linuxwave-error)"
+LIB_DIRS_FILE="$(mktemp)"
+PROVIDED_FILE="$(mktemp)"
+SYSTEM_FILE="$(mktemp)"
+TREE_FILE="$(mktemp)"
+UNRESOLVED_FILE="$(mktemp)"
+MISSING_FILE="$(mktemp)"
+EXTERNAL_FILE="$(mktemp)"
+FAILED_FILE="$(mktemp)"
+ERROR_FILE="$(mktemp)"
 
 cleanup() {
-    rm -f "$MAP_FILE" "$TREE_FILE" "$UNRESOLVED_FILE" "$MISSING_FILE" "$EXTERNAL_FILE" "$FAILED_FILE" "$ERROR_FILE"
+    rm -f "$LIB_DIRS_FILE" "$PROVIDED_FILE" "$SYSTEM_FILE" "$TREE_FILE" \
+          "$UNRESOLVED_FILE" "$MISSING_FILE" "$EXTERNAL_FILE" "$FAILED_FILE" "$ERROR_FILE"
 }
 trap cleanup EXIT
 
-map_add_file() {
-    local file="$1"
-    echo "$(basename "$file")|$file" >> "$MAP_FILE"
-}
+# -------------------- 库目录索引（有序、去重） --------------------
 
-map_add_dir() {
+add_lib_dir() {
     local dir="$1"
     if [[ ! -d "$dir" ]]; then
         return 0
     fi
-
-    local file
-    for file in "$dir"/*; do
-        if [[ -f "$file" ]]; then
-            map_add_file "$file"
-        fi
-    done
-}
-
-map_add_tree() {
-    local root="$1"
-    local file
-    while IFS= read -r file; do
-        if [[ -f "$file" ]]; then
-            map_add_file "$file"
-        fi
-    done < <(find "$root" -type f 2>/dev/null)
-}
-
-tree_add_tree() {
-    # 只登记文件名，用于分辨“我们的树里有但没接上”与“根本不属于我们的库”
-    local root="$1"
-    local file
-    while IFS= read -r file; do
-        echo "$(basename "$file")" >> "$TREE_FILE"
-    done < <(find "$root" -type f 2>/dev/null)
-}
-
-map_lookup() {
-    # 命中则输出绝对路径，否则返回 1
-    local name="$1"
-    local line
-    line="$(grep -m1 -F "$name|" "$MAP_FILE" 2>/dev/null || true)"
-
-    if [[ -z "$line" ]]; then
-        return 1
+    if grep -qxF "$dir" "$LIB_DIRS_FILE" 2>/dev/null; then
+        return 0
     fi
-
-    echo "${line#*|}"
+    echo "$dir" >> "$LIB_DIRS_FILE"
 }
 
 # 1. 目标目录自身
-map_add_tree "$TARGET_DIR"
-tree_add_tree "$TARGET_DIR"
+add_lib_dir "$TARGET_DIR/lib"
+add_lib_dir "$TARGET_DIR/lib64"
 
 # 2. _DEPS 列出的依赖（优先于其它同名库）
 DEPS_FILE="$TARGET_DIR/_DEPS"
@@ -129,44 +95,78 @@ if [[ -f "$DEPS_FILE" ]]; then
 
         dep_name="${ref%@*}"
         dep_version="${ref##*@}"
-        map_add_dir "$BASE_DIR/deps/$dep_name/$dep_name@$dep_version/lib"
+        add_lib_dir "$BASE_DIR/deps/$dep_name/$dep_name@$dep_version/lib"
+        add_lib_dir "$BASE_DIR/deps/$dep_name/$dep_name@$dep_version/lib64"
     done < "$DEPS_FILE"
 fi
 
-# 3. 其余已安装依赖的 lib（兜底）
-for dep_lib in "$BASE_DIR"/deps/*/*/lib; do
-    map_add_dir "$dep_lib"
-done
-
-# 4. 记录“我们自己的树”里出现过的文件名，用于后续分流未解析引用
+# 3. 其余已安装依赖的 lib（兜底，用于传递依赖）
 for dep_tree in "$BASE_DIR"/deps/*/*; do
     if [[ -d "$dep_tree" ]]; then
-        tree_add_tree "$dep_tree"
+        add_lib_dir "$dep_tree/lib"
+        add_lib_dir "$dep_tree/lib64"
     fi
 done
 
-# -------------------- 辅助函数 --------------------
+# -------------------- 已经在我们树里的库名 --------------------
 
-is_system_path() {
-    case "$1" in
-        /usr/lib/*|/System/*|/Library/Apple/*)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+# PROVIDED：出现在上面这些 lib 目录里的库文件名 —— 能靠 RUNPATH 解析的
+while IFS= read -r dir; do
+    for file in "$dir"/*; do
+        if [[ -f "$file" ]]; then
+            basename "$file" >> "$PROVIDED_FILE"
+        fi
+    done
+done < "$LIB_DIRS_FILE"
+
+# TREE：整棵树里出现过的文件名 —— 用于分辨“我们有但没接上”与“根本不属于我们”
+tree_add_tree() {
+    local root="$1"
+    local file
+    while IFS= read -r file; do
+        basename "$file"
+    done < <(find "$root" -type f 2>/dev/null)
 }
 
-is_macho() {
-    # 按魔数判断，避开 otool 对非 Mach-O 也会以 0 退出并打印一行提示的问题；
-    # 静态库（!<arch>）在此直接滤掉，它们不参与运行时加载。
+tree_add_tree "$TARGET_DIR" >> "$TREE_FILE"
+for dep_tree in "$BASE_DIR"/deps/*/*; do
+    if [[ -d "$dep_tree" ]]; then
+        tree_add_tree "$dep_tree" >> "$TREE_FILE"
+    fi
+done
+
+# -------------------- 系统库名（不计入“未声明依赖”） --------------------
+
+# libc/libm/ld.so 这类系统本来就有的库由加载器的默认搜索路径兜底，
+# 不该被报成“未被任何已安装依赖提供”。ldconfig -p 能覆盖绝大部分。
+{
+    echo "libc.so.6"
+    echo "libm.so.6"
+    echo "libdl.so.2"
+    echo "librt.so.1"
+    echo "libpthread.so.0"
+    echo "libresolv.so.2"
+    echo "libutil.so.1"
+    echo "libnsl.so.1"
+    echo "libcrypt.so.1"
+    echo "libgcc_s.so.1"
+    echo "libstdc++.so.6"
+} >> "$SYSTEM_FILE"
+
+if command -v ldconfig >/dev/null 2>&1; then
+    ldconfig -p 2>/dev/null | awk '/=>/ {print $1}' >> "$SYSTEM_FILE" || true
+fi
+
+# -------------------- 辅助函数 --------------------
+
+is_elf() {
+    # 按魔数判断；静态库（!<arch>）、脚本、数据文件在此直接滤掉。
     local file="$1"
     local magic
     magic="$(head -c 4 "$file" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
 
     case "$magic" in
-        cffaedfe|cefaedfe|feedfacf|feedface|cafebabe|bebafeca)
+        7f454c46)
             return 0
             ;;
         *)
@@ -175,106 +175,126 @@ is_macho() {
     esac
 }
 
-# -------------------- 逐个 Mach-O 替换 --------------------
+is_system_lib() {
+    # 系统自带的库：动态加载器本身，以及 ldconfig -p 里登记过的
+    local name="$1"
+    case "$name" in
+        ld-linux*.so*|ld.so*)
+            return 0
+            ;;
+    esac
+    grep -qxF "$name" "$SYSTEM_FILE" 2>/dev/null
+}
+
+declare -A RPATH_REL_CACHE
+
+build_rpath_for_file() {
+    # 输出该文件应有的 RUNPATH（$ORIGIN 相对形式，按 LIB_DIRS 顺序），
+    # 无需重定位时输出空串。同一个文件目录的 relpath 只算一次。
+    local file="$1"
+    local file_dir
+    file_dir="$(dirname "$file")"
+
+    local rpath=""
+    local dir rel entry key
+
+    while IFS= read -r dir; do
+        key="$file_dir|$dir"
+        if [[ -n "${RPATH_REL_CACHE[$key]+set}" ]]; then
+            rel="${RPATH_REL_CACHE[$key]}"
+        else
+            rel="$(realpath --relative-to="$file_dir" "$dir" 2>/dev/null || true)"
+            RPATH_REL_CACHE[$key]="$rel"
+        fi
+
+        if [[ -z "$rel" ]]; then
+            continue
+        fi
+
+        if [[ "$rel" == "." ]]; then
+            entry='$ORIGIN'
+        else
+            entry="\$ORIGIN/$rel"
+        fi
+
+        if [[ -z "$rpath" ]]; then
+            rpath="$entry"
+        else
+            rpath="$rpath:$entry"
+        fi
+    done < "$LIB_DIRS_FILE"
+
+    printf '%s' "$rpath"
+}
+
+# -------------------- 逐个 ELF 替换 --------------------
 
 CHANGED=0
 
 while IFS= read -r file; do
-    if ! is_macho "$file"; then
+    if ! is_elf "$file"; then
         continue
     fi
 
-    if ! otool_output="$(otool -L "$file" 2>/dev/null)"; then
+    # 没有 .dynamic（静态链接）的 ELF 不参与重定位
+    if ! current_rpath="$(patchelf --print-rpath "$file" 2>/dev/null)"; then
         continue
     fi
 
-    if [[ -z "$otool_output" ]]; then
-        continue
-    fi
+    new_rpath="$(build_rpath_for_file "$file")"
 
-    modified=0
-
-    while IFS= read -r ref_line; do
-        # otool -L 里只有缩进行是库引用（首行是文件名）
-        if [[ "$ref_line" != [[:space:]]* ]]; then
-            continue
-        fi
-
-        old_path="$(printf '%s' "$ref_line" | awk '{print $1}')"
-        if [[ -z "$old_path" ]]; then
-            continue
-        fi
-
-        if is_system_path "$old_path"; then
-            continue
-        fi
-
-        new_path="$(map_lookup "${old_path##*/}" || true)"
-
-        if [[ "$new_path" == "$old_path" ]]; then
-            # 已经指向正确位置
-            continue
-        fi
-
-        if [[ -z "$new_path" ]]; then
-            echo "$old_path" >> "$UNRESOLVED_FILE"
-            continue
-        fi
-
-        if install_name_tool -change "$old_path" "$new_path" "$file" 2>"$ERROR_FILE"; then
-            modified=1
+    if [[ -n "$new_rpath" && "$current_rpath" != "$new_rpath" ]]; then
+        if patchelf --set-rpath "$new_rpath" "$file" 2>"$ERROR_FILE"; then
+            CHANGED=$((CHANGED + 1))
         else
-            # 不要静默：改不动的话这个二进制运行时一定加载失败（最常见的原因是
-            # 它没预留 headerpad，装不下更长的路径），必须让用户当场知道
-            echo "$file|$old_path|$(head -n 1 "$ERROR_FILE")" >> "$FAILED_FILE"
-        fi
-    done <<< "$otool_output"
-
-    # dylib 自身的 install name 也要指向实际位置。
-    # 只有本来就有 LC_ID_DYLIB 的文件才改：engines/ossl-modules 里的插件是
-    # MH_BUNDLE 类型，本来没有 id，install_name_tool 也设不上，硬设会每次空改一遍。
-    if [[ "$file" == *.dylib ]]; then
-        current_id="$(otool -D "$file" 2>/dev/null | sed -n '2p' || true)"
-        if [[ -n "$current_id" && "$current_id" != "$file" ]]; then
-            if install_name_tool -id "$file" "$file" 2>"$ERROR_FILE"; then
-                modified=1
-            else
-                echo "$file|(install name)|$(head -n 1 "$ERROR_FILE")" >> "$FAILED_FILE"
-            fi
+            # 不要静默：改不动的话这个二进制运行时一定加载失败
+            echo "$file|$new_rpath|$(head -n 1 "$ERROR_FILE")" >> "$FAILED_FILE"
         fi
     fi
 
-    if [[ "$modified" -eq 1 ]]; then
-        if ! codesign --force --sign - "$file" >/dev/null 2>&1; then
-            echo -e "${YELLOW}🌊 Warning: Failed to re-sign: $file${RESET}"
+    # 收集仍未解析的 DT_NEEDED（仅用于最后报告）
+    while IFS= read -r needed; do
+        if [[ -z "$needed" ]]; then
+            continue
         fi
-        CHANGED=$((CHANGED + 1))
-    fi
+
+        # 我们的树里有同名库 → 能靠 RUNPATH 解析
+        if grep -qxF "$needed" "$PROVIDED_FILE" 2>/dev/null; then
+            continue
+        fi
+
+        # 系统库（含动态加载器本身）→ 交给默认搜索路径
+        if is_system_lib "$needed"; then
+            continue
+        fi
+
+        echo "$needed" >> "$UNRESOLVED_FILE"
+    done < <(patchelf --print-needed "$file" 2>/dev/null || true)
 done < <(find "$TARGET_DIR" -type f 2>/dev/null)
 
 # -------------------- 输出 --------------------
 
 if [[ "$CHANGED" -gt 0 ]]; then
-    echo "🌊 Relocated $CHANGED Mach-O file(s) in ${TARGET_DIR#"$BASE_DIR"/}"
+    echo "🌊 Relocated $CHANGED ELF file(s) in ${TARGET_DIR#"$BASE_DIR"/}"
 fi
 
 if [[ -s "$FAILED_FILE" ]]; then
     failed_count="$(wc -l < "$FAILED_FILE" | tr -d ' ')"
-    echo -e "${YELLOW}🌊 Warning: $failed_count library reference(s) could not be rewritten:${RESET}"
-    while IFS='|' read -r failed_file failed_ref failed_reason; do
-        echo -e "${YELLOW}🌊   ${failed_file#"$BASE_DIR"/}: $failed_ref${RESET}"
+    echo -e "${YELLOW}🌊 Warning: $failed_count file(s) could not be relocated:${RESET}"
+    while IFS='|' read -r failed_file failed_rpath failed_reason; do
+        echo -e "${YELLOW}🌊   ${failed_file#"$BASE_DIR"/}${RESET}"
         if [[ -n "$failed_reason" ]]; then
             echo -e "${YELLOW}🌊     $failed_reason${RESET}"
         fi
     done < <(sort -u "$FAILED_FILE" | head -10)
-    echo -e "${YELLOW}🌊 This binary will fail to load them at runtime. It was most likely built without header space for a longer path (no -headerpad), so it cannot be relocated in place.${RESET}"
+    echo -e "${YELLOW}🌊 These binaries will fail to load their libraries at runtime.${RESET}"
 fi
 
 if [[ -s "$UNRESOLVED_FILE" ]]; then
-    # 分流：我们自己的树里存在同名文件 → 真的没接上（警告）；
+    # 分流：我们树里存在同名文件 → 真的没接上（警告）；
     #       树里根本没有 → 外部/未声明的依赖，LinuxWave 无从接，只作提示。
     while IFS= read -r ref; do
-        if grep -qxF "${ref##*/}" "$TREE_FILE" 2>/dev/null; then
+        if grep -qxF "$ref" "$TREE_FILE" 2>/dev/null; then
             echo "$ref" >> "$MISSING_FILE"
         else
             echo "$ref" >> "$EXTERNAL_FILE"
@@ -291,7 +311,7 @@ if [[ -s "$UNRESOLVED_FILE" ]]; then
 
     if [[ -s "$EXTERNAL_FILE" ]]; then
         external_count="$(wc -l < "$EXTERNAL_FILE" | tr -d ' ')"
-        echo "🌊 Note: $external_count library reference(s) not provided by any installed dependency, left unchanged:"
+        echo "🌊 Note: $external_count library reference(s) not provided by any installed dependency, left to the system loader:"
         sort -u "$EXTERNAL_FILE" | head -10 | while IFS= read -r ref; do
             echo "🌊   $ref"
         done

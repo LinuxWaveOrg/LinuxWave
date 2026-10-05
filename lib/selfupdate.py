@@ -31,7 +31,7 @@ UPDATE_TIMEOUT = 1800
 # -------------------- 版本数据 --------------------
 
 def fetch_version_data():
-    # 优先用标准库；本地 Python 缺根证书（macOS 常见）时改走 curl
+    # 优先用标准库；本地 Python 缺根证书时改走 curl
     try:
         with urllib.request.urlopen(VERSION_DATA_URL, timeout=FETCH_TIMEOUT) as response:
             return response.read().decode()

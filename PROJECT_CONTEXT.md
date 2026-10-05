@@ -1,6 +1,6 @@
 # 🌊 LinuxWave 项目结构
 
-面向 macOS / Linux 软件开发者的包管理器，主要托管 iOS/iPadOS 相关软件包。
+面向 Linux 软件开发者的包管理器，主要托管面向 Linux 的预编译软件包。
 技术栈：Python + Shell。
 
 - `main` 与版本分支（当前的 `2.4`）：程序代码，两者保持同步
@@ -33,7 +33,7 @@ README.md     用户文档
 | `configpaths.py` | **配置目录解析**（`find_config_dir` / `load_base_dir` / `CONFIG_FILE` / `VERSION_FILE`）：系统级 `/etc/linuxwave_config` 优先，其次用户级 `~/.config/linuxwave_config`；系统级配置损坏或缺 `base_dir` 时也回落用户级。其余模块都从这里取配置，不再各自写死路径 |
 | `configerror.py` | 启动前的环境自检：只要两处配置目录里有一处装了 LinuxWave 就放行；都没装且在 git 仓库里时，报错并提示用 `lib/install.sh` 正式安装 |
 | `help.py` | 帮助与版本文本：`print_custom_help`（`-h` / `--help` 的用法，命令与旗标列表与 README 的 Command Reference 对齐）、`print_version`、`print_error_help`（未知命令时先报错再打帮助） |
-| `install.sh` | 官方安装脚本：选安装目录、`sudo` 提权、建运行时目录（`bin` / `links` / `deps` / `pkg` / `surfboard` / `lib` / `downloads/tmp`）、写 `config.json` / `VERSION.json`（**系统目录→`/etc/linuxwave_config`，用户目录→`~/.config/linuxwave_config`**）、**用户级安装时把 2.5 之前的旧系统级配置 `/etc/linuxwave_config` 迁走**（否则它会因系统级优先而盖住新配置）、**按 configdata 的 `versiondata/files_info` 清单拉取全部程序文件**（与 `selfupdate.sh` 共用同一份清单，解析逻辑也相同）、安装 Python 依赖（requests / packaging / rich）、把 `bin/` + `links/` + `lib/` 写入 PATH（升级时替换旧版只含 `bin`/`lib` 的行）、清理旧版平铺 `bin/` 文件、检查 Xcode 命令行工具（`otool` / `install_name_tool` / `codesign`）、许可协议确认（直接回车视为同意）。注意 `LINUXWAVE_VERSION` 仍**按分支写死**在脚本里，不能从 configdata 取 —— 否则用旧分支安装会写成新版本号 |
+| `install.sh` | 官方安装脚本：选安装目录、`sudo` 提权、建运行时目录（`bin` / `links` / `deps` / `pkg` / `surfboard` / `lib` / `downloads/tmp`）、写 `config.json` / `VERSION.json`（**系统目录→`/etc/linuxwave_config`，用户目录→`~/.config/linuxwave_config`**）、**用户级安装时把 2.5 之前的旧系统级配置 `/etc/linuxwave_config` 迁走**（否则它会因系统级优先而盖住新配置）、**按 configdata 的 `versiondata/files_info` 清单拉取全部程序文件**（与 `selfupdate.sh` 共用同一份清单，解析逻辑也相同）、安装 Python 依赖（requests / packaging / rich）、把 `bin/` + `links/` + `lib/` 写入 PATH（升级时替换旧版只含 `bin`/`lib` 的行）、清理旧版平铺 `bin/` 文件、检查 `patchelf`（依赖库重定位所需）、许可协议确认（直接回车视为同意）。注意 `LINUXWAVE_VERSION` 仍**按分支写死**在脚本里，不能从 configdata 取 —— 否则用旧分支安装会写成新版本号 |
 | `uninstall.sh` | 卸载 LinuxWave 本体：读两处配置定位 `BASE_DIR`（都读不到则遍历候选路径）、二次确认后删除安装目录与两处配置目录、清掉 rc 文件里的 PATH 行、最后自删 |
 | `selfupdate.py` | `wave selfupdate`：拉 `configdata` 分支的 `versiondata/latest_version`，取其 `version` 与当前生效的 `VERSION.json` 比较（只比数字段，`2.3` == `2.3.0`）；已是最新则直接返回，否则把 `update_command` 中 `<<<` / `>>>` 之间的内容交给 `/bin/bash -c` 执行（用环境变量 `LINUXWAVE_UPDATE_VERSION` / `LINUXWAVE_UPDATE_BRANCH` 把目标版本与分支传下去）。因为 `bash -c "$(curl …)"` 在 curl 失败时仍返回 0，执行完会**回读 `VERSION.json` 复核**，没变就报错 |
 | `selfupdate.sh` | 自更新脚本，由 `latest_version` 的 `update_command` 调用（也可 `bash lib/selfupdate.sh [分支]`）：按「系统级 → 用户级」定位配置目录与 `BASE_DIR` → 拉 `configdata/versiondata/files_info`（一份**只写仓库路径**的缩进树，`/` 开头是安装根、以 `/` 结尾表示目录、`#` 开始是注释；缩进每层 4 空格，Tab 与之等价，也可行内直接写 `pkg/linker.py` 这样的完整路径）→ **用脚本内置的 `python3` 解析它**（不能做成单独的 `.py` 文件，否则新文件本身又得先被下载 —— 鸡生蛋）→ 逐个从 `$BRANCH` 下载并复位可执行位（`lib/wave.py` 特例装成可执行的 `lib/wave`；其余 `*.sh` 加 +x）→ 清掉 `__pycache__` → 重写 `VERSION.json`。**以后新增文件只改 configdata 的 files_info，不用再动本脚本** |
@@ -46,7 +46,7 @@ README.md     用户文档
 | `pkginstaller.sh` | **软件包安装入口（binary 模式）**：组装长字符串，调用通用安装核心 `depsmanager.sh` 的 `mw_install_artifact`，写 `installed.json`，输出安装结果 |
 | `pkginfohelper.py` | `list`（扫描 `bin/` 下的目录）、`search`（远程匹配包名）、`info`（本地已装版本 + 远程可装版本 + `@common` 描述） |
 | `pkgversionparser.py` | 版本号比较与排序；处理 `alpha/beta/rc` 预发布，以及 `procursus` / `linuxwaveteam` / `Xteam` 等特殊版本 |
-| `pkgunzip.sh` | 按扩展名解压：`zip` / `tar.gz` / `tar.bz2` / `tar.xz` / `tar` / `gz` / `bz2` / `xz` / `conda`。裸 `xz` 用 Python 标准库 `lzma`（macOS 不自带 `xz` 命令）；**`.conda` 本质是个 zip，里装两个 zstd 压缩的 tar，只取 `pkg-*.tar.zst` 那个载荷**（`info-*.tar.zst` 是元数据），用 Python 3.14 的 `compression.zstd` 解（macOS 也不自带 `zstd`）—— **所以安装要求 Python 3.14+**；`extractall` 传 `filter='tar'`，因为 3.14 默认的 `data` 过滤器会拒掉 conda 包里的符号链接 |
+| `pkgunzip.sh` | 按扩展名解压：`zip` / `tar.gz` / `tar.bz2` / `tar.xz` / `tar` / `gz` / `bz2` / `xz` / `conda`。裸 `xz` 用 Python 标准库 `lzma`（不依赖系统装有 `xz` 命令）；**`.conda` 本质是个 zip，里装两个 zstd 压缩的 tar，只取 `pkg-*.tar.zst` 那个载荷**（`info-*.tar.zst` 是元数据），用 Python 3.14 的 `compression.zstd` 解（不依赖系统装有 `zstd`）—— **所以安装要求 Python 3.14+**；`extractall` 传 `filter='tar'`，因为 3.14 默认的 `data` 过滤器会拒掉 conda 包里的符号链接 |
 | `uninstaller.py` | **卸载**：扫描 `bin/` 找出该包所有版本；删除包目录与软链接；按 `_DEPS` 删除依赖标记，若某依赖已无任何标记，则连同它自己的依赖一起级联删除（递归时带 `visited` 集合，避免循环依赖 A→B→A 造成无限递归）。卸载完调 `linker` 同步不带版本号的软链接：还有别的版本就改指最高的，一个不剩就删掉；本来就没链接过的不重建（悬空链接也在这里被治好）。加 `--unlink` 则不动这个链接 —— **但如果被删的版本正好是链接当前指向的那个，会报错并拒绝执行**（绝不留下指向已卸载版本的坏链接） |
 | `linker.py` | **不带版本号的软链接**（仅限软件包，不碰依赖）：`link <名>[@latest]` / `link --all`（`-a`）建或改指链接，`unlink <名>` / `unlink --all` 删链接，`linkquery <名>` 看当前指向（输出形如 `🌊 ffmpeg@9.0`；未链接退 1，**指向已不存在的版本也报错退 1**）。`installed_versions` / `linked_version` / `is_dangling` 分别扫 `bin/`、读 `links/` 软链、判断是否悬空；重复 link 会报 `already linked` |
 
@@ -58,7 +58,7 @@ README.md     用户文档
 | `depsinstaller.sh` | **依赖安装入口（tree 模式）**：`source depsmanager.sh` → 调 `mw_install_artifact` → 在依赖目录里创建 `.depped_pkg_*` / `.depped_dep_*` 标记 |
 | `depsmanager.sh` | **通用安装核心**（被 `pkginstaller.sh` 与 `depsinstaller.sh` source，不单独执行）：定位下载到的原文件、SHA256 校验、解压、落盘（`binary` / `tree` 两种形态）、创建 `links/` 软链接、写 `_DEPS`、标记文件辅助函数。`mw_extract_binary` 与 `mw_extract_all` 里各有一串扩展名，**加新格式时两处都得补**，漏一个就会出现“把压缩包当二进制装下去”的静默错误 |
 | `tagger.sh` | `.depped_*` 标记文件原语：`tagger_create` / `tagger_delete` / `tagger_has_any`，既可 `bash tagger.sh <动作> …` 调用，也可被 source |
-| `transfer.sh` | **路径替换（Homebrew 式）**：把产物里所有 Mach-O 的动态库引用（`LC_LOAD_DYLIB`）与自身 `install name`（`LC_ID_DYLIB`）改写成 `BASE_DIR` 下的绝对路径，运行时 dyld 才找得到依赖；改过的文件自动做 ad-hoc 重签名（Apple Silicon 必需）。解析顺序：产物自己的 `lib/` → `_DEPS` 列出的依赖 → 其它已安装依赖的 `lib`。**改不动时不再静默**（2026-09-29 修）—— 二进制没预留 `headerpad` 时 `install_name_tool` 会报 `larger updated load commands do not fit`，现在会收集并在最后打出 Warning，不然安装报“成功”、一跑就 `Library not loaded`。接不上的引用分两类报告：本地树里其实有、只是没接上 → YELLOW 警告；本地根本没有（上游包自带的外部依赖，如 gettext 的 `libxml2` / `ncurses`）→ 🌊 Note 列出名字并保持原样 |
+| `transfer.sh` | **路径替换（Homebrew 式，ELF 版）**：把产物里所有 ELF 的 `RPATH`/`RUNPATH` 改写成 `$ORIGIN` 相对路径，指向产物自己的 `lib/`（`lib64/`）与 `_DEPS` 列出的依赖的 `lib/`，运行时 `ld.so` 才找得到依赖包里的共享库。解析顺序：产物自己的 `lib/` → `_DEPS` 列出的依赖 → 其它已安装依赖的 `lib`（兜底，覆盖传递依赖）。ELF 没有代码签名这一说，改完即用；ELF 的 `DT_NEEDED` 只记库名、不含路径，所以这里重写的是**搜索路径本身**。**改不动时不再静默**：`patchelf` 失败的文件会被收集并在最后打出 Warning，不然安装报“成功”、一跑就 `cannot open shared object file`。接不上的引用分两类报告：本地树里其实有、只是没放进 lib 目录 → YELLOW 警告；本地根本没有（上游包自带的外部依赖）→ 🌊 Note 列出名字。系统库（libc / libm / ld.so 等，取自 `ldconfig -p`）不算未声明依赖 |
 | `depsversionparser.py` | 依赖引用解析（强制 `依赖名@版本号`）与版本比较；版本逻辑复用 `pkgversionparser.py` |
 | `querier.py` | 查询依赖是否已安装：`deps/{引用名}/{引用名}@{版本号}/` 存在**且含 `_DEPS`** 才算安装完成（避免中途失败留下的空目录被误判） |
 
@@ -67,12 +67,12 @@ README.md     用户文档
 | 文件 | 作用 |
 | --- | --- |
 | `scripts/format_test.sh` | 10 种打包格式（无扩展名 / zip / tar.gz / tar.bz2 / tar.xz / tar / gz / bz2 / xz / **conda**）逐个跑 install → 运行 → uninstall；跑完再断言装完自动建了不带版本号的链接，以及 `install --unlink` 不建链接 |
-| `scripts/audit_deps.py` | **依赖审计**。`data` 模式：查 infosource 数据的 `deps` 引用格式（必须一行一个引用）、`url` / `sha256` / `bin_name` 完整性，以及被引用的 `@common` 与版本文件是否存在（本地有数据就读本地，否则从 GitHub 拉取）；`edges` 模式：把已安装依赖的实测 Mach-O 引用与数据声明对比，找出漏声明的依赖边。`--ignore 正则` 可跳过已知历史问题；加 `--check-urls` 会额外联网逐个确认 url 可达（默认关闭，因为依赖网络；数据里的 `test_*` 测试包故意用假 url，开它时要配 `--ignore 'test_'`）；发现真问题时退出码 1 |
+| `scripts/audit_deps.py` | **依赖审计**。`data` 模式：查 infosource 数据的 `deps` 引用格式（必须一行一个引用）、`url` / `sha256` / `bin_name` 完整性，以及被引用的 `@common` 与版本文件是否存在（本地有数据就读本地，否则从 GitHub 拉取）；`edges` 模式：把已安装依赖的实测 ELF `DT_NEEDED` 引用与数据声明对比，找出漏声明的依赖边。`--ignore 正则` 可跳过已知历史问题；加 `--check-urls` 会额外联网逐个确认 url 可达（默认关闭，因为依赖网络；数据里的 `test_*` 测试包故意用假 url，开它时要配 `--ignore 'test_'`）；发现真问题时退出码 1 |
 | `scripts/deps_test.sh` | **依赖链端到端回归**：装一个带依赖链的包（默认 `wget@1.25.0`）→ 跑 `--version` 验证 relink → 检查安装日志里没有未解析的库引用 → 检查 `.depped_*` 标记已写入 → 卸载并确认依赖目录与软链接被级联清理 |
 | `scripts/selfupdate_test.sh` | **自更新回归**（必须放最后，它会真的改安装目录）：① 离线单测 `selfupdate.py` 的 `parse_version_data`（含 `<<<`/`>>>` 多行命令）与 `version_key`；② 把 `VERSION.json` 写成 `9999.0`，断言 `wave selfupdate` 短路为「已是最新」且退出码 0；③ 写成 `0.1`，跑真实自更新，最后断言 `VERSION.json` 等于 `configdata/versiondata/latest_version` 声明的版本 |
 | `scripts/link_test.sh` | **不带版本号软链接回归**：装完自动建链接 → 不带版本号能跑 → `link` / `unlink` / `linkquery` → `-a` 批量 → 卸掉最高版自动降级（先复制一份目录造出 2.0，不依赖 infosource 真有该版本）→ `uninstall --unlink` 不降级 → `install --unlink` 不建链接 → 卸掉最后一个版本时删掉链接 |
 | `scripts/configpath_test.sh` | **配置目录解析回归**（离线）：把 `configpaths` 的两个候选目录换成临时目录，验证「系统级优先 / 用户级回落 / 系统级损坏或缺字段也回落 / 都没有则退 1」 |
-| `.github/workflows/format-test.yml` | 在 `macos-latest` 上把 `lib/`、`pkg/`、`surfboard/` 部署到 `/tmp/linuxwave-test`，依次跑配置目录回归、依赖审计、格式回归、依赖链回归、链接回归、**selfupdate 回归** |
+| `.github/workflows/format-test.yml` | 在 `ubuntu-latest` 上把 `lib/`、`pkg/`、`surfboard/` 部署到 `/tmp/linuxwave-test`，依次跑配置目录回归、依赖审计、格式回归、依赖链回归、链接回归、**selfupdate 回归** |
 
 ## 三、安装后的运行时目录
 
@@ -151,7 +151,7 @@ updatedata/{版本号}/transfer_commands      Y/y 时执行这个脚本（bash -
    - `.depped_dep_{依赖名}@{版本号}`：被某个依赖依赖
    - 卸载时先删掉自己的标记；某依赖已无任何标记，才连同它自己的依赖一起级联删除，多个依赖者共享时不会被误删
 5. **递归**：依赖自身的 `deps` 会被继续安装（先装下层、再装自己）
-6. **动态库路径替换**：依赖包里的库不会自动被 dyld 找到（conda 包的 install name 是 `@rpath/xxx.dylib`，自带 rpath 只有 `@loader_path/`，跨目录必然失败）。安装完成后由 `surfboard/transfer.sh` 用 `otool` + `install_name_tool` 把引用改成 `BASE_DIR` 下的绝对路径，并 `codesign --force --sign -` 重签名。替换统一放在**全部产物就位之后**做（先逐个处理 `deps/*/*`，再处理软件包目录），因为依赖声明顺序与实际库依赖顺序未必一致——例如 `wget` 的 `deps` 里 `libidn2` 排在 `libunistring` 前面，而 `libidn2.0.dylib` 恰好引用 `libunistring.5.dylib`，提前替换会解析不到
+6. **动态库路径替换**：依赖包里的库不会自动被 `ld.so` 找到（预编译产物的 `DT_NEEDED` 只记库名、`RUNPATH` 又只指向构建机的路径，而安装目录可选，跨目录必然失败）。安装完成后由 `surfboard/transfer.sh` 用 `patchelf` 把 `RPATH`/`RUNPATH` 改写成指向依赖 `lib/` 的 `$ORIGIN` 相对路径。替换统一放在**全部产物就位之后**做（先逐个处理 `deps/*/*`，再处理软件包目录），因为依赖声明顺序与实际库依赖顺序未必一致——例如 `wget` 的 `deps` 里 `libidn2` 排在 `libunistring` 前面，而 `libidn2` 恰好引用 `libunistring`，提前替换会解析不到
 7. **网络**：所有请求 30 秒超时；下载超时或连接失败时询问是否重试
 
 ## 七、代码约定
@@ -194,7 +194,7 @@ updatedata/{版本号}/transfer_commands      Y/y 时执行这个脚本（bash -
 | 16 | `surfboard/depsinstaller.py` | 只负责装依赖，不在此时做路径替换（见第 18 步） |
 | 17 | `surfboard/depsinstaller.py` | 已安装的依赖：跳过下载，只调 `tagger.sh` 补标记（例如 `libiconv` 同时被 `gettext` 和 `wget` 依赖，就会有两条标记） |
 | 18 | `surfboard/depsinstaller.py` | 已安装的依赖：跳过下载，只调 `tagger.sh` 补标记（例如 `libiconv` 同时被 `gettext` 和 `wget` 依赖，就会有两条标记） |
-| 18 | `pkg/pkginstaller.py` → `surfboard/depsinstaller.py` → `surfboard/transfer.sh` | 依赖与软件包全部就位后，调 `transfer_installed_artifacts()`：先逐个 `deps/*/*` 处理，再处理包目录——建「库文件名 → 本地实际路径」索引（产物自身 `lib/` → 该产物 `_DEPS` 列出的依赖 → 其它已安装依赖兜底），对每个 Mach-O 用 `install_name_tool -change` 改写动态库引用、给有 id 的 dylib 改 `-id`，最后 `codesign --force --sign -` 重签名 |
+| 18 | `pkg/pkginstaller.py` → `surfboard/depsinstaller.py` → `surfboard/transfer.sh` | 依赖与软件包全部就位后，调 `transfer_installed_artifacts()`：先逐个 `deps/*/*` 处理，再处理包目录——建「库目录」索引（产物自身 `lib/` → 该产物 `_DEPS` 列出的依赖 → 其它已安装依赖兜底），对每个 ELF 用 `patchelf --set-rpath` 把 `RUNPATH` 改写成 `$ORIGIN` 相对路径 |
 | 19 | `surfboard/transfer.sh` | 幂等：已正确的引用直接跳过，重复执行零副作用（可作为修复既有安装的手段） |
 | 20 | `pkg/linker.py` | 路径替换完成后，把 `links/wget` 指向 `bin/wget@1.25.0/wget`（不带 `--unlink` 时）；已于 18 步建好的 `links/wget@1.25.0` 不受影响 |
 

@@ -23,7 +23,7 @@ done
 if [ ${#BASE_DIRS[@]} -eq 0 ]; then
     BASE_DIRS+=("$HOME/.local/linuxwave")
     BASE_DIRS+=("/opt/linuxwave")
-    # Intel Mac 才有 /usr/local/linuxwave
+    # 仅在 x86_64 上提供 /usr/local/linuxwave（与 install.sh 的可选目录一致）
     if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
         BASE_DIRS+=("/usr/local/linuxwave")
     fi
@@ -86,7 +86,7 @@ for line in rc_file.read_text().splitlines():
 rc_file.write_text("\n".join(kept) + ("\n" if kept else ""))
 PYEOF
         # 兜底：注释行缺失时，仍按旧版写法删掉 linuxwave 的 PATH 行
-        sed -i '' '/export PATH=".*linuxwave\//d' "$RC_FILE" 2>/dev/null || true
+        sed -i '/export PATH=".*linuxwave\//d' "$RC_FILE" 2>/dev/null || true
         echo "🌊 Removed LinuxWave PATH entries from $RC_FILE"
     fi
 done

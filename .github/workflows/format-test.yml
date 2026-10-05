@@ -9,10 +9,15 @@ on:
 
 jobs:
   format-test:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
 
       # 审计需要 infosource 分支的数据。直接检出本地副本，不走 api.github.com：
       # 未认证只有 60 次/小时，而 Runner 共用出口 IP，很容易被限流。
