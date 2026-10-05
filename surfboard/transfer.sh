@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # transfer.sh
-# MacWave 🌊 路径替换 ：把安装好的产物里所有 Mach-O 文件的
+# LinuxWave 🌊 路径替换 ：把安装好的产物里所有 Mach-O 文件的
 # 动态库引用（LC_LOAD_DYLIB）与自身 install name（LC_ID_DYLIB）改写成
 # BASE_DIR 下的绝对路径，让运行时 dyld 能真正加载依赖包里的库。
 #
@@ -48,13 +48,13 @@ done
 
 # -------------------- 库索引（名字 -> 绝对路径） --------------------
 
-MAP_FILE="$(mktemp -t macwave-transfer)"
-TREE_FILE="$(mktemp -t macwave-tree)"
-UNRESOLVED_FILE="$(mktemp -t macwave-unresolved)"
-MISSING_FILE="$(mktemp -t macwave-missing)"
-EXTERNAL_FILE="$(mktemp -t macwave-external)"
-FAILED_FILE="$(mktemp -t macwave-failed)"
-ERROR_FILE="$(mktemp -t macwave-error)"
+MAP_FILE="$(mktemp -t linuxwave-transfer)"
+TREE_FILE="$(mktemp -t linuxwave-tree)"
+UNRESOLVED_FILE="$(mktemp -t linuxwave-unresolved)"
+MISSING_FILE="$(mktemp -t linuxwave-missing)"
+EXTERNAL_FILE="$(mktemp -t linuxwave-external)"
+FAILED_FILE="$(mktemp -t linuxwave-failed)"
+ERROR_FILE="$(mktemp -t linuxwave-error)"
 
 cleanup() {
     rm -f "$MAP_FILE" "$TREE_FILE" "$UNRESOLVED_FILE" "$MISSING_FILE" "$EXTERNAL_FILE" "$FAILED_FILE" "$ERROR_FILE"
@@ -272,7 +272,7 @@ fi
 
 if [[ -s "$UNRESOLVED_FILE" ]]; then
     # 分流：我们自己的树里存在同名文件 → 真的没接上（警告）；
-    #       树里根本没有 → 外部/未声明的依赖，MacWave 无从接，只作提示。
+    #       树里根本没有 → 外部/未声明的依赖，LinuxWave 无从接，只作提示。
     while IFS= read -r ref; do
         if grep -qxF "${ref##*/}" "$TREE_FILE" 2>/dev/null; then
             echo "$ref" >> "$MISSING_FILE"

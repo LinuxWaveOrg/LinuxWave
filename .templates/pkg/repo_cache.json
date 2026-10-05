@@ -22,7 +22,7 @@
     "description": "A demo CLI tool for showing cache format.",
     "homepage": "https://example.com/demo_tool",
     "license": "GPL-3.0",
-    "author": "MacWave Team",
+    "author": "LinuxWave Team",
     "binary_name": "demo",
     "releases": [
       {

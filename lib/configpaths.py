@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
 # configpaths.py
-# 解析 MacWave 的配置目录。
+# 解析 LinuxWave 的配置目录。
 #
 # 安装目录决定配置写在哪：
-#   - 系统级（/opt/macwave、/usr/local/macwave 等需要 sudo 的目录）
-#     → /opt/macwave_config
-#   - 用户级（~/.local/macwave 等无需 sudo 的目录）
-#     → ~/.config/macwave_config
+#   - 系统级（/opt/linuxwave、/usr/local/linuxwave 等需要 sudo 的目录）
+#     → /etc/linuxwave_config
+#   - 用户级（~/.local/linuxwave 等无需 sudo 的目录）
+#     → ~/.config/linuxwave_config
 #
-# 读取时系统级优先：只要 /opt/macwave_config/config.json 存在就用它，
-# 否则才回落到 ~/.config/macwave_config —— 也就是优先跑系统级的 MacWave。
+# 读取时系统级优先：只要 /etc/linuxwave_config/config.json 存在就用它，
+# 否则才回落到 ~/.config/linuxwave_config —— 也就是优先跑系统级的 LinuxWave。
 
 import json
 import sys
@@ -28,8 +28,8 @@ RESET = '\033[0m'
 CONFIG_FILE_NAME = "config.json"
 VERSION_FILE_NAME = "VERSION.json"
 
-SYSTEM_CONFIG_DIR = Path("/opt/macwave_config")
-USER_CONFIG_DIR = Path.home() / ".config" / "macwave_config"
+SYSTEM_CONFIG_DIR = Path("/etc/linuxwave_config")
+USER_CONFIG_DIR = Path.home() / ".config" / "linuxwave_config"
 
 
 def config_dir_candidates():
@@ -50,7 +50,7 @@ def _read_base_dir(config_file):
 
 
 def find_config_dir():
-    # 第一个装了 MacWave 的配置目录（config.json 合法且含 base_dir）；都没装时返回 None
+    # 第一个装了 LinuxWave 的配置目录（config.json 合法且含 base_dir）；都没装时返回 None
     for directory in config_dir_candidates():
         if _read_base_dir(directory / CONFIG_FILE_NAME) is not None:
             return directory
@@ -65,7 +65,7 @@ def load_base_dir():
             return base_dir
 
     print(f"{RED_BOLD}🌊 Error: Configuration file not found or invalid.{RESET}")
-    print(f"{RED_BOLD}🌊 Please run the install script again to reinstall MacWave.{RESET}")
+    print(f"{RED_BOLD}🌊 Please run the install script again to reinstall LinuxWave.{RESET}")
     sys.exit(1)
 
 
@@ -78,5 +78,5 @@ VERSION_FILE = CONFIG_DIR / VERSION_FILE_NAME
 
 if __name__ == "__main__":
     print("🌊 This module is not meant to be run directly.")
-    print("🌊 It is used internally by the other MacWave modules.")
+    print("🌊 It is used internally by the other LinuxWave modules.")
     sys.exit(1)

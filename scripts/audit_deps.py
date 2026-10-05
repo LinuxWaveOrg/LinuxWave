@@ -31,11 +31,11 @@ RESET = '\033[0m'
 # -------------------- 常量 --------------------
 
 BRANCH = "infosource"
-RAW_BASE = f"https://raw.githubusercontent.com/Sha0huaZhang/MacWave/{BRANCH}"
-TREE_API = f"https://api.github.com/repos/Sha0huaZhang/MacWave/git/trees/{BRANCH}?recursive=1"
+RAW_BASE = f"https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/{BRANCH}"
+TREE_API = f"https://api.github.com/repos/Sha0huaZhang/LinuxWave/git/trees/{BRANCH}?recursive=1"
 CONFIG_FILES = (
-    Path("/opt/macwave_config/config.json"),          # 系统级优先
-    Path.home() / ".config" / "macwave_config" / "config.json",
+    Path("/etc/linuxwave_config/config.json"),          # 系统级优先
+    Path.home() / ".config" / "linuxwave_config" / "config.json",
 )
 DATA_GROUPS = ("pkg", "surfboard")
 REF_PATTERN = re.compile(r'^[^@\s,]+@[^@\s,]+$')
@@ -45,7 +45,7 @@ CURL_ONLY = False
 FETCH_TIMEOUT = 30
 URL_TIMEOUT = 20
 URL_WORKERS = 8
-USER_AGENT = 'MacWave-audit'
+USER_AGENT = 'LinuxWave-audit'
 
 
 # -------------------- 辅助函数 --------------------
@@ -437,11 +437,11 @@ def audit_edges(files, base_dir, arch):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Audit MacWave dependency data (infosource) and the installed dependency edges.")
+        description="Audit LinuxWave dependency data (infosource) and the installed dependency edges.")
     parser.add_argument("mode", nargs="?", default="all", choices=["data", "edges", "all"],
                         help="data: 只查数据；edges: 只查本机依赖边；all: 两者都查（默认）")
     parser.add_argument("--data-dir", help="infosource 检出的目录（默认：本地有就用，否则从 GitHub 拉取）")
-    parser.add_argument("--base-dir", help="MacWave 安装目录（默认按系统级 → 用户级读 config.json）")
+    parser.add_argument("--base-dir", help="LinuxWave 安装目录（默认按系统级 → 用户级读 config.json）")
     parser.add_argument("--arch", choices=["arm64", "amd64"], help="目标架构（默认本机架构）")
     parser.add_argument("--check-urls", action="store_true",
                         help="联网确认每个 url 可访问（默认关闭；依赖网络，按需开启）")
@@ -450,7 +450,7 @@ def main():
     args = parser.parse_args()
 
     arch = args.arch or detect_arch()
-    print(f"🌊 MacWave dependency audit (arch: {arch})")
+    print(f"🌊 LinuxWave dependency audit (arch: {arch})")
 
     files = resolve_data(args.data_dir)
     problems = []
@@ -465,7 +465,7 @@ def main():
         base_dir = resolve_base_dir(args.base_dir)
         if base_dir is None:
             if args.mode == "edges":
-                fail("MacWave is not installed. Use --base-dir to point at an installation.")
+                fail("LinuxWave is not installed. Use --base-dir to point at an installation.")
         else:
             found, notes = audit_edges(files, base_dir, arch)
             problems += found

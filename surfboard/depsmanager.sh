@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # depsmanager.sh
-# MacWave 🌊 通用安装核心：定位下载文件、SHA256 校验、解压、落盘、创建软链接、
+# LinuxWave 🌊 通用安装核心：定位下载文件、SHA256 校验、解压、落盘、创建软链接、
 # 写入 _DEPS、依赖标记文件管理。
 # 由 pkg/pkginstaller.sh 与 surfboard/depsinstaller.sh source 使用，不单独执行。
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MacWave Help Module
+LinuxWave Help Module
 负责展示命令行帮助信息（简版和详细版）。
 """
 
@@ -36,7 +36,7 @@ def print_custom_help():
     version = get_project_version()
     print(f"{PURPLE}usage: {ORANGE}wave <command> [package] [flags]{RESET}")
     print()
-    print(f"MacWave {version} 🌊")
+    print(f"LinuxWave {version} 🌊")
     print("A package manager for macOS software developers.")
     print()
     print(f"{PURPLE}Commands:{RESET}")
@@ -45,7 +45,7 @@ def print_custom_help():
     print(f"  {GREEN}list{RESET}                  List installed packages")
     print(f"  {GREEN}search{RESET}                Search for a package in the index")
     print(f"  {GREEN}info{RESET}                  Display detailed information about a package")
-    print(f"  {GREEN}selfupdate{RESET}            Update MacWave itself to the latest version")
+    print(f"  {GREEN}selfupdate{RESET}            Update LinuxWave itself to the latest version")
     print(f"  {GREEN}link{RESET}                  Link installed packages without a version number")
     print(f"  {GREEN}unlink{RESET}                Remove those unversioned links")
     print(f"  {GREEN}linkquery{RESET}             Show which version an unversioned link points to")
@@ -73,15 +73,15 @@ def print_custom_help():
     print(f"  {GREEN}wave unlink <name>{RESET}               Remove that link")
     print("  Links are created on install and re-pointed on uninstall; --unlink never leaves one broken.")
     print()
-    print("For more details, visit: https://macwave.org")
+    print("For more details, visit: https://linuxwave.macwave.org")
 
 
 # -------------------- 版本与错误提示 --------------------
 
 def print_version():
-    """输出当前 MacWave 的版本号"""
+    """输出当前 LinuxWave 的版本号"""
     version = get_project_version()
-    print(f"🌊 MacWave {version}")
+    print(f"🌊 LinuxWave {version}")
 
 
 def print_error_help():

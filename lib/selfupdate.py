@@ -23,7 +23,7 @@ RESET = '\033[0m'
 
 from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir
 
-VERSION_DATA_URL = "https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata/versiondata/latest_version"
+VERSION_DATA_URL = "https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/configdata/versiondata/latest_version"
 FETCH_TIMEOUT = 30
 UPDATE_TIMEOUT = 1800
 
@@ -102,14 +102,14 @@ def installed_version():
 
 def handle_selfupdate(input_string=""):
     if find_config_dir() is None:
-        print(f"{RED_BOLD}🌊 Error: MacWave is not installed. Run lib/install.sh first.{RESET}")
+        print(f"{RED_BOLD}🌊 Error: LinuxWave is not installed. Run lib/install.sh first.{RESET}")
         sys.exit(1)
 
     print("🌊 Fetching the latest version...")
 
     text = fetch_version_data()
     if text is None:
-        print(f"{RED_BOLD}🌊 Error: Cannot reach the MacWave version data.{RESET}")
+        print(f"{RED_BOLD}🌊 Error: Cannot reach the LinuxWave version data.{RESET}")
         print(f"{RED_BOLD}🌊 {VERSION_DATA_URL}{RESET}")
         sys.exit(1)
 
@@ -123,7 +123,7 @@ def handle_selfupdate(input_string=""):
 
     current = installed_version()
     if current and version_key(current) >= version_key(latest):
-        print(f"{GREEN}🌊 MacWave is already up to date (current: {current}).{RESET}")
+        print(f"{GREEN}🌊 LinuxWave is already up to date (current: {current}).{RESET}")
         sys.exit(0)
 
     print("🌊 Fetching the new version information")
@@ -134,15 +134,15 @@ def handle_selfupdate(input_string=""):
         sys.exit(1)
 
     if current:
-        print(f"🌊 Updating MacWave from {current} to {latest}...")
+        print(f"🌊 Updating LinuxWave from {current} to {latest}...")
     else:
         print(f"{YELLOW}🌊 No installed version found, updating to {latest}...{RESET}")
 
     # 分支与目标版本通过环境变量传给 selfupdate.sh，避免脚本自己去猜
     environment = dict(os.environ)
-    environment["MACWAVE_UPDATE_VERSION"] = latest
+    environment["LINUXWAVE_UPDATE_VERSION"] = latest
     if data.get("branch"):
-        environment["MACWAVE_UPDATE_BRANCH"] = data["branch"]
+        environment["LINUXWAVE_UPDATE_BRANCH"] = data["branch"]
 
     try:
         result = subprocess.run(['/bin/bash', '-c', command], env=environment, timeout=UPDATE_TIMEOUT)
@@ -162,7 +162,7 @@ def handle_selfupdate(input_string=""):
         sys.exit(1)
 
     print("")
-    print(f"{GREEN}🌊 MacWave has been updated to {final}!{RESET}")
+    print(f"{GREEN}🌊 LinuxWave has been updated to {final}!{RESET}")
 
     # wave.py 会被覆盖，但当前进程已经加载完了，直接退出即可
     sys.exit(0)

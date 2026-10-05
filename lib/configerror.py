@@ -19,7 +19,7 @@ RESET = '\033[0m'
 def check_environment():
     
     # 检测当前环境
-    # - 如果 /opt/macwave_config/config.json 或 ~/.config/macwave_config/config.json
+    # - 如果 /etc/linuxwave_config/config.json 或 ~/.config/linuxwave_config/config.json
     #   存在，说明已正式安装，正常继续。
     # - 如果都不存在，且当前在 git 仓库里，报错并退出。
 
@@ -55,21 +55,21 @@ def check_environment():
         repo_root = ""
 
     if is_shallow:
-        print(f"{RED_BOLD}🌊 Error: MacWave is a shallow clone!{RESET}")
+        print(f"{RED_BOLD}🌊 Error: LinuxWave is a shallow clone!{RESET}")
     else:
-        print(f"{RED_BOLD}🌊 Error: MacWave is a git clone!{RESET}")
+        print(f"{RED_BOLD}🌊 Error: LinuxWave is a git clone!{RESET}")
 
     config_paths = " or ".join(str(directory / "config.json") for directory in config_dir_candidates())
 
     print("")
-    print(f"MacWave is not distributed as a shallow clone. Instead, it uses install.sh to download various files to their corresponding locations. Among other things, install.sh writes a configuration file to {config_paths}. This configuration file records a large amount of information, including the location where you downloaded MacWave, and it is called by many programs. Without it, many programs will not be able to find the directories.")
+    print(f"LinuxWave is not distributed as a shallow clone. Instead, it uses install.sh to download various files to their corresponding locations. Among other things, install.sh writes a configuration file to {config_paths}. This configuration file records a large amount of information, including the location where you downloaded LinuxWave, and it is called by many programs. Without it, many programs will not be able to find the directories.")
     print("")
     if is_shallow:
-        print("We have detected that you are using a shallow clone, which will cause MacWave to fail to work properly. To continue using it, please run $ /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/HEAD/lib/install.sh)\" and select the directory you want to install to. You can also run $ bash " + repo_root + "/lib/install.sh or $ /bin/bash " + repo_root + "/lib/install.sh and select the directory you want to install to in order to fully install MacWave.")
+        print("We have detected that you are using a shallow clone, which will cause LinuxWave to fail to work properly. To continue using it, please run $ /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)\" and select the directory you want to install to. You can also run $ bash " + repo_root + "/lib/install.sh or $ /bin/bash " + repo_root + "/lib/install.sh and select the directory you want to install to in order to fully install LinuxWave.")
     else:
-        print("We have detected that you are using a git clone, which will cause MacWave to fail to work properly. To continue using it, please run $ /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/HEAD/lib/install.sh)\" and select the directory you want to install to. You can also run $ bash " + repo_root + "/lib/install.sh or $ /bin/bash " + repo_root + "/lib/install.sh and select the directory you want to install to in order to fully install MacWave.")
+        print("We have detected that you are using a git clone, which will cause LinuxWave to fail to work properly. To continue using it, please run $ /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)\" and select the directory you want to install to. You can also run $ bash " + repo_root + "/lib/install.sh or $ /bin/bash " + repo_root + "/lib/install.sh and select the directory you want to install to in order to fully install LinuxWave.")
     print("")
-    print("If you are a collaborator of MacWave, or if you cloned the source code for a specific purpose, please do not run it locally, or at least do not run it in the Git directory.")
+    print("If you are a collaborator of LinuxWave, or if you cloned the source code for a specific purpose, please do not run it locally, or at least do not run it in the Git directory.")
     print("")
     print("If you have any other questions, please contact hi@macwave.org.")
 

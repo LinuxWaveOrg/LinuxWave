@@ -1,4 +1,4 @@
-# 🌊 MacWave 项目结构
+# 🌊 LinuxWave 项目结构
 
 面向 macOS / Linux 软件开发者的包管理器，主要托管 iOS/iPadOS 相关软件包。
 技术栈：Python + Shell。
@@ -17,7 +17,7 @@ pkg/          安装与查询核心
 surfboard/    依赖处理
 scripts/      回归测试脚本
 .github/      CI
-.templates/   目录与文件的模板样例（bin/、pkg/、macwave_config/）
+.templates/   目录与文件的模板样例（bin/、pkg/、linuxwave_config/）
 .Pseudocode/  早期伪代码，仅作参考
 STYLE.md      代码风格约定
 README.md     用户文档
@@ -30,12 +30,12 @@ README.md     用户文档
 | 文件 | 作用 |
 | --- | --- |
 | `wave.py` | 主入口。读配置目录（`config.json`）的 `base_dir`，把 `lib/`、`pkg/`、`surfboard/` 注入 `sys.path`；用 `COMMANDS` 字典把 `install / uninstall / list / search / info / version / selfupdate / link / unlink / linkquery` 分发到对应模块，`ARGUMENTS` 处理 `-h/--help/-V/--version` |
-| `configpaths.py` | **配置目录解析**（`find_config_dir` / `load_base_dir` / `CONFIG_FILE` / `VERSION_FILE`）：系统级 `/opt/macwave_config` 优先，其次用户级 `~/.config/macwave_config`；系统级配置损坏或缺 `base_dir` 时也回落用户级。其余模块都从这里取配置，不再各自写死路径 |
-| `configerror.py` | 启动前的环境自检：只要两处配置目录里有一处装了 MacWave 就放行；都没装且在 git 仓库里时，报错并提示用 `lib/install.sh` 正式安装 |
+| `configpaths.py` | **配置目录解析**（`find_config_dir` / `load_base_dir` / `CONFIG_FILE` / `VERSION_FILE`）：系统级 `/etc/linuxwave_config` 优先，其次用户级 `~/.config/linuxwave_config`；系统级配置损坏或缺 `base_dir` 时也回落用户级。其余模块都从这里取配置，不再各自写死路径 |
+| `configerror.py` | 启动前的环境自检：只要两处配置目录里有一处装了 LinuxWave 就放行；都没装且在 git 仓库里时，报错并提示用 `lib/install.sh` 正式安装 |
 | `help.py` | 帮助与版本文本：`print_custom_help`（`-h` / `--help` 的用法，命令与旗标列表与 README 的 Command Reference 对齐）、`print_version`、`print_error_help`（未知命令时先报错再打帮助） |
-| `install.sh` | 官方安装脚本：选安装目录、`sudo` 提权、建运行时目录（`bin` / `links` / `deps` / `pkg` / `surfboard` / `lib` / `downloads/tmp`）、写 `config.json` / `VERSION.json`（**系统目录→`/opt/macwave_config`，用户目录→`~/.config/macwave_config`**）、**用户级安装时把 2.5 之前的旧系统级配置 `/opt/macwave_config` 迁走**（否则它会因系统级优先而盖住新配置）、**按 configdata 的 `versiondata/files_info` 清单拉取全部程序文件**（与 `selfupdate.sh` 共用同一份清单，解析逻辑也相同）、安装 Python 依赖（requests / packaging / rich）、把 `bin/` + `links/` + `lib/` 写入 PATH（升级时替换旧版只含 `bin`/`lib` 的行）、清理旧版平铺 `bin/` 文件、检查 Xcode 命令行工具（`otool` / `install_name_tool` / `codesign`）、许可协议确认（直接回车视为同意）。注意 `MACWAVE_VERSION` 仍**按分支写死**在脚本里，不能从 configdata 取 —— 否则用旧分支安装会写成新版本号 |
-| `uninstall.sh` | 卸载 MacWave 本体：读两处配置定位 `BASE_DIR`（都读不到则遍历候选路径）、二次确认后删除安装目录与两处配置目录、清掉 rc 文件里的 PATH 行、最后自删 |
-| `selfupdate.py` | `wave selfupdate`：拉 `configdata` 分支的 `versiondata/latest_version`，取其 `version` 与当前生效的 `VERSION.json` 比较（只比数字段，`2.3` == `2.3.0`）；已是最新则直接返回，否则把 `update_command` 中 `<<<` / `>>>` 之间的内容交给 `/bin/bash -c` 执行（用环境变量 `MACWAVE_UPDATE_VERSION` / `MACWAVE_UPDATE_BRANCH` 把目标版本与分支传下去）。因为 `bash -c "$(curl …)"` 在 curl 失败时仍返回 0，执行完会**回读 `VERSION.json` 复核**，没变就报错 |
+| `install.sh` | 官方安装脚本：选安装目录、`sudo` 提权、建运行时目录（`bin` / `links` / `deps` / `pkg` / `surfboard` / `lib` / `downloads/tmp`）、写 `config.json` / `VERSION.json`（**系统目录→`/etc/linuxwave_config`，用户目录→`~/.config/linuxwave_config`**）、**用户级安装时把 2.5 之前的旧系统级配置 `/etc/linuxwave_config` 迁走**（否则它会因系统级优先而盖住新配置）、**按 configdata 的 `versiondata/files_info` 清单拉取全部程序文件**（与 `selfupdate.sh` 共用同一份清单，解析逻辑也相同）、安装 Python 依赖（requests / packaging / rich）、把 `bin/` + `links/` + `lib/` 写入 PATH（升级时替换旧版只含 `bin`/`lib` 的行）、清理旧版平铺 `bin/` 文件、检查 Xcode 命令行工具（`otool` / `install_name_tool` / `codesign`）、许可协议确认（直接回车视为同意）。注意 `LINUXWAVE_VERSION` 仍**按分支写死**在脚本里，不能从 configdata 取 —— 否则用旧分支安装会写成新版本号 |
+| `uninstall.sh` | 卸载 LinuxWave 本体：读两处配置定位 `BASE_DIR`（都读不到则遍历候选路径）、二次确认后删除安装目录与两处配置目录、清掉 rc 文件里的 PATH 行、最后自删 |
+| `selfupdate.py` | `wave selfupdate`：拉 `configdata` 分支的 `versiondata/latest_version`，取其 `version` 与当前生效的 `VERSION.json` 比较（只比数字段，`2.3` == `2.3.0`）；已是最新则直接返回，否则把 `update_command` 中 `<<<` / `>>>` 之间的内容交给 `/bin/bash -c` 执行（用环境变量 `LINUXWAVE_UPDATE_VERSION` / `LINUXWAVE_UPDATE_BRANCH` 把目标版本与分支传下去）。因为 `bash -c "$(curl …)"` 在 curl 失败时仍返回 0，执行完会**回读 `VERSION.json` 复核**，没变就报错 |
 | `selfupdate.sh` | 自更新脚本，由 `latest_version` 的 `update_command` 调用（也可 `bash lib/selfupdate.sh [分支]`）：按「系统级 → 用户级」定位配置目录与 `BASE_DIR` → 拉 `configdata/versiondata/files_info`（一份**只写仓库路径**的缩进树，`/` 开头是安装根、以 `/` 结尾表示目录、`#` 开始是注释；缩进每层 4 空格，Tab 与之等价，也可行内直接写 `pkg/linker.py` 这样的完整路径）→ **用脚本内置的 `python3` 解析它**（不能做成单独的 `.py` 文件，否则新文件本身又得先被下载 —— 鸡生蛋）→ 逐个从 `$BRANCH` 下载并复位可执行位（`lib/wave.py` 特例装成可执行的 `lib/wave`；其余 `*.sh` 加 +x）→ 清掉 `__pycache__` → 重写 `VERSION.json`。**以后新增文件只改 configdata 的 files_info，不用再动本脚本** |
 
 ### pkg/ —— 安装与查询核心
@@ -45,7 +45,7 @@ README.md     用户文档
 | `pkginstaller.py` | **软件包安装编排**。解析参数（包名取第一个非 flag 的 token，`--limit-rate` / `--proxy` 的值会被跳过）与架构 → 定版本（`@版本`、`--ver` 或远程取最高）→ 拉 `_包名@common` 取 `bin_name` → 拉版本文件取 `url` / `sha256` / `deps` → 下载（rich 进度条、断点续传、限速、代理、30 秒超时+重试询问）→ 调 `pkginstaller.sh` → 通过 `depsinstaller` 递归安装依赖 → 最后调 `linker.link_package()` 把不带版本号的软链接指到刚装好的版本（`--unlink` 可跳过） |
 | `pkginstaller.sh` | **软件包安装入口（binary 模式）**：组装长字符串，调用通用安装核心 `depsmanager.sh` 的 `mw_install_artifact`，写 `installed.json`，输出安装结果 |
 | `pkginfohelper.py` | `list`（扫描 `bin/` 下的目录）、`search`（远程匹配包名）、`info`（本地已装版本 + 远程可装版本 + `@common` 描述） |
-| `pkgversionparser.py` | 版本号比较与排序；处理 `alpha/beta/rc` 预发布，以及 `procursus` / `macwaveteam` / `Xteam` 等特殊版本 |
+| `pkgversionparser.py` | 版本号比较与排序；处理 `alpha/beta/rc` 预发布，以及 `procursus` / `linuxwaveteam` / `Xteam` 等特殊版本 |
 | `pkgunzip.sh` | 按扩展名解压：`zip` / `tar.gz` / `tar.bz2` / `tar.xz` / `tar` / `gz` / `bz2` / `xz` / `conda`。裸 `xz` 用 Python 标准库 `lzma`（macOS 不自带 `xz` 命令）；**`.conda` 本质是个 zip，里装两个 zstd 压缩的 tar，只取 `pkg-*.tar.zst` 那个载荷**（`info-*.tar.zst` 是元数据），用 Python 3.14 的 `compression.zstd` 解（macOS 也不自带 `zstd`）—— **所以安装要求 Python 3.14+**；`extractall` 传 `filter='tar'`，因为 3.14 默认的 `data` 过滤器会拒掉 conda 包里的符号链接 |
 | `uninstaller.py` | **卸载**：扫描 `bin/` 找出该包所有版本；删除包目录与软链接；按 `_DEPS` 删除依赖标记，若某依赖已无任何标记，则连同它自己的依赖一起级联删除（递归时带 `visited` 集合，避免循环依赖 A→B→A 造成无限递归）。卸载完调 `linker` 同步不带版本号的软链接：还有别的版本就改指最高的，一个不剩就删掉；本来就没链接过的不重建（悬空链接也在这里被治好）。加 `--unlink` 则不动这个链接 —— **但如果被删的版本正好是链接当前指向的那个，会报错并拒绝执行**（绝不留下指向已卸载版本的坏链接） |
 | `linker.py` | **不带版本号的软链接**（仅限软件包，不碰依赖）：`link <名>[@latest]` / `link --all`（`-a`）建或改指链接，`unlink <名>` / `unlink --all` 删链接，`linkquery <名>` 看当前指向（输出形如 `🌊 ffmpeg@9.0`；未链接退 1，**指向已不存在的版本也报错退 1**）。`installed_versions` / `linked_version` / `is_dangling` 分别扫 `bin/`、读 `links/` 软链、判断是否悬空；重复 link 会报 `already linked` |
@@ -72,15 +72,15 @@ README.md     用户文档
 | `scripts/selfupdate_test.sh` | **自更新回归**（必须放最后，它会真的改安装目录）：① 离线单测 `selfupdate.py` 的 `parse_version_data`（含 `<<<`/`>>>` 多行命令）与 `version_key`；② 把 `VERSION.json` 写成 `9999.0`，断言 `wave selfupdate` 短路为「已是最新」且退出码 0；③ 写成 `0.1`，跑真实自更新，最后断言 `VERSION.json` 等于 `configdata/versiondata/latest_version` 声明的版本 |
 | `scripts/link_test.sh` | **不带版本号软链接回归**：装完自动建链接 → 不带版本号能跑 → `link` / `unlink` / `linkquery` → `-a` 批量 → 卸掉最高版自动降级（先复制一份目录造出 2.0，不依赖 infosource 真有该版本）→ `uninstall --unlink` 不降级 → `install --unlink` 不建链接 → 卸掉最后一个版本时删掉链接 |
 | `scripts/configpath_test.sh` | **配置目录解析回归**（离线）：把 `configpaths` 的两个候选目录换成临时目录，验证「系统级优先 / 用户级回落 / 系统级损坏或缺字段也回落 / 都没有则退 1」 |
-| `.github/workflows/format-test.yml` | 在 `macos-latest` 上把 `lib/`、`pkg/`、`surfboard/` 部署到 `/tmp/macwave-test`，依次跑配置目录回归、依赖审计、格式回归、依赖链回归、链接回归、**selfupdate 回归** |
+| `.github/workflows/format-test.yml` | 在 `macos-latest` 上把 `lib/`、`pkg/`、`surfboard/` 部署到 `/tmp/linuxwave-test`，依次跑配置目录回归、依赖审计、格式回归、依赖链回归、链接回归、**selfupdate 回归** |
 
 ## 三、安装后的运行时目录
 
-`BASE_DIR` 取自生效的 `config.json` 的 `base_dir`（系统级 `/opt/macwave_config` 优先，其次用户级 `~/.config/macwave_config`；默认安装 `~/.local/macwave`）。
+`BASE_DIR` 取自生效的 `config.json` 的 `base_dir`（系统级 `/etc/linuxwave_config` 优先，其次用户级 `~/.config/linuxwave_config`；默认安装 `~/.local/linuxwave`）。
 
-配置目录的归属由安装位置决定：装到需要 `sudo` 的目录（`/opt/macwave`、`/usr/local/macwave`、自定义的系统路径）→ `/opt/macwave_config`；装到无需 `sudo` 的目录（`~/.local/macwave`、家目录下的自定义路径）→ `~/.config/macwave_config`。两处都存在时程序一律先用系统级。
+配置目录的归属由安装位置决定：装到需要 `sudo` 的目录（`/opt/linuxwave`、`/usr/local/linuxwave`、自定义的系统路径）→ `/etc/linuxwave_config`；装到无需 `sudo` 的目录（`~/.local/linuxwave`、家目录下的自定义路径）→ `~/.config/linuxwave_config`。两处都存在时程序一律先用系统级。
 
-**迁移**：2.5 之前不分系统级/用户级，配置一律写在 `/opt/macwave_config`。所以用户级安装时，`install.sh` 会读 `/opt/macwave_config/VERSION.json`，只要版本低于 `2.5`（读不到也视为旧版）就把它删掉，配置重新落到 `~/.config/macwave_config`；`2.5` 及以后的系统级配置不动。
+**迁移**：2.5 之前不分系统级/用户级，配置一律写在 `/etc/linuxwave_config`。所以用户级安装时，`install.sh` 会读 `/etc/linuxwave_config/VERSION.json`，只要版本低于 `2.5`（读不到也视为旧版）就把它删掉，配置重新落到 `~/.config/linuxwave_config`；`2.5` 及以后的系统级配置不动。
 
 ```
 BASE_DIR/bin/{可执行文件名}@{版本}/            软件包：二进制 + _DEPS
@@ -89,8 +89,8 @@ BASE_DIR/links/{名字}@{版本}                   软链接，此目录已加�
 BASE_DIR/pkg/installed.json                   已安装软件包记录
 BASE_DIR/downloads/tmp/                       下载临时目录（*.partial 表示未下载完）
 BASE_DIR/{lib,pkg,surfboard}/                 程序文件自身
-/opt/macwave_config/{config.json,VERSION.json}          系统级安装的配置（优先）
-~/.config/macwave_config/{config.json,VERSION.json}     用户级安装的配置
+/etc/linuxwave_config/{config.json,VERSION.json}          系统级安装的配置（优先）
+~/.config/linuxwave_config/{config.json,VERSION.json}     用户级安装的配置
 ```
 
 ## 四、数据源（`infosource` 分支）
@@ -125,18 +125,18 @@ deps: "gettext@0.21.0"
 
 ## 五、数据源（`configdata` 分支的 `updatedata/`）
 
-当某个版本**改动了目录结构**（例如 2.5 把用户级安装的配置从 `/opt/macwave_config` 挪到 `~/.config/macwave_config`）时，`install.sh` 与 `selfupdate.sh` 会在下载程序文件之前执行一段**数据驱动**的迁移：
+当某个版本**改动了目录结构**（例如 2.5 把用户级安装的配置从 `/etc/linuxwave_config` 挪到 `~/.config/linuxwave_config`）时，`install.sh` 与 `selfupdate.sh` 会在下载程序文件之前执行一段**数据驱动**的迁移：
 
 ```
 updatedata/{版本号}/dir_structure_change   只有一个字符：Y/y = 目录结构变了，N/n = 没变
 updatedata/{版本号}/transfer_commands      Y/y 时执行这个脚本（bash -c "$(curl …)"）
 ```
 
-- `{版本号}`：`install.sh` 用脚本里写死的 `MACWAVE_VERSION`（正在安装的版本）；`selfupdate.sh` 用 `latest_version` 里的目标版本
+- `{版本号}`：`install.sh` 用脚本里写死的 `LINUXWAVE_VERSION`（正在安装的版本）；`selfupdate.sh` 用 `latest_version` 里的目标版本
 - 标记文件拉不到（不存在/网络失败）→ 按「没变」处理，静默跳过；标记为 Y/y 但**迁移脚本拉不到** → 报错退出（避免留下半迁移状态）
-- 执行迁移脚本前会 `export MACWAVE_INSTALL_DIR`（安装目录）/ `MACWAVE_CONFIG_DIR`（配置目录）/ `MACWAVE_TARGET_VERSION`，脚本据此**自己判断要不要搬**（例如只对用户级安装迁移）
+- 执行迁移脚本前会 `export LINUXWAVE_INSTALL_DIR`（安装目录）/ `LINUXWAVE_CONFIG_DIR`（配置目录）/ `LINUXWAVE_TARGET_VERSION`，脚本据此**自己判断要不要搬**（例如只对用户级安装迁移）
 - **迁移会搬走配置目录，所以迁移后必须重新解析**：`selfupdate.sh` 会再解析一次（否则 `VERSION.json` 会被写回旧位置）；`selfupdate.py` 的升级后复核也用 `version_file()` 每次重新解析（否则会误报「更新没有完成」）。`configpaths.py` 的模块级常量只在**进程启动时**解析一次，跨迁移的复核不能用它
-- ⚠️ **从 2.5 之前的版本升级必须用 `install.sh`**：2.5 之前发布的 `selfupdate.py` 把 `VERSION_FILE` 写死在 `/opt/macwave_config/VERSION.json`，配置被搬走后升级完的复核会读不到、**误报失败**（其实升级成功了）。2.5 及以后没有这个问题，可以正常用 `wave selfupdate`
+- ⚠️ **从 2.5 之前的版本升级必须用 `install.sh`**：2.5 之前发布的 `selfupdate.py` 把 `VERSION_FILE` 写死在 `/etc/linuxwave_config/VERSION.json`，配置被搬走后升级完的复核会读不到、**误报失败**（其实升级成功了）。2.5 及以后没有这个问题，可以正常用 `wave selfupdate`
 - 以后目录结构再变，只需在 configdata 加 `updatedata/{新版本}/` 这两个文件，**不用改任何代码**
 
 ## 六、关键机制

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# MacWave 🌊 Self Updater
-# Re-downloads every MacWave code file and refreshes VERSION.json in the
-# active config dir (/opt/macwave_config or ~/.config/macwave_config).
+# LinuxWave 🌊 Self Updater
+# Re-downloads every LinuxWave code file and refreshes VERSION.json in the
+# active config dir (/etc/linuxwave_config or ~/.config/linuxwave_config).
 # Invoked by `wave selfupdate` through the update_command field in
 # configdata/versiondata/latest_version, or directly:
 #   bash lib/selfupdate.sh [branch]
@@ -22,15 +22,15 @@ RESET='\033[0m'
 # 目标仓库、分支与版本
 # ==========================================
 
-REPO="Sha0huaZhang/MacWave"
-BRANCH="${MACWAVE_UPDATE_BRANCH:-${1:-main}}"
+REPO="Sha0huaZhang/LinuxWave"
+BRANCH="${LINUXWAVE_UPDATE_BRANCH:-${1:-main}}"
 BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH"
 VERSION_DATA_URL="https://raw.githubusercontent.com/$REPO/configdata/versiondata/latest_version"
 
 # 配置目录：系统级优先，其次用户级（与 lib/configpaths.py 的规则一致）
 # 迁移可能把配置搬到用户级位置，所以做成函数，迁移之后要再解析一次。
-SYSTEM_CONFIG_DIR="/opt/macwave_config"
-USER_CONFIG_DIR="$HOME/.config/macwave_config"
+SYSTEM_CONFIG_DIR="/etc/linuxwave_config"
+USER_CONFIG_DIR="$HOME/.config/linuxwave_config"
 
 resolve_config_dir() {
     CONFIG_DIR=""
@@ -42,7 +42,7 @@ resolve_config_dir() {
     done
 
     if [[ -z "$CONFIG_DIR" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: MacWave is not installed (no config.json in $SYSTEM_CONFIG_DIR or $USER_CONFIG_DIR).${RESET}"
+        echo -e "${RED_BOLD}🌊 Error: LinuxWave is not installed (no config.json in $SYSTEM_CONFIG_DIR or $USER_CONFIG_DIR).${RESET}"
         echo -e "${RED_BOLD}🌊 Install it first with lib/install.sh.${RESET}"
         exit 1
     fi
@@ -116,7 +116,7 @@ fi
 # 确定目标版本
 # ==========================================
 
-VERSION="${MACWAVE_UPDATE_VERSION:-}"
+VERSION="${LINUXWAVE_UPDATE_VERSION:-}"
 
 if [[ -z "$VERSION" ]]; then
     VERSION=$(curl -fsSL --max-time 30 "$VERSION_DATA_URL" \
@@ -129,7 +129,7 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
-echo "🌊 Updating MacWave to $VERSION"
+echo "🌊 Updating LinuxWave to $VERSION"
 
 # ==========================================
 # 版本目录结构变更迁移（configdata/updatedata/{版本号}）
@@ -156,9 +156,9 @@ if [[ "$DIR_STRUCTURE_CHANGE" == "Y" || "$DIR_STRUCTURE_CHANGE" == "y" ]]; then
     fi
 
     # 把当前安装的位置与配置目录告诉迁移脚本，由它自己判断该不该搬
-    export MACWAVE_INSTALL_DIR="$BASE_DIR"
-    export MACWAVE_CONFIG_DIR="$CONFIG_DIR"
-    export MACWAVE_TARGET_VERSION="$VERSION"
+    export LINUXWAVE_INSTALL_DIR="$BASE_DIR"
+    export LINUXWAVE_CONFIG_DIR="$CONFIG_DIR"
+    export LINUXWAVE_TARGET_VERSION="$VERSION"
 
     if ! bash -c "$TRANSFER_COMMANDS"; then
         echo -e "${RED_BOLD}🌊 Error: The migration for $VERSION failed.${RESET}"

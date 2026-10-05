@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-MacWave pkgversionparser.py
+LinuxWave pkgversionparser.py
 负责所有软件包（Software Package）常规版本号的解析、比较和排序逻辑。
 支持 alpha/beta/rc 预发布版本，遇到无数字后缀自动补 0（例如 rc -> rc0）。
-特殊版本（procursus, macwaveteam 等）在本文件内处理。
+特殊版本（procursus, linuxwaveteam 等）在本文件内处理。
 """
 
 import re
@@ -14,7 +14,7 @@ from packaging.version import parse as parse_version, InvalidVersion
 def is_special_version(v: str) -> bool:
     """判断版本号是否包含特殊后缀标记"""
     v = str(v)
-    return bool(re.search(r'(procursus|macwaveteam|team|Xteam)', v, re.IGNORECASE))
+    return bool(re.search(r'(procursus|linuxwaveteam|team|Xteam)', v, re.IGNORECASE))
 
 
 def extract_special_info(v: str):
@@ -33,15 +33,15 @@ def extract_special_info(v: str):
         info["suffix_num"] = int(proc_match.group(2))
         return info
 
-    # 处理 macwaveteam 类型：1.0-macwaveteam2 或 1.0-Xteam2
-    macwave_match = re.search(r'(\d+\.\d+(?:\.\d+)?)[-_]?(?:macwaveteam|Xteam)(\d+)', v, re.IGNORECASE)
-    if macwave_match:
-        base = macwave_match.group(1)
+    # 处理 linuxwaveteam 类型：1.0-linuxwaveteam2 或 1.0-Xteam2
+    linuxwave_match = re.search(r'(\d+\.\d+(?:\.\d+)?)[-_]?(?:linuxwaveteam|Xteam)(\d+)', v, re.IGNORECASE)
+    if linuxwave_match:
+        base = linuxwave_match.group(1)
         if base.count('.') == 1:
             base += '.0'
         info["base"] = base
-        info["suffix_type"] = "macwaveteam"
-        info["suffix_num"] = int(macwave_match.group(2))
+        info["suffix_type"] = "linuxwaveteam"
+        info["suffix_num"] = int(linuxwave_match.group(2))
         return info
 
     # 兜底处理：匹配任意数字 + 数字后缀

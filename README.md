@@ -1,10 +1,10 @@
-## 🌊 MacWave
+## 🌊 LinuxWave
 
 A package manager for macOS software developers.
 
 ## 🌊 Official Website
 
-[macwave.org](https://macwave.org)
+[linuxwave.macwave.org](https://linuxwave.macwave.org)
 
 ## 🌊 Supported macOS Version
 macOS Sonoma14 and above
@@ -12,11 +12,11 @@ macOS Sonoma14 and above
 
 2.5, Release on 2026-10-05
 
-## 🌊 What is MacWave?
+## 🌊 What is LinuxWave?
 
-MacWave is a **package manager** that runs on **macOS/Linux**, designed to host common software packages for macOS software developers.
+LinuxWave is a **package manager** that runs on **macOS/Linux**, designed to host common software packages for macOS software developers.
 
-## 🌊 Why MacWave
+## 🌊 Why LinuxWave
 
 1. **One command, install common packages.** No more scattered download links.
 2. **Versioned storage.** Every binary is stored as `package@version`, so multiple versions can coexist without conflicting with system tools.
@@ -28,12 +28,12 @@ MacWave is a **package manager** that runs on **macOS/Linux**, designed to host 
 8. **Lightweight and transparent.** Pure Python + Shell. No heavy runtime, no hidden behavior.
 9. **Automatically manage dependencies.** Support for software packages with dependencies, using reference counting and automatic dependency management, with no need to handle dependencies manually.
 
-## 🌊 Install MacWave
+## 🌊 Install LinuxWave
 
 In the terminal, run:
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/HEAD/lib/install.sh)" && source ~/.zshrc
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)" && source ~/.zshrc
 ```
 
 (If you are using bash instead of zsh, run ```source ~/.bashrc```)
@@ -43,22 +43,22 @@ In the terminal, run:
 ## 🌊 Download Directory 
 Installed binaries are stored in (options):    
 ```
-1. ~/.local/macwave
-2. /opt/macwave
-3. /usr/local/macwave (Only Intel Mac)
+1. ~/.local/linuxwave
+2. /opt/linuxwave
+3. /usr/local/linuxwave (Only Intel Mac)
 4. Custom
 ```
 Config file is stored in (a system-level install always takes priority):
 ```
-1. /opt/macwave_config          system-level install (needs sudo)
-2. ~/.config/macwave_config     user-level install (no sudo)
+1. /etc/linuxwave_config          system-level install (needs sudo)
+2. ~/.config/linuxwave_config     user-level install (no sudo)
 ```
-## Uninstall MacWave
+## Uninstall LinuxWave
 
-To completely remove MacWave from your system, run the following command in your terminal:
+To completely remove LinuxWave from your system, run the following command in your terminal:
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/HEAD/lib/uninstall.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/uninstall.sh)"
 ```
 
 ## 🌊 Run Packages
@@ -84,7 +84,7 @@ Commands:
   list        List installed packages
   search      Search for a package in the index
   info        Display detailed information about a package
-  selfupdate  Update MacWave itself
+  selfupdate  Update LinuxWave itself
   link        Link installed packages without a version number
   unlink      Remove those unversioned links
   linkquery   Show which version an unversioned link points to

@@ -24,12 +24,12 @@ if [[ ! -f "$WAVE_BIN" ]]; then
 fi
 
 # 配置目录：系统级优先，其次用户级
-if [[ -f /opt/macwave_config/config.json ]]; then
-    CONFIG_DIR="/opt/macwave_config"
-elif [[ -f "$HOME/.config/macwave_config/config.json" ]]; then
-    CONFIG_DIR="$HOME/.config/macwave_config"
+if [[ -f /etc/linuxwave_config/config.json ]]; then
+    CONFIG_DIR="/etc/linuxwave_config"
+elif [[ -f "$HOME/.config/linuxwave_config/config.json" ]]; then
+    CONFIG_DIR="$HOME/.config/linuxwave_config"
 else
-    echo -e "${RED_BOLD}🌊 Error: MacWave not installed (config not found).${RESET}"
+    echo -e "${RED_BOLD}🌊 Error: LinuxWave not installed (config not found).${RESET}"
     exit 1
 fi
 
@@ -37,7 +37,7 @@ CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
 
 if [[ ! -f "$VERSION_FILE" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: MacWave not installed (VERSION.json not found).${RESET}"
+    echo -e "${RED_BOLD}🌊 Error: LinuxWave not installed (VERSION.json not found).${RESET}"
     exit 1
 fi
 
@@ -161,7 +161,7 @@ import re
 import subprocess
 import sys
 
-url = "https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata/versiondata/latest_version"
+url = "https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/configdata/versiondata/latest_version"
 result = subprocess.run(['curl', '-fsSL', '--max-time', '60', url], capture_output=True, text=True)
 if result.returncode != 0:
     print(f'🌊 Error: cannot fetch the version data ({result.returncode})')
@@ -199,7 +199,7 @@ echo "========== every listed file landed =========="
 
 BASE_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['base_dir'])")
 
-FILES_INFO_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata/versiondata/files_info"
+FILES_INFO_URL="https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/configdata/versiondata/files_info"
 FILES_INFO_TMP="$(mktemp)"
 PARSER_TMP="$(mktemp)"
 

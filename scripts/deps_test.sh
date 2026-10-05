@@ -22,12 +22,12 @@ if [[ ! -f "$WAVE_BIN" ]]; then
 fi
 
 # 配置目录：系统级优先，其次用户级
-if [[ -f /opt/macwave_config/config.json ]]; then
-    CONFIG_FILE="/opt/macwave_config/config.json"
-elif [[ -f "$HOME/.config/macwave_config/config.json" ]]; then
-    CONFIG_FILE="$HOME/.config/macwave_config/config.json"
+if [[ -f /etc/linuxwave_config/config.json ]]; then
+    CONFIG_FILE="/etc/linuxwave_config/config.json"
+elif [[ -f "$HOME/.config/linuxwave_config/config.json" ]]; then
+    CONFIG_FILE="$HOME/.config/linuxwave_config/config.json"
 else
-    echo -e "${RED_BOLD}🌊 Error: MacWave not installed (config not found).${RESET}"
+    echo -e "${RED_BOLD}🌊 Error: LinuxWave not installed (config not found).${RESET}"
     exit 1
 fi
 

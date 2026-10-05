@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# MacWave 🌊 Official Installer
+# LinuxWave 🌊 Official Installer
 # This script downloads wave.py, installs dependencies, and configures PATH.
-# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/MacWave/main/lib/install.sh)"
+# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/main/lib/install.sh)"
 
 set -e
 
 BRANCH="main"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-MACWAVE_VERSION="2.5"
+LINUXWAVE_VERSION="2.5"
 
-BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/$BRANCH"
+BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/$BRANCH"
 
 # ==========================================
 # 颜色定义
@@ -88,7 +88,7 @@ validate_custom_dir() {
 # 显示欢迎信息
 # ==========================================
 
-echo "🌊 Welcome to MacWave $MACWAVE_VERSION!"
+echo "🌊 Welcome to LinuxWave $LINUXWAVE_VERSION!"
 echo ""
 
 # ==========================================
@@ -103,10 +103,10 @@ echo "🌊 Detected architecture: $ARCH"
 # ==========================================
 
 if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
-    echo -e "${YELLOW}Where do you want to install MacWave? (Enter the number)${RESET}"
-    echo "1. ~/.local/macwave"
-    echo "2. /opt/macwave"
-    echo "3. /usr/local/macwave"
+    echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
+    echo "1. ~/.local/linuxwave"
+    echo "2. /opt/linuxwave"
+    echo "3. /usr/local/linuxwave"
     echo "4. other (enter custom directory)"
     echo ""
     echo -e "${YELLOW}Enter your choice:${RESET}"
@@ -115,13 +115,13 @@ if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
 
     case "$choice" in
         1)
-            BASE_DIR="$HOME/.local/macwave"
+            BASE_DIR="$HOME/.local/linuxwave"
             ;;
         2)
-            BASE_DIR="/opt/macwave"
+            BASE_DIR="/opt/linuxwave"
             ;;
         3)
-            BASE_DIR="/usr/local/macwave"
+            BASE_DIR="/usr/local/linuxwave"
             ;;
         4)
             echo -e "${YELLOW}Please enter the installation directory:${RESET}"
@@ -130,14 +130,14 @@ if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
             BASE_DIR="$validated"
             ;;
         *)
-            echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/macwave${RESET}"
-            BASE_DIR="$HOME/.local/macwave"
+            echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
+            BASE_DIR="$HOME/.local/linuxwave"
             ;;
     esac
 else
-    echo -e "${YELLOW}Where do you want to install MacWave? (Enter the number)${RESET}"
-    echo "1. ~/.local/macwave"
-    echo "2. /opt/macwave"
+    echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
+    echo "1. ~/.local/linuxwave"
+    echo "2. /opt/linuxwave"
     echo "3. other (enter custom directory)"
     echo ""
     echo -e "${YELLOW}Enter your choice:${RESET}"
@@ -146,10 +146,10 @@ else
 
     case "$choice" in
         1)
-            BASE_DIR="$HOME/.local/macwave"
+            BASE_DIR="$HOME/.local/linuxwave"
             ;;
         2)
-            BASE_DIR="/opt/macwave"
+            BASE_DIR="/opt/linuxwave"
             ;;
         3)
             echo -e "${YELLOW}Please enter the installation directory:${RESET}"
@@ -158,8 +158,8 @@ else
             BASE_DIR="$validated"
             ;;
         *)
-            echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/macwave${RESET}"
-            BASE_DIR="$HOME/.local/macwave"
+            echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
+            BASE_DIR="$HOME/.local/linuxwave"
             ;;
     esac
 fi
@@ -212,7 +212,7 @@ fi
 # 这一步刻意放在「建目录 / 写配置 / 清旧版」之前：连不上 configdata 就直接退出，
 # 不会留下一个配置已写好、文件却一个都没下的半成品安装。
 
-CONFIGDATA_URL="https://raw.githubusercontent.com/Sha0huaZhang/MacWave/configdata"
+CONFIGDATA_URL="https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/configdata"
 FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
 FILES_INFO_TMP="$(mktemp)"
 FILES_INFO_ATTEMPTS=3
@@ -253,13 +253,13 @@ LIB_DIR="$BASE_DIR/lib"
 DEPS_DIR="$BASE_DIR/deps"
 DOWNLOAD_DIR="$BASE_DIR/downloads/tmp"
 
-# 配置文件目录：装到系统目录（需要 sudo）时用 /opt/macwave_config，
-# 装到用户目录（无需 sudo）时用 ~/.config/macwave_config。
-# 读取时系统级优先，所以系统级 MacWave 总是盖过用户级的。
+# 配置文件目录：装到系统目录（需要 sudo）时用 /etc/linuxwave_config，
+# 装到用户目录（无需 sudo）时用 ~/.config/linuxwave_config。
+# 读取时系统级优先，所以系统级 LinuxWave 总是盖过用户级的。
 if [[ "$NEED_SUDO" == "true" ]]; then
-    CONFIG_DIR="/opt/macwave_config"
+    CONFIG_DIR="/etc/linuxwave_config"
 else
-    CONFIG_DIR="$HOME/.config/macwave_config"
+    CONFIG_DIR="$HOME/.config/linuxwave_config"
 fi
 CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
@@ -281,31 +281,31 @@ run_cmd chmod 755 "$CONFIG_DIR"
 # configdata 的 updatedata/{版本号}/dir_structure_change 只有**一个字符**：
 #     Y/y → 该版本改变了目录结构，执行同目录下的 transfer_commands 完成迁移
 #     N/n → 没有改变，跳过（文件不存在也按「没有改变」处理）
-# 目标版本号就是本脚本的 MACWAVE_VERSION（正在安装的这个版本）。
+# 目标版本号就是本脚本的 LINUXWAVE_VERSION（正在安装的这个版本）。
 # 迁移逻辑全部由 configdata 里的脚本提供，以后目录结构再变只改 configdata，
 # 不用再动这个脚本。
 
-UPDATEDATA_URL="$CONFIGDATA_URL/updatedata/$MACWAVE_VERSION"
+UPDATEDATA_URL="$CONFIGDATA_URL/updatedata/$LINUXWAVE_VERSION"
 
 DIR_STRUCTURE_CHANGE="$(curl -fsSL --max-time 30 "$UPDATEDATA_URL/dir_structure_change" 2>/dev/null | tr -d '[:space:]')" || DIR_STRUCTURE_CHANGE=""
 
 if [[ "$DIR_STRUCTURE_CHANGE" == "Y" || "$DIR_STRUCTURE_CHANGE" == "y" ]]; then
-    echo -e "${YELLOW}🌊 Directory structure changed in $MACWAVE_VERSION, running migration...${RESET}"
+    echo -e "${YELLOW}🌊 Directory structure changed in $LINUXWAVE_VERSION, running migration...${RESET}"
 
     TRANSFER_COMMANDS="$(curl -fsSL --max-time 60 "$UPDATEDATA_URL/transfer_commands" 2>/dev/null)" || TRANSFER_COMMANDS=""
     if [[ -z "$TRANSFER_COMMANDS" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Cannot fetch the migration script for $MACWAVE_VERSION.${RESET}"
+        echo -e "${RED_BOLD}🌊 Error: Cannot fetch the migration script for $LINUXWAVE_VERSION.${RESET}"
         echo -e "${RED_BOLD}🌊 Nothing was installed. Check your network, then run the installer again.${RESET}"
         exit 1
     fi
 
     # 把本次安装的位置与配置目录告诉迁移脚本，由它自己判断该不该搬
-    export MACWAVE_INSTALL_DIR="$BASE_DIR"
-    export MACWAVE_CONFIG_DIR="$CONFIG_DIR"
-    export MACWAVE_TARGET_VERSION="$MACWAVE_VERSION"
+    export LINUXWAVE_INSTALL_DIR="$BASE_DIR"
+    export LINUXWAVE_CONFIG_DIR="$CONFIG_DIR"
+    export LINUXWAVE_TARGET_VERSION="$LINUXWAVE_VERSION"
 
     if ! bash -c "$TRANSFER_COMMANDS"; then
-        echo -e "${RED_BOLD}🌊 Error: The migration for $MACWAVE_VERSION failed.${RESET}"
+        echo -e "${RED_BOLD}🌊 Error: The migration for $LINUXWAVE_VERSION failed.${RESET}"
         echo -e "${RED_BOLD}🌊 Nothing was installed. Fix the issue above, then run the installer again.${RESET}"
         exit 1
     fi
@@ -325,10 +325,10 @@ EOF
 
 run_cmd tee "$VERSION_FILE" > /dev/null << EOF
 {
-  "version": "$MACWAVE_VERSION",
+  "version": "$LINUXWAVE_VERSION",
   "components": {
-    "installer": "$MACWAVE_VERSION",
-    "parser": "$MACWAVE_VERSION"
+    "installer": "$LINUXWAVE_VERSION",
+    "parser": "$LINUXWAVE_VERSION"
   }
 }
 EOF
@@ -523,18 +523,18 @@ fi
 PATH_LINE="export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\""
 
 if grep -qF "$PATH_LINE" "$RC_FILE" 2>/dev/null; then
-    echo "🌊 MacWave is already in your PATH."
+    echo "🌊 LinuxWave is already in your PATH."
 else
     if grep -qF "$INSTALL_DIR" "$RC_FILE" 2>/dev/null; then
         # 旧版本（如 2.1.0）的 PATH 行只有 bin/ 与 lib/，升级后需要换成含 links/ 的新行
-        echo "🌊 Replacing old MacWave PATH entry in $RC_FILE..."
-        grep -v -F "export PATH=\"$INSTALL_DIR" "$RC_FILE" > "$RC_FILE.macwave.tmp" || true
-        cat "$RC_FILE.macwave.tmp" > "$RC_FILE"
-        rm -f "$RC_FILE.macwave.tmp"
+        echo "🌊 Replacing old LinuxWave PATH entry in $RC_FILE..."
+        grep -v -F "export PATH=\"$INSTALL_DIR" "$RC_FILE" > "$RC_FILE.linuxwave.tmp" || true
+        cat "$RC_FILE.linuxwave.tmp" > "$RC_FILE"
+        rm -f "$RC_FILE.linuxwave.tmp"
     else
-        echo "🌊 Adding MacWave to PATH in $RC_FILE..."
+        echo "🌊 Adding LinuxWave to PATH in $RC_FILE..."
         echo "" >> "$RC_FILE"
-        echo "# MacWave" >> "$RC_FILE"
+        echo "# LinuxWave" >> "$RC_FILE"
     fi
 
     echo "$PATH_LINE" >> "$RC_FILE"
@@ -546,7 +546,7 @@ fi
 
 echo ""
 echo "🌊 Installation complete!"
-echo "🌊 MacWave installed to: $DISPLAY_DIR"
+echo "🌊 LinuxWave installed to: $DISPLAY_DIR"
 echo "🌊 Architecture: $ARCH"
 echo ""
 RC_DISPLAY=$(home_to_tilde "$RC_FILE")
@@ -560,7 +560,7 @@ echo ""
 # ==========================================
 
 echo ""
-echo -e "${YELLOW}Please read the agreement before use (see bottom of https://macwave.org).${RESET}"
+echo -e "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.macwave.org).${RESET}"
 echo -e "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}"
 read -r agreement < /dev/tty
 if [[ -z "$agreement" || "$agreement" =~ ^[Yy]$ ]]; then
