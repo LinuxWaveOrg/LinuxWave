@@ -45,14 +45,18 @@ Installed binaries are stored in (options):
 ```
 1. ~/.local/linuxwave
 2. /opt/linuxwave
-3. /usr/local/linuxwave (x86_64 only)
-4. Custom
+3. /usr/local/linuxwave
+4. /home/linuxwave/.linuxwave (shared, all users)
+5. Custom
 ```
 Config file is stored in (a system-level install always takes priority):
 ```
 1. /etc/linuxwave_config          system-level install (needs sudo)
 2. ~/.config/linuxwave_config     user-level install (no sudo)
 ```
+A shared install (option 4) always uses `/etc/linuxwave_config`, so every user
+on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
+`sudo` once; the `linuxwave` account is created automatically if missing.
 ## Uninstall LinuxWave
 
 To completely remove LinuxWave from your system, run the following command in your terminal:

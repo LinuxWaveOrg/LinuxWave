@@ -57,9 +57,12 @@ mike@mike-Inspiron-16-Plus-7640:~$ /bin/bash -c "$(curl -fsSL https://raw.github
 
 | 提示 | 输入 |
 | --- | --- |
-| `Where do you want to install LinuxWave? (Enter the number)` | `4`（other） |
-| `Please enter the installation directory:` | `/home/linuxwave/.linuxwave` |
+| `Where do you want to install LinuxWave? (Enter the number)` | `4`（shared, all users） |
 | `Have you read and agreed to the agreement? [Y/n]` | `Y`（或直接回车） |
+
+选 `4` 即共享安装，安装器会直接使用 `/home/linuxwave/.linuxwave` 并打印前置准备清单，**无需**再手工输入该路径。
+
+> 选项 `4` 在 **2.5** 及更早版本上是「自定义目录」。若你用的是旧安装器，请选 `4` 并手工输入 `/home/linuxwave/.linuxwave`。
 
 > 回答 `n` 时脚本会执行 `rm -rf "$BASE_DIR"`，把目标目录整个删掉。
 

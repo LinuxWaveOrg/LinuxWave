@@ -4,7 +4,6 @@
 
 SYSTEM_CONFIG_DIR="/etc/linuxwave_config"
 USER_CONFIG_DIR="$HOME/.config/linuxwave_config"
-ARCH=$(uname -m)
 
 # 共享安装（install.sh 的 x86_64 选项 4 / arm64 选项 3）
 SHARED_USER="linuxwave"
@@ -32,10 +31,7 @@ done
 if [ ${#BASE_DIRS[@]} -eq 0 ]; then
     BASE_DIRS+=("$HOME/.local/linuxwave")
     BASE_DIRS+=("/opt/linuxwave")
-    # 仅在 x86_64 上提供 /usr/local/linuxwave（与 install.sh 的可选目录一致）
-    if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
-        BASE_DIRS+=("/usr/local/linuxwave")
-    fi
+    BASE_DIRS+=("/usr/local/linuxwave")
     BASE_DIRS+=("$SHARED_BASE_DIR")
 fi
 

@@ -138,77 +138,45 @@ SHARED_CONFIG_DIR="/etc/linuxwave_config"
 # 交互式目录选择
 # ==========================================
 
-if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
-    echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
-    echo "1. ~/.local/linuxwave"
-    echo "2. /opt/linuxwave"
-    echo "3. /usr/local/linuxwave"
-    echo "4. $SHARED_BASE_DIR (shared, all users)"
-    echo "5. other (enter custom directory)"
-    echo ""
-    echo -e "${YELLOW}Enter your choice:${RESET}"
+# 目录菜单对 x86_64 与 arm64 完全一致。
+# MacWave 曾把 /usr/local 限制为 Intel Mac（Apple 芯片上不建议写入 /usr/local），
+# Linux 没有这个限制，因此这里不做区分。
+echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
+echo "1. ~/.local/linuxwave"
+echo "2. /opt/linuxwave"
+echo "3. /usr/local/linuxwave"
+echo "4. $SHARED_BASE_DIR (shared, all users)"
+echo "5. other (enter custom directory)"
+echo ""
+echo -e "${YELLOW}Enter your choice:${RESET}"
 
-    read -r choice < /dev/tty
+read -r choice < /dev/tty
 
-    case "$choice" in
-        1)
-            BASE_DIR="$HOME/.local/linuxwave"
-            ;;
-        2)
-            BASE_DIR="/opt/linuxwave"
-            ;;
-        3)
-            BASE_DIR="/usr/local/linuxwave"
-            ;;
-        4)
-            SHARED_INSTALL=true
-            BASE_DIR="$SHARED_BASE_DIR"
-            ;;
-        5)
-            echo -e "${YELLOW}Please enter the installation directory:${RESET}"
-            read -r custom_dir < /dev/tty
-            validated=$(validate_custom_dir "$custom_dir") || exit 1
-            BASE_DIR="$validated"
-            ;;
-        *)
-            echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
-            BASE_DIR="$HOME/.local/linuxwave"
-            ;;
-    esac
-else
-    echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
-    echo "1. ~/.local/linuxwave"
-    echo "2. /opt/linuxwave"
-    echo "3. $SHARED_BASE_DIR (shared, all users)"
-    echo "4. other (enter custom directory)"
-    echo ""
-    echo -e "${YELLOW}Enter your choice:${RESET}"
-
-    read -r choice < /dev/tty
-
-    case "$choice" in
-        1)
-            BASE_DIR="$HOME/.local/linuxwave"
-            ;;
-        2)
-            BASE_DIR="/opt/linuxwave"
-            ;;
-        3)
-            SHARED_INSTALL=true
-            BASE_DIR="$SHARED_BASE_DIR"
-            ;;
-        4)
-            echo -e "${YELLOW}Please enter the installation directory:${RESET}"
-            read -r custom_dir < /dev/tty
-            validated=$(validate_custom_dir "$custom_dir") || exit 1
-            BASE_DIR="$validated"
-            ;;
-        *)
-            echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
-            BASE_DIR="$HOME/.local/linuxwave"
-            ;;
-    esac
-fi
+case "$choice" in
+    1)
+        BASE_DIR="$HOME/.local/linuxwave"
+        ;;
+    2)
+        BASE_DIR="/opt/linuxwave"
+        ;;
+    3)
+        BASE_DIR="/usr/local/linuxwave"
+        ;;
+    4)
+        SHARED_INSTALL=true
+        BASE_DIR="$SHARED_BASE_DIR"
+        ;;
+    5)
+        echo -e "${YELLOW}Please enter the installation directory:${RESET}"
+        read -r custom_dir < /dev/tty
+        validated=$(validate_custom_dir "$custom_dir") || exit 1
+        BASE_DIR="$validated"
+        ;;
+    *)
+        echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
+        BASE_DIR="$HOME/.local/linuxwave"
+        ;;
+esac
 
 DISPLAY_DIR=$(home_to_tilde "$BASE_DIR")
 
