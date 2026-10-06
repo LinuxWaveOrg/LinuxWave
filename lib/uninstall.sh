@@ -6,6 +6,12 @@ SYSTEM_CONFIG_DIR="/etc/linuxwave_config"
 USER_CONFIG_DIR="$HOME/.config/linuxwave_config"
 ARCH=$(uname -m)
 
+# 共享安装（install.sh 的 x86_64 选项 4 / arm64 选项 3）
+SHARED_USER="linuxwave"
+SHARED_HOME="/home/$SHARED_USER"
+SHARED_BASE_DIR="$SHARED_HOME/.linuxwave"
+SHARED_DETECTED=false
+
 # 默认尝试删除的路径列表
 BASE_DIRS=()
 
@@ -15,6 +21,9 @@ for CONFIG_DIR in "$SYSTEM_CONFIG_DIR" "$USER_CONFIG_DIR"; do
         READ_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_DIR/config.json')).get('base_dir', ''))" 2>/dev/null)
         if [ -n "$READ_DIR" ]; then
             BASE_DIRS+=("$READ_DIR")
+            if [ "$READ_DIR" = "$SHARED_BASE_DIR" ]; then
+                SHARED_DETECTED=true
+            fi
         fi
     fi
 done
@@ -27,6 +36,7 @@ if [ ${#BASE_DIRS[@]} -eq 0 ]; then
     if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
         BASE_DIRS+=("/usr/local/linuxwave")
     fi
+    BASE_DIRS+=("$SHARED_BASE_DIR")
 fi
 
 echo -e "\033[1;31mYou are deleting LinuxWave, are you sure? [Y/n]\033[0m"
@@ -90,6 +100,50 @@ PYEOF
         echo "🌊 Removed LinuxWave PATH entries from $RC_FILE"
     fi
 done
+
+# 共享安装：$SHARED_USER 的 rc 里也写入了 PATH
+if [[ "$SHARED_DETECTED" == "true" ]] && sudo test -f "$SHARED_HOME/.bashrc"; then
+    python3 - "$SHARED_HOME/.bashrc" << 'PYEOF'
+import sys
+from pathlib import Path
+
+rc_file = Path(sys.argv[1])
+kept = []
+skip_next = False
+for line in rc_file.read_text().splitlines():
+    if line.strip() == "# LinuxWave":
+        skip_next = True
+        continue
+    if skip_next and line.startswith("export PATH="):
+        skip_next = False
+        continue
+    skip_next = False
+    kept.append(line)
+rc_file.write_text("\n".join(kept) + ("\n" if kept else ""))
+PYEOF
+    echo "🌊 Removed LinuxWave PATH entries from $SHARED_HOME/.bashrc"
+fi
+
+# ========== 共享安装：删除专用用户（会连带删除家目录，须确认） ==========
+if [[ "$SHARED_DETECTED" == "true" ]] && id "$SHARED_USER" > /dev/null 2>&1; then
+    echo ""
+    echo -e "\033[1;31m🌊 Warning: this was a shared install.${RESET}"
+    echo "🌊 Removing the '$SHARED_USER' account also deletes its home directory"
+    echo "🌊 ($SHARED_HOME) and everything else stored in it, not just LinuxWave."
+    echo "🌊 It is a dedicated account created for LinuxWave, so this is normally safe."
+    echo ""
+    echo -e "\033[1;31mAlso remove the '$SHARED_USER' user? [y/N]${RESET}"
+    read -n 1 -r < /dev/tty
+    echo
+    if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+        echo "🌊 Removing user '$SHARED_USER' (with sudo)..."
+        sudo userdel -r "$SHARED_USER"
+        echo "🌊 User '$SHARED_USER' removed."
+    else
+        echo "🌊 Kept the '$SHARED_USER' user. Remove it later with:"
+        echo "     sudo userdel -r $SHARED_USER"
+    fi
+fi
 
 echo ""
 echo "🌊 LinuxWave has been uninstalled."
