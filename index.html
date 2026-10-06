@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>LinuxWave</title>
     <style>
+        :root {
+            /* Monospace stack for anything code-related: paths, commands, package
+               names, placeholders. Linux families come first because that is the
+               audience, and because fontconfig can resolve an unknown macOS name
+               to a proportional font instead of falling through. */
+            --lw-mono: 'DejaVu Sans Mono', 'Liberation Mono', 'Noto Sans Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Courier New', monospace;
+        }
+
         body {
             background-color: #0a1b3f;
             color: #ffffff;
@@ -107,7 +115,7 @@
             padding: 20px;
             overflow-x: auto;
             color: #d4d4d4;
-            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-family: var(--lw-mono);
             border: 1px solid #3a4a6a;
             font-size: 0.9rem;
             white-space: pre-wrap;
@@ -116,6 +124,15 @@
             text-align: left;
             margin: 0;
             padding-right: 20px;
+        }
+
+        /* Inline code: same stack as the blocks, so a path rendered inline and the
+           same path inside a block match instead of picking two different faces. */
+        code {
+            font-family: var(--lw-mono);
+            background-color: #0f1a30;
+            padding: 2px 6px;
+            border-radius: 4px;
         }
 
         /* 有复制按钮的pre，添加右侧padding */
@@ -527,26 +544,26 @@
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">为什么选择 LinuxWave</h2>
         <ul style="font-size: 1.1rem; line-height: 1.8; opacity: 0.9; padding-left: 1.2em;" data-lang="en">
             <li><strong>One command, install common packages.</strong> No more scattered download links.</li>
-            <li><strong>Versioned storage.</strong> Every binary is stored as <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">package@version</code>, so multiple versions can coexist without conflicting with system tools.</li>
-            <li><strong>Optional unversioned links.</strong> <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">wave link &lt;package&gt;</code> adds a plain shortcut pointing at the highest installed version, and re-points itself whenever you install or remove versions.</li>
+            <li><strong>Versioned storage.</strong> Every binary is stored as <code>package@version</code>, so multiple versions can coexist without conflicting with system tools.</li>
+            <li><strong>Optional unversioned links.</strong> <code>wave link &lt;package&gt;</code> adds a plain shortcut pointing at the highest installed version, and re-points itself whenever you install or remove versions.</li>
             <li><strong>Fully isolated. Upgrade-proof.</strong> LinuxWave operates entirely within its own dedicated directories and never overwrites or links against distribution libraries - the dependency libraries it does ship are relocated into its own tree. Even across major distribution upgrades, your LinuxWave environment remains completely intact and functional.</li>
-            <li><strong>No cache, always up to date.</strong> Package metadata is fetched live from the infosource branch.</li>
-            <li><strong>10 archive formats, CI-verified.</strong> Supports no-extension binaries, <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.zip</code>, <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.gz</code>, <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.bz2</code>, <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.xz</code>, <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar</code>, <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.gz</code>,<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.xz</code>, <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.bz2</code>, <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.conda</code>.</li>
-            <li><strong>Verify first, extract later.</strong> SHA256 is checked before extraction.</li>
-            <li><strong>Resumable downloads.</strong> Interrupted? Resume with <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">-C</code>.</li>
+            <li><strong>No cache, always up to date.</strong> Package metadata is fetched live from the <code>infosource</code> branch.</li>
+            <li><strong>10 archive formats, CI-verified.</strong> Supports no-extension binaries, <code>.zip</code>, <code>.tar.gz</code>, <code>.tar.bz2</code>, <code>.tar.xz</code>, <code>.tar</code>, <code>.gz</code>,<code>.xz</code>, <code>.bz2</code>, <code>.conda</code>.</li>
+            <li><strong>Verify first, extract later.</strong> <code>SHA256</code> is checked before extraction.</li>
+            <li><strong>Resumable downloads.</strong> Interrupted? Resume with <code>-C</code>.</li>
             <li><strong>Lightweight and transparent.</strong> Pure Python + Shell. No heavy runtime, no hidden behavior.</li>
             <li><strong>Automatically manage dependencies.</strong> Support for software packages with dependencies, using reference counting and automatic dependency management, with no need to handle dependencies manually.</li>
 
         </ul>
         <ul style="font-size: 1.1rem; line-height: 1.8; opacity: 0.9; padding-left: 1.2em;" data-lang="zh">
             <li><strong>一条命令，安装常用软件包。</strong> 不再需要到处寻找下载链接。</li>
-            <li><strong>版本化存储。</strong> 每个二进制文件都以 <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">package@version</code> 形式存储，因此多个版本可以共存，且不会与系统工具冲突。</li>
-            <li><strong>可选的无版本号链接。</strong> <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">wave link &lt;包名&gt;</code> 会建立一个指向最高已安装版本的普通快捷方式，并在安装或卸载版本时自动改指。</li>
+            <li><strong>版本化存储。</strong> 每个二进制文件都以 <code>package@version</code> 形式存储，因此多个版本可以共存，且不会与系统工具冲突。</li>
+            <li><strong>可选的无版本号链接。</strong> <code>wave link &lt;包名&gt;</code> 会建立一个指向最高已安装版本的普通快捷方式，并在安装或卸载版本时自动改指。</li>
             <li><strong>完全隔离，无惧升级。</strong> LinuxWave 完全在自己的专用目录中运行，绝不覆盖或链接发行版自带的库——它附带的依赖库会被重定位到自己的目录树内。即使跨越大版本发行版升级，你的 LinuxWave 环境依然完整可用。</li>
-            <li><strong>无缓存，始终最新。</strong> 软件包元数据实时从 infosource 分支获取。</li>
-            <li><strong>支持 10 种归档格式，经 CI 验证。</strong> 支持无扩展名二进制文件、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.zip</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.gz</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.bz2</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.xz</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.gz</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.xz</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.bz2</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.conda</code>。</li>
-            <li><strong>先校验，后解压。</strong> 解压前先校验 SHA256。</li>
-            <li><strong>支持断点续传。</strong> 下载中断了？用 <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">-C</code> 继续。</li>
+            <li><strong>无缓存，始终最新。</strong> 软件包元数据实时从 <code>infosource</code> 分支获取。</li>
+            <li><strong>支持 10 种归档格式，经 CI 验证。</strong> 支持无扩展名二进制文件、<code>.zip</code>、<code>.tar.gz</code>、<code>.tar.bz2</code>、<code>.tar.xz</code>、<code>.tar</code>、<code>.gz</code>、<code>.xz</code>、<code>.bz2</code>、<code>.conda</code>。</li>
+            <li><strong>先校验，后解压。</strong> 解压前先校验 <code>SHA256</code>。</li>
+            <li><strong>支持断点续传。</strong> 下载中断了？用 <code>-C</code> 继续。</li>
             <li><strong>轻量透明。</strong> 纯 Python + Shell，无重型运行时，无隐藏行为。</li>
             <li><strong>自动管理依赖。</strong> 支持带依赖的软件包，采用引用计数与自动依赖管理，无需手动处理依赖。</li>
 
@@ -580,17 +597,17 @@
             <pre><span class="code-dollar">$</span> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)" &amp;&amp; source ~/.zshrc</pre>
         </div>
         <p style="margin: 10px 0 0 0; font-size: 1rem; line-height: 1.5; color: #a0b0d0; font-style: italic;" data-lang="en">
-            (If you are using bash instead of zsh, run <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">source ~/.bashrc</code>)
+            (If you are using bash instead of zsh, run <code>source ~/.bashrc</code>)
         </p>
         <p style="margin: 10px 0 0 0; font-size: 1rem; line-height: 1.5; color: #a0b0d0; font-style: italic;" data-lang="zh">
-            （如果你使用的是 bash 而非 zsh，请运行 <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">source ~/.bashrc</code>）
+            （如果你使用的是 bash 而非 zsh，请运行 <code>source ~/.bashrc</code>）
         </p>
 
         <p class="env-requirements" data-lang="en">
-            Requirements: Linux (x86_64 / arm64), Python (3.14 and above), patchelf (for dependency library relocation).
+            Requirements: Linux (x86_64 / arm64), Python (3.14 and above), <code>patchelf</code> (for dependency library relocation).
         </p>
         <p class="env-requirements" data-lang="zh">
-            环境要求：Linux（x86_64 / arm64）、Python（3.14 及以上）、patchelf（用于依赖库重定位）。
+            环境要求：Linux（x86_64 / arm64）、Python（3.14 及以上）、<code>patchelf</code>（用于依赖库重定位）。
         </p>
 
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Uninstall LinuxWave</h2>
@@ -637,10 +654,10 @@
 2. ~/.config/linuxwave_config     user-level install (no sudo)</pre>
         </div>
         <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
-            A shared install (option 4) always uses <strong>/etc/linuxwave_config</strong>, so that every user on the machine resolves the same install. It needs <strong>patchelf</strong>, <strong>Python 3.14+</strong> and <strong>sudo</strong> once; the <strong>linuxwave</strong> account is created automatically if it does not exist.
+            A shared install (option 4) always uses <code>/etc/linuxwave_config</code>, so that every user on the machine resolves the same install. It needs <code>patchelf</code>, <code>Python 3.14+</code> and <code>sudo</code> once; the <code>linuxwave</code> account is created automatically if it does not exist.
         </p>
         <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
-            共享安装（选项 4）始终使用 <strong>/etc/linuxwave_config</strong>，以保证全机所有用户解析到同一个安装。需要 <strong>patchelf</strong>、<strong>Python 3.14+</strong>，以及一次性提供 <strong>sudo</strong>；若 <strong>linuxwave</strong> 账号不存在会自动创建。
+            共享安装（选项 4）始终使用 <code>/etc/linuxwave_config</code>，以保证全机所有用户解析到同一个安装。需要 <code>patchelf</code>、<code>Python 3.14+</code>，以及一次性提供 <code>sudo</code>；若 <code>linuxwave</code> 账号不存在会自动创建。
         </p>
 
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Run Packages</h2>
@@ -655,10 +672,10 @@
             <pre>{package_name}@{version}</pre>
         </div>
         <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
-            Use the versioned name <strong>{package_name}@{version}</strong>, or run <strong>wave link {package_name}</strong> once and then just type <strong>{package_name}</strong>.
+            Use the versioned name <code>{package_name}@{version}</code>, or run <code>wave link {package_name}</code> once and then just type <code>{package_name}</code>.
         </p>
         <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
-            使用带版本号的名称 <strong>{package_name}@{version}</strong>，或先运行一次 <strong>wave link {package_name}</strong>，之后直接输入 <strong>{package_name}</strong> 即可。
+            使用带版本号的名称 <code>{package_name}@{version}</code>，或先运行一次 <code>wave link {package_name}</code>，之后直接输入 <code>{package_name}</code> 即可。
         </p>
 
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Command Reference</h2>
