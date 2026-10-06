@@ -2,11 +2,11 @@
 
 # LinuxWave 🌊 Official Installer
 # This script downloads wave.py, installs dependencies, and configures PATH.
-# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/main/lib/install.sh)"
+# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)"
 
 set -e
 
-BRANCH="main"
+BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
 LINUXWAVE_VERSION="2.5"

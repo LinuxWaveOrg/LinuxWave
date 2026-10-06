@@ -5,7 +5,7 @@
 # active config dir (/etc/linuxwave_config or ~/.config/linuxwave_config).
 # Invoked by `wave selfupdate` through the update_command field in
 # configdata/versiondata/latest_version, or directly:
-#   bash lib/selfupdate.sh [branch]
+#   bash lib/selfupdate.sh [branch]        (defaults to HEAD)
 
 set -e
 
@@ -23,7 +23,7 @@ RESET='\033[0m'
 # ==========================================
 
 REPO="Sha0huaZhang/LinuxWave"
-BRANCH="${LINUXWAVE_UPDATE_BRANCH:-${1:-main}}"
+BRANCH="${LINUXWAVE_UPDATE_BRANCH:-${1:-HEAD}}"
 BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH"
 VERSION_DATA_URL="https://raw.githubusercontent.com/$REPO/configdata/versiondata/latest_version"
 
