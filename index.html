@@ -30,6 +30,8 @@
             gap: 0;
             margin-bottom: 25px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
         .logo-img {
@@ -300,6 +302,13 @@
             opacity: 0.8;
         }
 
+        /* 内容区限宽：小屏下不因长行（中文/内联代码）被撑宽 */
+        .content-section {
+            width: 100%;
+            box-sizing: border-box;
+            overflow-wrap: anywhere;
+        }
+
         /* 修改所有正文段落和标题的换行 */
         .content-section h2 {
             word-break: break-word;
@@ -327,7 +336,10 @@
             }
             .logo-img.logo-3 {
                 display: block !important;
-                height: 42px;
+                width: auto;
+                height: auto;
+                max-height: 42px;
+                max-width: 100%;
             }
             .logo-wrapper {
                 padding: 4px 18px !important;
@@ -351,6 +363,17 @@
 
             .tagline {
                 text-align: center !important;
+            }
+        }
+
+        /* ===== 平板/窄屏：logo 按可用宽度等比缩小，避免横向溢出 ===== */
+        @media (min-width: 691px) and (max-width: 800px) {
+            .logo-img.logo-1,
+            .logo-img.logo-2 {
+                width: auto;
+                height: auto;
+                max-height: 50px;
+                min-width: 0;
             }
         }
 
