@@ -9,7 +9,7 @@ set -e
 BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.5.1"
+LINUXWAVE_VERSION="2.5.2"
 
 BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/$BRANCH"
 
@@ -111,6 +111,93 @@ print_shared_install_notes() {
 }
 
 # ==========================================
+# 命令行参数（批量 / 脚本化安装）
+# ==========================================
+
+CLI_SILENT=false
+CLI_DIR_OPTION=""
+CLI_CUSTOM_DIR=""
+
+usage() {
+    cat <<'USAGE_EOF'
+LinuxWave installer
+
+Usage:
+  install.sh [options]
+
+Options:
+  -S, --silent            No interaction at all: the directory menu and the
+                          agreement are answered automatically. Without
+                          --dir-option the default (option 1) is used.
+                          Requires passwordless sudo when privilege is needed.
+      --dir-option=N      Pick menu entry N without prompting (1-5).
+      --dir-option=N=DIR  Pick entry N and, for the custom entry (5), use DIR
+                          as the installation directory.
+  -h, --help              Show this help.
+
+Directory menu:
+  1. ~/.local/linuxwave
+  2. /opt/linuxwave
+  3. /usr/local/linuxwave
+  4. /home/linuxwave/.linuxwave (shared, all users)
+  5. other (enter custom directory)
+
+Examples:
+  install.sh --silent --dir-option=4
+  install.sh -S --dir-option=1
+  install.sh --silent --dir-option=5=/opt/mylw
+USAGE_EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -S|--silent)
+            CLI_SILENT=true
+            ;;
+        --dir-option=*)
+            _value="${1#--dir-option=}"
+            if [[ "$_value" == *=* ]]; then
+                CLI_DIR_OPTION="${_value%%=*}"
+                CLI_CUSTOM_DIR="${_value#*=}"
+            else
+                CLI_DIR_OPTION="$_value"
+            fi
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED_BOLD}🌊 Error: unknown option '$1'. Try --help.${RESET}" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# 通过管道安装时，选项很容易被当成脚本名传进来：
+#   bash -c "$(curl ...)" --silent     ← --silent 变成 $0，被静默丢掉
+# 这里明确提示，避免「静默模式没生效、脚本却卡在交互上」。
+case "$0" in
+    -*)
+        echo -e "${YELLOW}🌊 Warning: '$0' was treated as the script name, not as an option.${RESET}" >&2
+        echo -e "${YELLOW}🌊 When piping the installer, pass options after 'bash -s --'.${RESET}" >&2
+        echo "🌊   curl -fsSL <url> | bash -s -- $0" >&2
+        ;;
+esac
+
+if [[ -n "$CLI_DIR_OPTION" && ! "$CLI_DIR_OPTION" =~ ^[1-5]$ ]]; then
+    echo -e "${RED_BOLD}🌊 Error: --dir-option must be 1-5, got '$CLI_DIR_OPTION'.${RESET}" >&2
+    exit 1
+fi
+
+if [[ "$CLI_DIR_OPTION" == "5" && -z "$CLI_CUSTOM_DIR" && "$CLI_SILENT" == "true" ]]; then
+    echo -e "${RED_BOLD}🌊 Error: --dir-option=5 needs a directory in --silent mode.${RESET}" >&2
+    echo -e "${RED_BOLD}🌊 Use --dir-option=5=/some/dir${RESET}" >&2
+    exit 1
+fi
+
+# ==========================================
 # 显示欢迎信息
 # ==========================================
 
@@ -141,16 +228,21 @@ SHARED_CONFIG_DIR="/etc/linuxwave_config"
 # 目录菜单对 x86_64 与 arm64 完全一致。
 # MacWave 曾把 /usr/local 限制为 Intel Mac（Apple 芯片上不建议写入 /usr/local），
 # Linux 没有这个限制，因此这里不做区分。
-echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
-echo "1. ~/.local/linuxwave"
-echo "2. /opt/linuxwave"
-echo "3. /usr/local/linuxwave"
-echo "4. $SHARED_BASE_DIR (shared, all users)"
-echo "5. other (enter custom directory)"
-echo ""
-echo -e "${YELLOW}Enter your choice:${RESET}"
+if [[ -n "$CLI_DIR_OPTION" ]]; then
+    choice="$CLI_DIR_OPTION"
+    echo "🌊 Directory option: $choice (from --dir-option)"
+else
+    echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
+    echo "1. ~/.local/linuxwave"
+    echo "2. /opt/linuxwave"
+    echo "3. /usr/local/linuxwave"
+    echo "4. $SHARED_BASE_DIR (shared, all users)"
+    echo "5. other (enter custom directory)"
+    echo ""
+    echo -e "${YELLOW}Enter your choice:${RESET}"
 
-read -r choice < /dev/tty
+    read -r choice < /dev/tty
+fi
 
 case "$choice" in
     1)
@@ -167,8 +259,13 @@ case "$choice" in
         BASE_DIR="$SHARED_BASE_DIR"
         ;;
     5)
-        echo -e "${YELLOW}Please enter the installation directory:${RESET}"
-        read -r custom_dir < /dev/tty
+        if [[ -n "$CLI_CUSTOM_DIR" ]]; then
+            custom_dir="$CLI_CUSTOM_DIR"
+            echo "🌊 Installation directory: $custom_dir (from --dir-option)"
+        else
+            echo -e "${YELLOW}Please enter the installation directory:${RESET}"
+            read -r custom_dir < /dev/tty
+        fi
         validated=$(validate_custom_dir "$custom_dir") || exit 1
         BASE_DIR="$validated"
         ;;
@@ -209,8 +306,17 @@ run_cmd() {
 }
 
 if [[ "$NEED_SUDO" == "true" ]]; then
-    echo -e "${YELLOW}🌊 Granting temporary administrator access for installation...${RESET}"
-    sudo -v
+    if [[ "$CLI_SILENT" == "true" ]]; then
+        # --silent 不能停下来等密码：要么已经是 root，要么已有免密 sudo
+        if ! sudo -n true 2> /dev/null; then
+            echo -e "${RED_BOLD}🌊 Error: this install needs privilege, but --silent cannot ask for a password.${RESET}" >&2
+            echo -e "${RED_BOLD}🌊 Run as root, or configure passwordless sudo for the install user.${RESET}" >&2
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}🌊 Granting temporary administrator access for installation...${RESET}"
+        sudo -v
+    fi
 fi
 
 if [[ "$SHARED_INSTALL" == "true" ]]; then
@@ -506,7 +612,9 @@ while IFS=$'\t' read -r repo_path local_path executable; do
         continue
     fi
 
-    echo "🌊 Downloading $repo_path..."
+    if [[ "$CLI_SILENT" != "true" ]]; then
+        echo "🌊 Downloading $repo_path..."
+    fi
     run_cmd mkdir -p "$(dirname "$BASE_DIR/$local_path")"
     run_cmd curl -fsSL -o "$BASE_DIR/$local_path" "$BASE_URL/$repo_path"
 
@@ -644,8 +752,13 @@ echo ""
 
 echo ""
 echo -e "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.macwave.org).${RESET}"
-echo -e "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}"
-read -r agreement < /dev/tty
+if [[ "$CLI_SILENT" == "true" ]]; then
+    echo "🌊 --silent: the agreement is accepted automatically."
+    agreement="y"
+else
+    echo -e "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}"
+    read -r agreement < /dev/tty
+fi
 if [[ -z "$agreement" || "$agreement" =~ ^[Yy]$ ]]; then
     echo -e "${GREEN}You have agreed to the agreement. Installation continues.${RESET}"
 else
