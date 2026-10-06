@@ -34,7 +34,15 @@ case "$ARCHIVE_PATH" in
         tar -xzf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
         ;;
     *.tar.bz2|*.tbz2)
-        tar -xjf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
+        # 不依赖系统装有 bzip2 命令，改用 Python 标准库 tarfile + bz2
+        python3 - "$ARCHIVE_PATH" "$EXTRACT_DIR" << 'PYEOF'
+import sys
+import tarfile
+
+with tarfile.open(sys.argv[1], 'r:bz2') as tar:
+    # filter='tar'：保留符号链接，同时挡掉危险项
+    tar.extractall(sys.argv[2], filter='tar')
+PYEOF
         ;;
     *.tar.xz|*.txz)
         tar -xJf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
@@ -46,7 +54,15 @@ case "$ARCHIVE_PATH" in
         gzip -dk "$ARCHIVE_PATH" -c > "$EXTRACT_DIR/$(basename "${ARCHIVE_PATH%.gz}")"
         ;;
     *.bz2)
-        bzip2 -dk "$ARCHIVE_PATH" -c > "$EXTRACT_DIR/$(basename "${ARCHIVE_PATH%.bz2}")"
+        # 同 .xz：不依赖系统装有 bzip2 命令，改用 Python 标准库 bz2
+        python3 - "$ARCHIVE_PATH" "$EXTRACT_DIR/$(basename "${ARCHIVE_PATH%.bz2}")" << 'PYEOF'
+import bz2
+import shutil
+import sys
+
+with bz2.open(sys.argv[1], 'rb') as source, open(sys.argv[2], 'wb') as target:
+    shutil.copyfileobj(source, target)
+PYEOF
         ;;
     *.xz)
         # 不依赖系统装有 xz 命令，改用 Python 标准库 lzma（裸 .xz，非 .tar.xz）
