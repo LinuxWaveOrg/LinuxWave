@@ -2,31 +2,37 @@
 # LinuxWave Uninstaller
 # 卸载 LinuxWave 及清理环境配置
 
-CONFIG_DIR="/opt/linuxwave_config"
+SYSTEM_CONFIG_DIR="/etc/linuxwave_config"
+USER_CONFIG_DIR="$HOME/.config/linuxwave_config"
 ARCH=$(uname -m)
 
 # 默认尝试删除的路径列表
 BASE_DIRS=()
 
-# 1. 如果配置文件存在，优先读取
-if [ -f "$CONFIG_DIR/config.json" ]; then
-    READ_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_DIR/config.json')).get('base_dir', ''))" 2>/dev/null)
-    if [ -n "$READ_DIR" ]; then
-        BASE_DIRS+=("$READ_DIR")
+# 1. 如果配置文件存在，优先读取（系统级与用户级都读，两边都卸干净）
+for CONFIG_DIR in "$SYSTEM_CONFIG_DIR" "$USER_CONFIG_DIR"; do
+    if [ -f "$CONFIG_DIR/config.json" ]; then
+        READ_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_DIR/config.json')).get('base_dir', ''))" 2>/dev/null)
+        if [ -n "$READ_DIR" ]; then
+            BASE_DIRS+=("$READ_DIR")
+        fi
     fi
-fi
+done
 
 # 2. 如果读取失败（或文件不存在），把所有可能的路径都加入列表
 if [ ${#BASE_DIRS[@]} -eq 0 ]; then
     BASE_DIRS+=("$HOME/.local/linuxwave")
     BASE_DIRS+=("/opt/linuxwave")
-    BASE_DIRS+=("/usr/local/linuxwave")
+    # 仅在 x86_64 上提供 /usr/local/linuxwave（与 install.sh 的可选目录一致）
+    if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
+        BASE_DIRS+=("/usr/local/linuxwave")
+    fi
 fi
 
 echo -e "\033[1;31mYou are deleting LinuxWave, are you sure? [Y/n]\033[0m"
 read -n 1 -r
 echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+if [[ -n "$REPLY" && ! "$REPLY" =~ ^[Yy]$ ]]; then
     echo "🌊 Uninstall cancelled."
     exit 0
 fi
@@ -45,17 +51,42 @@ for DIR in "${BASE_DIRS[@]}"; do
     fi
 done
 
-# 删除配置目录
-if [ -d "$CONFIG_DIR" ]; then
-    echo "🌊 Removing $CONFIG_DIR..."
-    sudo rm -rf "$CONFIG_DIR"
-fi
+# 删除配置目录（系统级与用户级都可能存在）
+for CONFIG_DIR in "$SYSTEM_CONFIG_DIR" "$USER_CONFIG_DIR"; do
+    if [ -d "$CONFIG_DIR" ]; then
+        if [[ "$CONFIG_DIR" == "$HOME"* ]]; then
+            echo "🌊 Removing $CONFIG_DIR..."
+            rm -rf "$CONFIG_DIR"
+        else
+            echo "🌊 Removing $CONFIG_DIR (with sudo)..."
+            sudo rm -rf "$CONFIG_DIR"
+        fi
+    fi
+done
 
-# 清理 PATH 配置
-for RC_FILE in "$HOME/.bashrc" "$HOME/.profile"; do
+# 清理 PATH 配置（含自定义安装目录：删掉“# LinuxWave”注释行与紧跟在它后面的 PATH 行）
+for RC_FILE in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
     if [ -f "$RC_FILE" ]; then
-        sed -i '/# LinuxWave/d' "$RC_FILE" 2>/dev/null || true
-        sed -i '/export PATH=".*linuxwave\/bin/d' "$RC_FILE" 2>/dev/null || true
+        python3 - "$RC_FILE" << 'PYEOF'
+import sys
+from pathlib import Path
+
+rc_file = Path(sys.argv[1])
+kept = []
+skip_next = False
+for line in rc_file.read_text().splitlines():
+    if line.strip() == "# LinuxWave":
+        skip_next = True
+        continue
+    if skip_next and line.startswith("export PATH="):
+        skip_next = False
+        continue
+    skip_next = False
+    kept.append(line)
+rc_file.write_text("\n".join(kept) + ("\n" if kept else ""))
+PYEOF
+        # 兜底：注释行缺失时，仍按旧版写法删掉 linuxwave 的 PATH 行
+        sed -i '/export PATH=".*linuxwave\//d' "$RC_FILE" 2>/dev/null || true
         echo "🌊 Removed LinuxWave PATH entries from $RC_FILE"
     fi
 done
