@@ -128,12 +128,10 @@ when that would leave the link pointing at the version you are removing.
 ```
 bat           by David Peter
 btop          by Aristocratos
-choma         by opa334
 dust          by bootandy
 eza           by Christina Sørensen and the eza community
 fd            by David Peter
 ffmpeg        by FFmpeg Team
-fileicon      by Michael Klement
 fzf           by Junegunn Choi
 htop          by Hisham Muhammad and the htop team
 ipsw          by blacktop
