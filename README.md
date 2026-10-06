@@ -40,6 +40,31 @@ In the terminal, run:
 
 **Requirements: Python (3.14 and above), patchelf (for dependency library relocation).**
 
+### Unattended install
+
+For scripts and batch use, the installer takes flags so it never waits for input:
+
+```
+# script already on disk
+bash install.sh --silent --dir-option=4
+
+# straight from the repository
+curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh \
+  | bash -s -- --silent --dir-option=4
+```
+
+`--silent` (`-S`) answers the directory menu and the agreement automatically. It
+needs passwordless sudo, or root, when the chosen directory requires privilege.
+`--dir-option=N` picks menu entry `N` (1-5); for the custom entry, append the path
+after `=`, as in `--dir-option=5=/opt/mylw`. Run `install.sh --help` for the list.
+
+> When piping through `curl`, put the options after `bash -s --`. Writing
+> `bash -c "$(curl ...)" --silent` makes `--silent` the script name (`$0`), so it
+> is silently dropped; the installer warns when it detects this.
+
+`uninstall.sh` is scriptable in the same way: `--force` skips both confirmations
+and keeps the `linuxwave` account, while `--remove-user` also deletes that account.
+
 ## 🌊 Download Directory 
 Installed binaries are stored in (options):    
 ```
