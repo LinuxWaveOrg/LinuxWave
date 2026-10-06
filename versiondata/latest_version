@@ -1,5 +1,5 @@
 version: "2.5"
-release_date: "2026-10-05"
+release_date: "2026-10-06"
 build_number: "278H0206"
 branch: "HEAD"
 update_command: <<< /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/selfupdate.sh)" >>>
