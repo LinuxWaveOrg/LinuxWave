@@ -17,7 +17,7 @@ pkg/          安装与查询核心
 surfboard/    依赖处理
 scripts/      回归测试脚本
 .github/      CI
-.templates/   目录与文件的模板样例（bin/、pkg/、linuxwave_config/）
+.templates/   目录与文件的模板样例（bin/、pkg/、linuxwave_config/、SPECIAL/ 安装示例）
 .Pseudocode/  早期伪代码，仅作参考
 STYLE.md      代码风格约定
 README.md     用户文档
