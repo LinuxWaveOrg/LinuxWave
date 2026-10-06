@@ -58,12 +58,14 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# 通过管道卸载时，选项容易被当成脚本名传进来（--force 会静默失效）
+# 用 `/bin/bash -c "$(curl ...)"` 运行时，第一个参数会变成脚本名（$0），
+# 选项会被静默丢掉（--force 失效）。正确写法是加 `--`。
 case "$0" in
+    --) ;;              # 正确写法：`--` 之后的参数才轮到脚本
     -*)
         echo "🌊 Warning: '$0' was treated as the script name, not as an option." >&2
-        echo "🌊 When piping the uninstaller, pass options after 'bash -s --'." >&2
-        echo "🌊   curl -fsSL <url> | bash -s -- $0" >&2
+        echo "🌊 Put uninstaller options after '--', which ends bash's own options." >&2
+        echo "🌊   /bin/bash -c \"\$(curl -fsSL <url>)\" -- $0" >&2
         ;;
 esac
 
@@ -261,7 +263,13 @@ echo "🌊 LinuxWave has been uninstalled."
 echo "🌊 Please restart your terminal to apply changes."
 
 # ========== 删除自身脚本 ==========
-rm -f "$0"
+# 只有「脚本确实来自一个文件」时才有自己可删。用文档推荐的
+# `/bin/bash -c "$(curl ...)"` 运行时，$0 是解释器路径（无参数）或 `--`（带参数），
+# 直接 rm 会把 /bin/bash 删掉，所以这里逐条排除后再按内容确认一次。
+if [[ -f "$0" && "$0" != "$BASH" && "$0" != --* ]] \
+   && grep -q "LinuxWave Uninstaller" "$0" 2>/dev/null; then
+    rm -f "$0"
+fi
 
 if [[ "$REMOVE_USER_FAILED" == "true" ]]; then
     exit 1

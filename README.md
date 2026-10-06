@@ -49,8 +49,8 @@ For scripts and batch use, the installer takes flags so it never waits for input
 bash install.sh --silent --dir-option=4
 
 # straight from the repository
-curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh \
-  | bash -s -- --silent --dir-option=4
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)" \
+  -- --silent --dir-option=4
 ```
 
 `--silent` (`-S`) answers the directory menu and the agreement automatically. It
@@ -58,9 +58,14 @@ needs passwordless sudo, or root, when the chosen directory requires privilege.
 `--dir-option=N` picks menu entry `N` (1-5); for the custom entry, append the path
 after `=`, as in `--dir-option=5=/opt/mylw`. Run `install.sh --help` for the list.
 
-> When piping through `curl`, put the options after `bash -s --`. Writing
-> `bash -c "$(curl ...)" --silent` makes `--silent` the script name (`$0`), so it
-> is silently dropped; the installer warns when it detects this.
+> **Fetch with `/bin/bash -c`, and put options after `--`.** Calling `/bin/bash`
+> by absolute path means a tampered `PATH` cannot decide which shell runs the
+> script, and `curl` runs to completion before `bash` executes anything, so a
+> download that fails partway is not executed as it arrives. `--` ends bash's own
+> options, so everything after it reaches the installer. Writing `… --silent`
+> instead makes `--silent` the script name (`$0`), so it is silently dropped and
+> the installer stops at a prompt nobody is watching; the installer warns when it
+> sees an option in `$0`.
 
 `uninstall.sh` is scriptable in the same way: `--force` skips both confirmations
 and keeps the `linuxwave` account, while `--remove-user` also deletes that account.
