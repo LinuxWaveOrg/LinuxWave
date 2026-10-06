@@ -487,11 +487,11 @@
     <p class="tagline" style="max-width:800px;" data-lang="zh">面向 Linux 软件开发者的包管理器。</p>
 
     <div class="version-block" style="color: #a0b0d0; font-size: 0.95rem; margin-top: -10px; margin-bottom: 30px;" data-lang="en">
-        <span class="v-line">Latest Version : 2.5</span>
+        <span class="v-line">Latest Version : 2.5.1</span>
         <span class="v-line">Release on 2026-10-06</span>
     </div>
     <div class="version-block" style="color: #a0b0d0; font-size: 0.95rem; margin-top: -10px; margin-bottom: 30px;" data-lang="zh">
-        <span class="v-line">最新版本 : 2.5</span>
+        <span class="v-line">最新版本 : 2.5.1</span>
         <span class="v-line">发布于 2026-10-06</span>
     </div>
 
@@ -623,7 +623,8 @@
             <pre>1. ~/.local/linuxwave
 2. /opt/linuxwave
 3. /usr/local/linuxwave (x86_64 only)
-4. Custom</pre>
+4. /home/linuxwave/.linuxwave (shared, all users)
+5. Custom</pre>
         </div>
         <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
             Config file is stored in (a system-level install always takes priority):
@@ -635,6 +636,12 @@
             <pre>1. /etc/linuxwave_config          system-level install (needs sudo)
 2. ~/.config/linuxwave_config     user-level install (no sudo)</pre>
         </div>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
+            A shared install (option 4) always uses <strong>/etc/linuxwave_config</strong>, so that every user on the machine resolves the same install. It needs <strong>patchelf</strong>, <strong>Python 3.14+</strong> and <strong>sudo</strong> once; the <strong>linuxwave</strong> account is created automatically if it does not exist.
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            共享安装（选项 4）始终使用 <strong>/etc/linuxwave_config</strong>，以保证全机所有用户解析到同一个安装。需要 <strong>patchelf</strong>、<strong>Python 3.14+</strong>，以及一次性提供 <strong>sudo</strong>；若 <strong>linuxwave</strong> 账号不存在会自动创建。
+        </p>
 
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Run Packages</h2>
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">运行软件包</h2>
