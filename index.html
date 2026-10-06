@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="lang-en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
@@ -78,6 +78,18 @@
         .btn-github:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(255,255,255,0.2);
+        }
+
+        .link-macwave {
+            display: inline-block;
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .link-macwave:hover {
+            text-decoration: underline;
         }
 
         .code-container {
@@ -396,9 +408,51 @@
             word-break: break-word;
             overflow-wrap: break-word;
         }
+
+        /* ========== 语言切换 ========== */
+        .lang-switch {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .lang-btn {
+            background-color: rgba(255,255,255,0.25);
+            color: #ffffff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .lang-btn:hover {
+            background-color: rgba(255,255,255,0.4);
+            transform: translateY(-1px);
+        }
+
+        .lang-btn.active {
+            background-color: #ffffff;
+            color: #0a1b3f;
+        }
+
+        /* 只显示当前语言的内容 */
+        .lang-zh [data-lang="en"],
+        .lang-en [data-lang="zh"] {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
+
+    <!-- 语言切换 -->
+    <div class="lang-switch">
+        <button class="lang-btn" type="button" data-lang-set="en" onclick="setLanguage('en')">English</button>
+        <button class="lang-btn" type="button" data-lang-set="zh" onclick="setLanguage('zh')">简体中文</button>
+    </div>
 
     <div class="logo-wrapper">
         <img src="logo1.jpg" alt="LinuxWave Icon" class="logo-img logo-1">
@@ -406,32 +460,49 @@
         <img src="logo3.jpg" alt="LinuxWave Logo" class="logo-img logo-3">
     </div>
 
-    <p class="tagline" style="max-width:800px;">A package manager for Linux software developers.</p>
+    <p class="tagline" style="max-width:800px;" data-lang="en">A package manager for Linux software developers.</p>
+    <p class="tagline" style="max-width:800px;" data-lang="zh">面向 Linux 软件开发者的包管理器。</p>
 
-    <div class="version-block" style="color: #a0b0d0; font-size: 0.95rem; margin-top: -10px; margin-bottom: 30px;">
+    <div class="version-block" style="color: #a0b0d0; font-size: 0.95rem; margin-top: -10px; margin-bottom: 30px;" data-lang="en">
         <span class="v-line">Latest Version : 2.5</span>
         <span class="v-line">Release on 2026-10-05</span>
     </div>
+    <div class="version-block" style="color: #a0b0d0; font-size: 0.95rem; margin-top: -10px; margin-bottom: 30px;" data-lang="zh">
+        <span class="v-line">最新版本 : 2.5</span>
+        <span class="v-line">发布于 2026-10-05</span>
+    </div>
 
-    <a href="https://github.com/Sha0huaZhang/LinuxWave/releases" class="btn-github">View On GitHub</a>
+    <a href="https://github.com/Sha0huaZhang/LinuxWave/releases" class="btn-github" data-lang="en">View On GitHub</a>
+    <a href="https://github.com/Sha0huaZhang/LinuxWave/releases" class="btn-github" data-lang="zh">在 GitHub 上查看</a>
 
     <div style="margin-top: 2em;"></div>
+    <div style="text-align: center; margin-bottom: 1.2em;">
+        <a href="https://macwave.org" class="link-macwave" data-lang="en">macOS? View MacWave &rarr;</a>
+        <a href="https://macwave.org" class="link-macwave" data-lang="zh">macOS？查看 MacWave &rarr;</a>
+    </div>
     <div style="text-align: center; font-size: 1.2rem; font-weight: bold;">
-        <a href="https://sw.macwave.org" style="color: #ffffff; text-decoration: none;">Explore MacWave Team</a>
+        <a href="https://sw.macwave.org" style="color: #ffffff; text-decoration: none;" data-lang="en">Explore MacWave Team</a>
+        <a href="https://sw.macwave.org" style="color: #ffffff; text-decoration: none;" data-lang="zh">浏览 MacWave 团队</a>
     </div>
     <div style="margin-top: 0.5em;"></div>
-    <div style="color: #a0b0d0; font-size: 0.95rem; text-align: center;">(Click to view)</div>
+    <div style="color: #a0b0d0; font-size: 0.95rem; text-align: center;" data-lang="en">(Click to view)</div>
+    <div style="color: #a0b0d0; font-size: 0.95rem; text-align: center;" data-lang="zh">（点击查看）</div>
     <div style="margin-top: 1em;"></div>
 
     <div class="content-section" style="margin: 0 auto; padding: 20px; color: #ffffff; text-align: left;">
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px;">About LinuxWave</h2>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">
-            <strong>LinuxWave</strong> is the <strong>official Linux port of MacWave</strong>. Starting from <strong>MacWave 2.0</strong>, the main MacWave project <strong>no longer supports Linux</strong>, so LinuxWave carries that support forward. It is a <strong>package manager</strong> that runs on <strong>Linux (x86_64 / arm64)</strong>, designed to host <strong>common software packages</strong> for <strong>Linux software developers</strong>.
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px;" data-lang="en">About LinuxWave</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px;" data-lang="zh">关于LinuxWave</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
+            <strong>LinuxWave</strong> is the <strong>official Linux port of MacWave</strong>. Starting with <strong>MacWave 2.0</strong>, the main MacWave project <strong>no longer supports Linux</strong>, so LinuxWave carries that support forward. It is a <strong>package manager</strong> that runs on <strong>Linux (x86_64 / arm64)</strong>, designed to host <strong>common software packages</strong> for <strong>Linux software developers</strong>.
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            <strong>LinuxWave</strong> 是 <strong>MacWave 的官方 Linux 移植版</strong>。从 <strong>MacWave 2.0</strong> 起，MacWave 主线<strong>不再支持 Linux</strong>，LinuxWave 承接了这部分支持。它运行在 <strong>Linux（x86_64 / arm64）</strong> 上，是一个为 <strong>Linux 软件开发者</strong> 托管 <strong>常用软件包</strong> 的 <strong>包管理器</strong>。
         </p>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Why LinuxWave</h2>
-        <ul style="font-size: 1.1rem; line-height: 1.8; opacity: 0.9; padding-left: 1.2em;">
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Why LinuxWave</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">为什么选择 LinuxWave</h2>
+        <ul style="font-size: 1.1rem; line-height: 1.8; opacity: 0.9; padding-left: 1.2em;" data-lang="en">
             <li><strong>One command, install common packages.</strong> No more scattered download links.</li>
             <li><strong>Versioned storage.</strong> Every binary is stored as <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">package@version</code>, so multiple versions can coexist without conflicting with system tools.</li>
             <li><strong>Optional unversioned links.</strong> <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">wave link &lt;package&gt;</code> adds a plain shortcut pointing at the highest installed version, and re-points itself whenever you install or remove versions.</li>
@@ -444,16 +515,37 @@
             <li><strong>Automatically manage dependencies.</strong> Support for software packages with dependencies, using reference counting and automatic dependency management, with no need to handle dependencies manually.</li>
 
         </ul>
+        <ul style="font-size: 1.1rem; line-height: 1.8; opacity: 0.9; padding-left: 1.2em;" data-lang="zh">
+            <li><strong>一条命令，安装常用软件包。</strong> 不再需要到处寻找下载链接。</li>
+            <li><strong>版本化存储。</strong> 每个二进制文件都以 <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">package@version</code> 形式存储，因此多个版本可以共存，且不会与系统工具冲突。</li>
+            <li><strong>可选的无版本号链接。</strong> <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">wave link &lt;包名&gt;</code> 会建立一个指向最高已安装版本的普通快捷方式，并在安装或卸载版本时自动改指。</li>
+            <li><strong>完全隔离，无惧升级。</strong> LinuxWave 完全在自己的专用目录中运行，绝不覆盖或链接发行版自带的库——它附带的依赖库会被重定位到自己的目录树内。即使跨越大版本发行版升级，你的 LinuxWave 环境依然完整可用。</li>
+            <li><strong>无缓存，始终最新。</strong> 软件包元数据实时从 infosource 分支获取。</li>
+            <li><strong>支持 10 种归档格式，经 CI 验证。</strong> 支持无扩展名二进制文件、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.zip</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.gz</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.bz2</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar.xz</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.tar</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.gz</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.xz</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.bz2</code>、<code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">.conda</code>。</li>
+            <li><strong>先校验，后解压。</strong> 解压前先校验 SHA256。</li>
+            <li><strong>支持断点续传。</strong> 下载中断了？用 <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">-C</code> 继续。</li>
+            <li><strong>轻量透明。</strong> 纯 Python + Shell，无重型运行时，无隐藏行为。</li>
+            <li><strong>自动管理依赖。</strong> 支持带依赖的软件包，采用引用计数与自动依赖管理，无需手动处理依赖。</li>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Supported Platform</h2>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 1; font-weight: bold; color: #ffffff;">
+        </ul>
+
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Supported Platform</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">支持的平台</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 1; font-weight: bold; color: #ffffff;" data-lang="en">
             Linux (x86_64 / arm64)
         </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 1; font-weight: bold; color: #ffffff;" data-lang="zh">
+            Linux（x86_64 / arm64）
+        </p>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Install LinuxWave</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Install LinuxWave</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">安装 LinuxWave</h2>
 
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
             In the terminal, run:
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            在终端中运行：
         </p>
         <div class="code-container has-copy-btn">
             <button class="copy-btn" onclick="copyCode(this)">
@@ -464,17 +556,27 @@
             </button>
             <pre><span class="code-dollar">$</span> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)" &amp;&amp; source ~/.zshrc</pre>
         </div>
-        <p style="margin: 10px 0 0 0; font-size: 1rem; line-height: 1.5; color: #a0b0d0; font-style: italic;">
+        <p style="margin: 10px 0 0 0; font-size: 1rem; line-height: 1.5; color: #a0b0d0; font-style: italic;" data-lang="en">
             (If you are using bash instead of zsh, run <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">source ~/.bashrc</code>)
         </p>
-
-        <p class="env-requirements">
-            Requirements: Linux (x86_64 / arm64), Python (3.14 and above), patchelf (for dependency library relocation).
+        <p style="margin: 10px 0 0 0; font-size: 1rem; line-height: 1.5; color: #a0b0d0; font-style: italic;" data-lang="zh">
+            （如果你使用的是 bash 而非 zsh，请运行 <code style="background-color: #0f1a30; padding: 2px 6px; border-radius: 4px;">source ~/.bashrc</code>）
         </p>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Uninstall LinuxWave</h2>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">
+        <p class="env-requirements" data-lang="en">
+            Requirements: Linux (x86_64 / arm64), Python (3.14 and above), patchelf (for dependency library relocation).
+        </p>
+        <p class="env-requirements" data-lang="zh">
+            环境要求：Linux（x86_64 / arm64）、Python（3.14 及以上）、patchelf（用于依赖库重定位）。
+        </p>
+
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Uninstall LinuxWave</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">卸载 LinuxWave</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
             To completely remove LinuxWave from your system, run the following command in your terminal:
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            要从系统中彻底移除 LinuxWave，请在终端中运行以下命令：
         </p>
         <div class="code-container has-copy-btn">
             <button class="copy-btn" onclick="copyCode(this)">
@@ -486,9 +588,13 @@
             <pre><span class="code-dollar">$</span> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/uninstall.sh)"</pre>
         </div>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Download Directory</h2>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Download Directory</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">下载目录</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
             Installed binaries are stored in (options):
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            已安装的二进制文件存储于（可选）：
         </p>
         <div class="code-container">
             <pre>1. ~/.local/linuxwave
@@ -496,26 +602,37 @@
 3. /usr/local/linuxwave (x86_64 only)
 4. Custom</pre>
         </div>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
             Config file is stored in (a system-level install always takes priority):
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            配置文件存储于（系统级安装始终优先）：
         </p>
         <div class="code-container">
             <pre>1. /etc/linuxwave_config          system-level install (needs sudo)
 2. ~/.config/linuxwave_config     user-level install (no sudo)</pre>
         </div>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Run Packages</h2>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Run Packages</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">运行软件包</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
             To run a package, run the following commands in your terminal:
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            要运行某个软件包，请在终端中运行以下命令：
         </p>
         <div class="code-container">
             <pre>{package_name}@{version}</pre>
         </div>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
             Use the versioned name <strong>{package_name}@{version}</strong>, or run <strong>wave link {package_name}</strong> once and then just type <strong>{package_name}</strong>.
         </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            使用带版本号的名称 <strong>{package_name}@{version}</strong>，或先运行一次 <strong>wave link {package_name}</strong>，之后直接输入 <strong>{package_name}</strong> 即可。
+        </p>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Command Reference</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Command Reference</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">命令参考</h2>
         <pre>
 Usage:
   wave &lt;command&gt; [package] [flags]
@@ -559,15 +676,18 @@ refuses to run when that would leave the link pointing at the version you are
 removing.
 </pre>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Demo Pictures</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Demo Pictures</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">演示图片</h2>
         <div class="demo-pictures">
             <p>
                 <img src="images/demo1.png" alt="demo1">
             </p>
         </div>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">Supported Packages</h2>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">(Listed in alphabetical order)</p>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Supported Packages</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">支持的软件包</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">(Listed in alphabetical order)</p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">（按字母顺序排列）</p>
         <div class="code-container">
             <pre>
 bat           by David Peter
@@ -593,15 +713,20 @@ zoxide        by Ajeet D'Souza
             </pre>
         </div>
 
-        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;">License</h2>
-        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">License</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">许可证</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
             This project is licensed under the <strong>MIT License</strong>.
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            本项目基于 <strong>MIT 许可证</strong> 发布。
         </p>
 
     </div>
 
     <div class="contact-section">
-        <h2>Contact Us</h2>
+        <h2 data-lang="en">Contact Us</h2>
+        <h2 data-lang="zh">联系我们</h2>
         <div class="contact-divider"></div>
         <div class="contact-items">
             <div class="contact-item">
@@ -610,18 +735,20 @@ zoxide        by Ajeet D'Souza
             </div>
             <div class="contact-item">
                 <span class="contact-label">Twitter</span>
-                <a href="https://twitter.com/MacWaveOrg" target="_blank">@MacWaveOrg</a>
+                <a href="https://twitter.com/LinuxWaveOrg" target="_blank">@LinuxWaveOrg</a>
             </div>
             <div class="contact-item">
                 <span class="contact-label">Email</span>
                 <a href="mailto:hi@macwave.org">hi@macwave.org</a>
             </div>
         </div>
-        <div class="contact-hint">Click the links to open.</div>
+        <div class="contact-hint" data-lang="en">Click the links to open.</div>
+        <div class="contact-hint" data-lang="zh">点击链接即可打开。</div>
     </div>
 
     <div class="disclaimer-container">
         <div class="disclaimer">
+            <div data-lang="en">
             <p>1. Users should carefully read the agreement and possible negative impacts before operation, and bear the consequences themselves. Using LinuxWave means that you have agreed to the above conditions. LinuxWave is not responsible for any losses caused to users by LinuxWave or its software packages.</p>
             <p>2. LinuxWave (especially beta versions) may affect users due to code defects, security issues, etc. Users should be aware of and accept this risk, otherwise please do not use it. LinuxWave is not responsible for any losses caused to users' devices, etc.</p>
             <p>3. LinuxWave only provides links to software packages, not the software packages themselves. LinuxWave is not responsible for any losses caused to users due to security vulnerabilities, malicious code, etc. of the software packages themselves. If users violate the software package agreement, LinuxWave is not responsible.</p>
@@ -656,7 +783,8 @@ zoxide        by Ajeet D'Souza
             <p>32. LinuxWave is not responsible for any losses caused by incomplete downloads of executable scripts due to network fluctuations, etc.</p>
             <p>33. LinuxWave is not responsible for any losses suffered by users due to force majeure.</p>
             <p>34. LinuxWave has no cooperation with any company or profit-making organization. Any claims of cooperation with LinuxWave by companies or profit-making organizations are counterfeit. LinuxWave is not responsible for any losses caused by this.</p>
-            <br><br>
+            </div>
+            <div data-lang="zh">
             <p>1. 用户在操作前应仔细阅读协议及可能造成的负面影响，并自行承担后果，使用LinuxWave即视为已达成上述条件。LinuxWave及其软件包对使用者造成损失的，LinuxWave不承担责任</p>
             <p>2. LinuxWave（尤其是beta版）可能由于自身代码缺陷、安全问题等对用户造成影响，用户应知悉并接受这一风险，否则请勿使用。对用户的设备等造成损失的，LinuxWave不承担责任</p>
             <p>3. LinuxWave仅提供指向软件包的链接，不提供软件包本身。软件包因本身的安全漏洞、恶意代码等对用户造成损失的，LinuxWave不承担责任。用户如果违反软件包协议，LinuxWave不承担责任</p>
@@ -691,6 +819,7 @@ zoxide        by Ajeet D'Souza
             <p>32. 由于网络波动等原因导致软件可执行脚本下载不全并造成损失的，LinuxWave不承担责任</p>
             <p>33. 由于不可抗力因素导致用户蒙受损失的，LinuxWave不承担责任</p>
             <p>34. LinuxWave未与任何公司或营利组织等产生合作，如有公司或营利组织等声称与LinuxWave合作均属伪造。由此造成损失的，LinuxWave不承担责任</p>
+            </div>
         </div>
     </div>
 
@@ -709,6 +838,28 @@ zoxide        by Ajeet D'Souza
                 console.error('Failed to copy text: ', err);
             });
         }
+
+        // 语言切换
+        function setLanguage(lang) {
+            const root = document.documentElement;
+            root.classList.remove('lang-en', 'lang-zh');
+            root.classList.add('lang-' + lang);
+            root.lang = (lang === 'zh') ? 'zh-Hans' : 'en';
+            document.querySelectorAll('.lang-btn').forEach(function (btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-lang-set') === lang);
+            });
+            try { localStorage.setItem('linuxwave-lang', lang); } catch (e) {}
+        }
+
+        (function () {
+            let saved = null;
+            try { saved = localStorage.getItem('linuxwave-lang'); } catch (e) {}
+            if (saved !== 'en' && saved !== 'zh') {
+                const nav = (navigator.language || 'en').toLowerCase();
+                saved = nav.indexOf('zh') === 0 ? 'zh' : 'en';
+            }
+            setLanguage(saved);
+        })();
     </script>
 
 </body>
