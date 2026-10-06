@@ -1,3 +1,0 @@
-sha256: "a60941a0365ee3e8b9ff721f75b0608c234b5652f53337a918b787839de4bb53"
-url: "https://repo.continuum.io/pkgs/main/osx-64/libevent-2.1.12-h04015c4_1.tar.bz2"
-deps: "openssl@3.0.15"

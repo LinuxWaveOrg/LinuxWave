@@ -1,5 +1,0 @@
-des: "Regular expressions library."
-hom: "https://github.com/kkos/oniguruma"
-lic: "BSD-2-Clause"
-aut: "Kosako"
-dep_name: "oniguruma"

@@ -1,2 +1,2 @@
-sha256: "00d3c50551b270bbdf7da97816e5ba7f5fd10294cd310165f7f8b5523e738b9c"
-url: "https://github.com/lsd-rs/lsd/releases/download/v1.2.0/lsd-v1.2.0-x86_64-apple-darwin.tar.gz"
+sha256: "77849da1210336534258551a581401ba19ae6b8d7b66a2a1feff148ad41e3814"
+url: "https://github.com/lsd-rs/lsd/releases/download/v1.2.0/lsd-v1.2.0-x86_64-unknown-linux-musl.tar.gz"

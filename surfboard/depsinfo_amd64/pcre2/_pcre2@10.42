@@ -1,4 +1,0 @@
-sha256: "e18ec8727b8f74eb87a3c8945953c97de9b065aabcad272ece12972b854d964c"
-url: "https://repo.continuum.io/pkgs/main/osx-64/pcre2-10.42-h9b97e30_1.tar.bz2"
-deps: "bzip2@1.0.8"
-      "zlib@1.2.13"

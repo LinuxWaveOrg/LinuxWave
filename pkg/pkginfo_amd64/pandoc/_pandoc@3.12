@@ -1,2 +1,2 @@
-sha256: "18577f9460c3dc5d2651ad3bab37d513bc2034a5a777fbe18fa0a5acf2e936ea"
-url: "https://github.com/jgm/pandoc/releases/download/3.12/pandoc-3.12-x86_64-macOS.zip"
+sha256: "67d7d011fed8c8543306022b985b9b2499ab9b74818df91d8727c7e9ebc5ba06"
+url: "https://github.com/jgm/pandoc/releases/download/3.12/pandoc-3.12-linux-amd64.tar.gz"

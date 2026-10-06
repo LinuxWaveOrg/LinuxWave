@@ -1,0 +1,4 @@
+sha256: "913b7d2ba2418172858d8143f87354e78848921f119610c94ae47ad82cee43fb"
+url: "https://conda.anaconda.org/conda-forge/linux-aarch64/ncdu-1.16-h10724fe_0.tar.bz2"
+deps: "ncurses@6.6"
+      "zstd@1.5.7"

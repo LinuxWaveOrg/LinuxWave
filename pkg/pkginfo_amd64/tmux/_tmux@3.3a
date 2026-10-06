@@ -1,5 +1,0 @@
-sha256: "811ce8cda2ec6ccb9a6be8346849e7124c51eacad4faabe8534268b0b24b0c35"
-url: "https://repo.continuum.io/pkgs/main/osx-64/tmux-3.3a-h6c40b1e_1.tar.bz2"
-deps: "libevent@2.1.12"
-      "libutf8proc@2.6.1"
-      "ncurses@6.4"
