@@ -4,12 +4,15 @@
 # This script downloads wave.py, installs dependencies, and configures PATH.
 # Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)"
 
-set -e
+# -E（errtrace）让下面那个 ERR 陷阱能看见 run_cmd 等**函数内部**的失败：
+# 默认情况下陷阱不继承进函数，中途失败就只剩一个光秃秃的 curl 退出码。
+# 显式 `return 1`、调用方用 `||` 容忍的失败、`if` 条件里的失败都不会误触发。
+set -eE
 
 BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.5.2"
+LINUXWAVE_VERSION="2.5.3"
 
 BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/$BRANCH"
 
@@ -409,6 +412,20 @@ fi
 CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
 
+# 中途失败时给出明确指引。刻意**不自动删除**已下载的内容：升级安装时
+# 删掉安装树会把用户原有的可用安装一起毁掉，重跑安装器才是安全的做法。
+install_failed() {
+    local code=$?
+    echo "" >&2
+    echo -e "${RED_BOLD}🌊 Installation did not finish (exit $code).${RESET}" >&2
+    echo "🌊 Nothing was removed. Files already downloaded may be left in:" >&2
+    echo "     ${BASE_DIR:-<not chosen yet>}" >&2
+    echo "     ${CONFIG_DIR:-<not chosen yet>}" >&2
+    echo "🌊 Fix the cause (network, permissions, disk space) and run the installer again;" >&2
+    echo "🌊 a repeated install overwrites what it downloaded and is safe to rerun." >&2
+}
+trap install_failed ERR
+
 run_cmd mkdir -p "$INSTALL_DIR"
 run_cmd mkdir -p "$LINKS_DIR"
 run_cmd mkdir -p "$REPO_DIR"
@@ -690,17 +707,37 @@ fi
 
 PATH_LINE="export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\""
 
+# 从 rc 文件里摘掉我们写入的 PATH 行（连同标记行）。
+# 安装回滚时要靠它，否则会留下一个指向已删除目录的 PATH。
+remove_lw_path_entries() {
+    local rc="$1"
+    [[ -f "$rc" ]] || return 0
+    grep -qF -e "$PATH_LINE" -e "# LinuxWave" "$rc" 2>/dev/null || return 0
+    grep -v -F -e "$PATH_LINE" -e "# LinuxWave" "$rc" > "$rc.linuxwave.tmp" || true
+    cat "$rc.linuxwave.tmp" > "$rc"
+    rm -f "$rc.linuxwave.tmp"
+    echo "🌊 Removed LinuxWave PATH entries from $rc"
+}
+
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     # 共享安装：$SHARED_USER 自己的 shell 也要能直接用 wave
     SHARED_RC="$SHARED_HOME/.bashrc"
-    if sudo test -f "$SHARED_RC"; then
-        if sudo grep -qF "$PATH_LINE" "$SHARED_RC" 2>/dev/null; then
-            echo "🌊 LinuxWave is already in $SHARED_RC."
-        else
-            echo "🌊 Adding LinuxWave to PATH in $SHARED_RC..."
-            printf '\n# LinuxWave\n%s\n' "$PATH_LINE" | sudo tee -a "$SHARED_RC" > /dev/null
-            sudo chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
-        fi
+    if sudo grep -qF "$PATH_LINE" "$SHARED_RC" 2>/dev/null; then
+        echo "🌊 LinuxWave is already in $SHARED_RC."
+    elif sudo test -f "$SHARED_RC"; then
+        echo "🌊 Adding LinuxWave to PATH in $SHARED_RC..."
+        printf '\n# LinuxWave\n%s\n' "$PATH_LINE" | sudo tee -a "$SHARED_RC" > /dev/null
+        sudo chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
+    elif printf '# LinuxWave\n%s\n' "$PATH_LINE" | sudo tee "$SHARED_RC" > /dev/null; then
+        # 账号预存、或 /etc/skel 里没有 .bashrc 时文件不存在。
+        # 建出来，否则这个账号反而跑不了 wave，而安装却自称已完成。
+        echo "🌊 Created $SHARED_RC with LinuxWave in PATH."
+        sudo chmod 644 "$SHARED_RC"
+        sudo chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
+    else
+        echo -e "${YELLOW}🌊 Warning: could not write $SHARED_RC.${RESET}"
+        echo "🌊 '$SHARED_USER' can add it manually with:"
+        echo "     echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc"
     fi
 fi
 
@@ -720,6 +757,47 @@ else
     fi
 
     echo "$PATH_LINE" >> "$RC_FILE"
+fi
+
+# ==========================================
+# 许可协议确认
+# ==========================================
+# 必须放在「安装完成」之前：否则先告诉用户已经装好，随后又因为不同意而全部删除。
+
+echo ""
+echo -e "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.macwave.org).${RESET}"
+if [[ "$CLI_SILENT" == "true" ]]; then
+    echo "🌊 --silent: the agreement is accepted automatically."
+    agreement="y"
+else
+    echo -e "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}"
+    read -r agreement < /dev/tty
+fi
+if [[ -z "$agreement" || "$agreement" =~ ^[Yy]$ ]]; then
+    echo -e "${GREEN}You have agreed to the agreement.${RESET}"
+else
+    # 回滚要连 rc 里的 PATH 一起清掉，否则会留下指向已删除目录的一行。
+    # 这里不写死 sudo：用户级安装全程无需提权，回滚也不该突然要密码。
+    echo -e "${RED_BOLD}You do not agree to the agreement. Installation stopped.${RESET}"
+    echo -e "${RED_BOLD}🌊 Cleaning up downloaded files...${RESET}"
+    run_cmd rm -rf "$BASE_DIR"
+    run_cmd rm -rf "$CONFIG_DIR"
+    remove_lw_path_entries "$RC_FILE"
+    if [[ "$SHARED_INSTALL" == "true" ]] && sudo test -f "$SHARED_HOME/.bashrc"; then
+        sudo python3 - "$SHARED_HOME/.bashrc" "$PATH_LINE" << 'PYEOF'
+import sys
+from pathlib import Path
+
+rc_file = Path(sys.argv[1])
+path_line = sys.argv[2]
+kept = [line for line in rc_file.read_text().splitlines()
+        if line.strip() != "# LinuxWave" and line != path_line]
+rc_file.write_text("\n".join(kept) + ("\n" if kept else ""))
+PYEOF
+        echo "🌊 Removed LinuxWave PATH entries from $SHARED_HOME/.bashrc"
+    fi
+    echo -e "${RED_BOLD}🌊 All files have been deleted.${RESET}"
+    exit 1
 fi
 
 # ==========================================
@@ -747,27 +825,3 @@ echo "🌊 To use 'wave' immediately in this terminal, run:"
 echo -e "${YELLOW}    source $RC_DISPLAY${RESET}"
 echo "🌊 Or simply open a new terminal window."
 echo ""
-
-# ==========================================
-# 许可协议确认
-# ==========================================
-
-echo ""
-echo -e "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.macwave.org).${RESET}"
-if [[ "$CLI_SILENT" == "true" ]]; then
-    echo "🌊 --silent: the agreement is accepted automatically."
-    agreement="y"
-else
-    echo -e "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}"
-    read -r agreement < /dev/tty
-fi
-if [[ -z "$agreement" || "$agreement" =~ ^[Yy]$ ]]; then
-    echo -e "${GREEN}You have agreed to the agreement. Installation continues.${RESET}"
-else
-    echo -e "${RED_BOLD}You do not agree to the agreement. Installation stopped.${RESET}"
-    echo -e "${RED_BOLD}🌊 Cleaning up downloaded files...${RESET}"
-    run_cmd rm -rf "$BASE_DIR"
-    sudo rm -rf "$CONFIG_DIR"
-    echo -e "${RED_BOLD}🌊 All files have been deleted.${RESET}"
-    exit 1
-fi

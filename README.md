@@ -10,7 +10,7 @@ A package manager for Linux software developers.
 Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
-2.5, Release on 2026-10-06
+2.5.3, Release on 2026-10-07
 
 ## 🌊 What is LinuxWave?
 
@@ -69,6 +69,12 @@ after `=`, as in `--dir-option=5=/opt/mylw`. Run `install.sh --help` for the lis
 
 `uninstall.sh` is scriptable in the same way: `--force` skips both confirmations
 and keeps the `linuxwave` account, while `--remove-user` also deletes that account.
+Add both for a fully unattended removal.
+
+> **Without `--force`, the uninstaller needs a terminal.** It reads the
+> confirmation from `/dev/tty` and **stops** when there is none, instead of
+> treating a closed stdin as "yes" - deleting is not reversible. Scripts and CI
+> must say `--force` explicitly.
 
 ## 🌊 Download Directory 
 Installed binaries are stored in (options):    
