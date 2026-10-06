@@ -102,7 +102,17 @@ if [[ "$CLI_FORCE" == "true" ]]; then
     echo "🌊 --force: uninstalling without confirmation."
 else
     echo -e "\033[1;31mYou are deleting LinuxWave, are you sure? [Y/n]\033[0m"
-    read -n 1 -r
+    # 从 /dev/tty 读，且读不到就**中止**：
+    # 删除是不可逆的，stdin 是 EOF（< /dev/null、CI、被别的命令吃掉输入）时
+    # 绝不能默认当成「同意」。无人值守的场景请显式用 --force。
+    # `2>/dev/null` 写在输入重定向之前：没有控制终端时打开 /dev/tty 会失败，
+    # 重定向按从左到右处理，先屏蔽 stderr 才不会喷出那行原始报错。
+    if ! read -n 1 -r 2>/dev/null < /dev/tty; then
+        echo
+        echo -e "\033[1;31m🌊 No terminal available to confirm on. Nothing was deleted.\033[0m" >&2
+        echo "🌊 To uninstall non-interactively, run again with --force." >&2
+        exit 1
+    fi
     echo
     if [[ -n "$REPLY" && ! "$REPLY" =~ ^[Yy]$ ]]; then
         echo "🌊 Uninstall cancelled."
