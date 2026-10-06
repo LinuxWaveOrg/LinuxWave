@@ -175,14 +175,16 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# 通过管道安装时，选项很容易被当成脚本名传进来：
-#   bash -c "$(curl ...)" --silent     ← --silent 变成 $0，被静默丢掉
+# 用 `/bin/bash -c "$(curl ...)"` 运行时，第一个参数会变成脚本名（$0）：
+#   /bin/bash -c "$(curl ...)" --silent    ← --silent 成了 $0，被静默丢掉
+# 正确写法是加 `--`：它结束 bash 自身的选项，后面的参数才会传进脚本。
 # 这里明确提示，避免「静默模式没生效、脚本却卡在交互上」。
 case "$0" in
+    --) ;;              # 正确写法：`--` 之后的参数才轮到脚本
     -*)
         echo -e "${YELLOW}🌊 Warning: '$0' was treated as the script name, not as an option.${RESET}" >&2
-        echo -e "${YELLOW}🌊 When piping the installer, pass options after 'bash -s --'.${RESET}" >&2
-        echo "🌊   curl -fsSL <url> | bash -s -- $0" >&2
+        echo -e "${YELLOW}🌊 Put installer options after '--', which ends bash's own options.${RESET}" >&2
+        echo "🌊   /bin/bash -c \"\$(curl -fsSL <url>)\" -- $0" >&2
         ;;
 esac
 
