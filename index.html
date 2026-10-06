@@ -678,6 +678,32 @@
             使用带版本号的名称 <code>{package_name}@{version}</code>，或先运行一次 <code>wave link {package_name}</code>，之后直接输入 <code>{package_name}</code> 即可。
         </p>
 
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Symlink Management</h2>
+        <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">软链接管理</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
+            Once a versionless link exists, LinuxWave keeps it pointing at the right version on its own:
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            建立不含版本号的软链接后，LinuxWave 会自动维护它指向的版本：
+        </p>
+        <ol style="font-size: 1.1rem; line-height: 1.8; opacity: 0.9; padding-left: 1.6em;" data-lang="en">
+            <li>If the highest version is uninstalled, the versionless link moves to the highest version that remains, and the uninstalled version's own link goes with it.</li>
+            <li>An install re-points the versionless link at the version it just installed; add <code>--unlink</code> to that install to skip this.</li>
+            <li>If a package has no versions left at all, the versionless link is removed.</li>
+            <li>A versioned name is always callable, whether or not a versionless link exists.</li>
+        </ol>
+        <ol style="font-size: 1.1rem; line-height: 1.8; opacity: 0.9; padding-left: 1.6em;" data-lang="zh">
+            <li>最高版本被卸载后，不含版本号的软链接会改指向剩余版本中的最高版本，被卸载版本自己的软链接一并撤销。</li>
+            <li>安装会把不含版本号的软链接指向本次安装的版本；本次安装加上 <code>--unlink</code> 可跳过这一步。</li>
+            <li>某软件包不再有任何版本时，不含版本号的软链接会被撤销。</li>
+            <li>无论何种情况，含版本号的名称始终可以调用，即使存在不含版本号的软链接。</li>
+        </ol>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
+            A manual <code>wave unlink {package_name}</code> is remembered: a later uninstall will not re-create the link for that package.
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            手动 <code>wave unlink {package_name}</code> 过的软件包会被记住，之后的卸载不会重新为它建立链接。
+        </p>
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Command Reference</h2>
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">命令参考</h2>
         <pre>
