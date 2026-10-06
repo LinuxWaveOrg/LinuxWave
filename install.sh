@@ -9,7 +9,7 @@ set -e
 BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.5"
+LINUXWAVE_VERSION="2.5.1"
 
 BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/$BRANCH"
 
@@ -85,6 +85,32 @@ validate_custom_dir() {
 }
 
 # ==========================================
+# 共享安装：前置准备清单
+# ==========================================
+
+print_shared_install_notes() {
+    echo ""
+    echo -e "${YELLOW}🌊 Shared install (Linuxbrew style)${RESET}"
+    echo "🌊 Install directory : $SHARED_BASE_DIR"
+    echo "🌊 Config directory  : $SHARED_CONFIG_DIR  (system-level, shared by every user)"
+    echo "🌊 Owner             : $SHARED_USER"
+    echo ""
+    echo -e "${YELLOW}🌊 Make sure these are ready before continuing:${RESET}"
+    echo "   1. sudo - needed once, to create $SHARED_HOME and write $SHARED_CONFIG_DIR"
+    echo "   2. patchelf - dependency libraries cannot be relocated without it:"
+    echo "        Debian/Ubuntu : sudo apt install patchelf"
+    echo "        Fedora/RHEL   : sudo dnf install patchelf"
+    echo "        Arch          : sudo pacman -S patchelf"
+    echo "   3. Python 3.14 or above - required by LinuxWave and by .conda packages"
+    echo ""
+    echo "🌊 The '$SHARED_USER' account is created automatically if missing."
+    echo "🌊 Every user on this machine will be able to run 'wave'."
+    echo "🌊 To let several users install packages, see the group setup in"
+    echo "🌊 .templates/SPECIAL/INSTALL_BY_INTERNET.md."
+    echo ""
+}
+
+# ==========================================
 # 显示欢迎信息
 # ==========================================
 
@@ -99,72 +125,64 @@ ARCH=$(uname -m)
 echo "🌊 Detected architecture: $ARCH"
 
 # ==========================================
+# 共享安装（x86_64 选项 4 / arm64 选项 3）相关常量
+# ==========================================
+
+SHARED_INSTALL=false
+SHARED_USER="linuxwave"
+SHARED_HOME="/home/$SHARED_USER"
+SHARED_BASE_DIR="$SHARED_HOME/.linuxwave"
+SHARED_CONFIG_DIR="/etc/linuxwave_config"
+
+# ==========================================
 # 交互式目录选择
 # ==========================================
 
-if [[ "$ARCH" == "x86_64" ]] || [[ "$ARCH" == "amd64" ]]; then
-    echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
-    echo "1. ~/.local/linuxwave"
-    echo "2. /opt/linuxwave"
-    echo "3. /usr/local/linuxwave"
-    echo "4. other (enter custom directory)"
-    echo ""
-    echo -e "${YELLOW}Enter your choice:${RESET}"
+# 目录菜单对 x86_64 与 arm64 完全一致。
+# MacWave 曾把 /usr/local 限制为 Intel Mac（Apple 芯片上不建议写入 /usr/local），
+# Linux 没有这个限制，因此这里不做区分。
+echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
+echo "1. ~/.local/linuxwave"
+echo "2. /opt/linuxwave"
+echo "3. /usr/local/linuxwave"
+echo "4. $SHARED_BASE_DIR (shared, all users)"
+echo "5. other (enter custom directory)"
+echo ""
+echo -e "${YELLOW}Enter your choice:${RESET}"
 
-    read -r choice < /dev/tty
+read -r choice < /dev/tty
 
-    case "$choice" in
-        1)
-            BASE_DIR="$HOME/.local/linuxwave"
-            ;;
-        2)
-            BASE_DIR="/opt/linuxwave"
-            ;;
-        3)
-            BASE_DIR="/usr/local/linuxwave"
-            ;;
-        4)
-            echo -e "${YELLOW}Please enter the installation directory:${RESET}"
-            read -r custom_dir < /dev/tty
-            validated=$(validate_custom_dir "$custom_dir") || exit 1
-            BASE_DIR="$validated"
-            ;;
-        *)
-            echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
-            BASE_DIR="$HOME/.local/linuxwave"
-            ;;
-    esac
-else
-    echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
-    echo "1. ~/.local/linuxwave"
-    echo "2. /opt/linuxwave"
-    echo "3. other (enter custom directory)"
-    echo ""
-    echo -e "${YELLOW}Enter your choice:${RESET}"
-
-    read -r choice < /dev/tty
-
-    case "$choice" in
-        1)
-            BASE_DIR="$HOME/.local/linuxwave"
-            ;;
-        2)
-            BASE_DIR="/opt/linuxwave"
-            ;;
-        3)
-            echo -e "${YELLOW}Please enter the installation directory:${RESET}"
-            read -r custom_dir < /dev/tty
-            validated=$(validate_custom_dir "$custom_dir") || exit 1
-            BASE_DIR="$validated"
-            ;;
-        *)
-            echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
-            BASE_DIR="$HOME/.local/linuxwave"
-            ;;
-    esac
-fi
+case "$choice" in
+    1)
+        BASE_DIR="$HOME/.local/linuxwave"
+        ;;
+    2)
+        BASE_DIR="/opt/linuxwave"
+        ;;
+    3)
+        BASE_DIR="/usr/local/linuxwave"
+        ;;
+    4)
+        SHARED_INSTALL=true
+        BASE_DIR="$SHARED_BASE_DIR"
+        ;;
+    5)
+        echo -e "${YELLOW}Please enter the installation directory:${RESET}"
+        read -r custom_dir < /dev/tty
+        validated=$(validate_custom_dir "$custom_dir") || exit 1
+        BASE_DIR="$validated"
+        ;;
+    *)
+        echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
+        BASE_DIR="$HOME/.local/linuxwave"
+        ;;
+esac
 
 DISPLAY_DIR=$(home_to_tilde "$BASE_DIR")
+
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    print_shared_install_notes
+fi
 
 # ==========================================
 # 判断是否需要 sudo
@@ -172,7 +190,11 @@ DISPLAY_DIR=$(home_to_tilde "$BASE_DIR")
 
 CURRENT_USER=$(whoami)
 
-if [[ "$BASE_DIR" == "$HOME"* ]]; then
+# 共享安装固定按系统级处理：安装树不在任何个人家目录之下，
+# 且配置必须落在 /etc，否则其他用户会按各自的 $HOME 去找、找不到。
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    NEED_SUDO=true
+elif [[ "$BASE_DIR" == "$HOME"* ]]; then
     NEED_SUDO=false
 else
     NEED_SUDO=true
@@ -189,6 +211,18 @@ run_cmd() {
 if [[ "$NEED_SUDO" == "true" ]]; then
     echo -e "${YELLOW}🌊 Granting temporary administrator access for installation...${RESET}"
     sudo -v
+fi
+
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    if id "$SHARED_USER" >/dev/null 2>&1; then
+        echo "🌊 User '$SHARED_USER' already exists."
+    else
+        echo "🌊 Creating user '$SHARED_USER'..."
+        sudo useradd -m -d "$SHARED_HOME" -s /bin/bash "$SHARED_USER"
+    fi
+
+    sudo mkdir -p "$BASE_DIR"
+    sudo chown "$SHARED_USER:$SHARED_USER" "$SHARED_HOME" "$BASE_DIR"
 fi
 
 # ==========================================
@@ -253,10 +287,13 @@ LIB_DIR="$BASE_DIR/lib"
 DEPS_DIR="$BASE_DIR/deps"
 DOWNLOAD_DIR="$BASE_DIR/downloads/tmp"
 
-# 配置文件目录：装到系统目录（需要 sudo）时用 /etc/linuxwave_config，
-# 装到用户目录（无需 sudo）时用 ~/.config/linuxwave_config。
+# 配置文件目录：共享安装固定用 /etc/linuxwave_config —— 用户级那份会按
+# 每个调用者各自的 $HOME 解析，其他用户会找不到。装到其他系统目录（需要
+# sudo）时同样用 /etc；装在用户目录（无需 sudo）时才用 ~/.config。
 # 读取时系统级优先，所以系统级 LinuxWave 总是盖过用户级的。
-if [[ "$NEED_SUDO" == "true" ]]; then
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    CONFIG_DIR="$SHARED_CONFIG_DIR"
+elif [[ "$NEED_SUDO" == "true" ]]; then
     CONFIG_DIR="/etc/linuxwave_config"
 else
     CONFIG_DIR="$HOME/.config/linuxwave_config"
@@ -338,11 +375,20 @@ EOF
 # ==========================================
 
 if [[ "$NEED_SUDO" == "true" ]]; then
-    sudo chown -R "$CURRENT_USER": "$BASE_DIR"
+    if [[ "$SHARED_INSTALL" == "true" ]]; then
+        sudo chown -R "$SHARED_USER:$SHARED_USER" "$BASE_DIR"
+    else
+        sudo chown -R "$CURRENT_USER": "$BASE_DIR"
+    fi
 fi
 
+# 共享安装的配置保持 root:root 644：全体用户可读，但只有 root 能改
 if [[ "$NEED_SUDO" == "true" ]]; then
-    sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
+    if [[ "$SHARED_INSTALL" == "true" ]]; then
+        sudo chown -R root:root "$CONFIG_DIR"
+    else
+        sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
+    fi
 fi
 run_cmd chmod 755 "$CONFIG_DIR"
 run_cmd chmod 644 "$CONFIG_FILE"
@@ -474,7 +520,19 @@ done <<< "$FILE_ENTRIES"
 # ==========================================
 
 if [[ "$NEED_SUDO" == "true" ]]; then
-    sudo chown -R "$CURRENT_USER": "$BASE_DIR"
+    if [[ "$SHARED_INSTALL" == "true" ]]; then
+        sudo chown -R "$SHARED_USER:$SHARED_USER" "$BASE_DIR"
+    else
+        sudo chown -R "$CURRENT_USER": "$BASE_DIR"
+    fi
+fi
+
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    # useradd -m 建出的家目录默认是 750，其他用户连进入都不行；
+    # a+rX 里大写的 X 只给目录和原本可执行的文件加 x，不会误改普通文件。
+    echo "🌊 Opening $SHARED_HOME and $BASE_DIR to all users..."
+    sudo chmod 755 "$SHARED_HOME"
+    sudo chmod -R a+rX "$BASE_DIR"
 fi
 
 # ==========================================
@@ -522,6 +580,20 @@ fi
 
 PATH_LINE="export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\""
 
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    # 共享安装：$SHARED_USER 自己的 shell 也要能直接用 wave
+    SHARED_RC="$SHARED_HOME/.bashrc"
+    if sudo test -f "$SHARED_RC"; then
+        if sudo grep -qF "$PATH_LINE" "$SHARED_RC" 2>/dev/null; then
+            echo "🌊 LinuxWave is already in $SHARED_RC."
+        else
+            echo "🌊 Adding LinuxWave to PATH in $SHARED_RC..."
+            printf '\n# LinuxWave\n%s\n' "$PATH_LINE" | sudo tee -a "$SHARED_RC" > /dev/null
+            sudo chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
+        fi
+    fi
+fi
+
 if grep -qF "$PATH_LINE" "$RC_FILE" 2>/dev/null; then
     echo "🌊 LinuxWave is already in your PATH."
 else
@@ -549,6 +621,17 @@ echo "🌊 Installation complete!"
 echo "🌊 LinuxWave installed to: $DISPLAY_DIR"
 echo "🌊 Architecture: $ARCH"
 echo ""
+
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    echo "🌊 Shared install ready."
+    echo "🌊 Config   : $CONFIG_DIR  (system-level, every user resolves it)"
+    echo "🌊 Owner    : $SHARED_USER"
+    echo "🌊 Other users can enable 'wave' with:"
+    echo -e "${YELLOW}    echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc${RESET}"
+    echo "🌊 Only '$SHARED_USER' and root can install packages; see"
+    echo "🌊 .templates/SPECIAL/INSTALL_BY_INTERNET.md for the shared-write group setup."
+    echo ""
+fi
 RC_DISPLAY=$(home_to_tilde "$RC_FILE")
 echo "🌊 To use 'wave' immediately in this terminal, run:"
 echo -e "${YELLOW}    source $RC_DISPLAY${RESET}"
