@@ -12,7 +12,7 @@ set -eE
 BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.6.1"
+LINUXWAVE_VERSION="2.6.2"
 
 BASE_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/$BRANCH"
 
@@ -830,7 +830,7 @@ fi
 # 必须放在「安装完成」之前：否则先告诉用户已经装好，随后又因为不同意而全部删除。
 
 echo ""
-echo -e "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.macwave.org).${RESET}"
+echo -e "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.org).${RESET}"
 if [[ "$CLI_SILENT" == "true" ]]; then
     echo "🌊 --silent: the agreement is accepted automatically."
     agreement="y"

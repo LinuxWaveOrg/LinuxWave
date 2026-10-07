@@ -8,13 +8,13 @@ macOS? View [MacWave](https://github.com/MacWaveOrg/MacWave)
 
 ## 🌊 Official Website
 
-[linuxwave.macwave.org](https://linuxwave.macwave.org)
+[linuxwave.org](https://linuxwave.org)
 
 ## 🌊 Supported Platform
 Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
-2.6.1, Release on 2026-10-07
+2.6.2, Release on 2026-10-07
 
 ## 🌊 What is LinuxWave?
 
