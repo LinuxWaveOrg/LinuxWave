@@ -368,9 +368,10 @@ if [[ "$NEED_SUDO" == "true" && -n "$TREE_GROUP" && "$TREE_GROUP" != "root" \
     # setgid 加在目录上：否则组员新建的文件会落回他自己的主组，下一个组员就写不进去
     run_cmd find "$BASE_DIR" -type d -exec chmod g+s {} +
 
-    # 会话里还没有这个组的身份 -> 也要提示（加过但一直没重登就是这种）。
-    # 已经有了、而且这次也没加人，就不必为升级专门重登，什么都不说。
-    if ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
+    # 会话里还没有这个组的身份 -> 也要提示（加过组但一直没重登就是这种）。
+    # 用不带参数的 `id -G`：具名那种查的是 /etc 数据库，会把「已写进库、但当前
+    # shell 还没这个组」误判成已生效，于是谎报「不用重登」。
+    if ! id -G 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
         RELOGIN_NEEDED=true
     fi
 

@@ -741,9 +741,12 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     sudo groupadd -f "$SHARED_USER"
 
     RELOGIN_NEEDED=false
-    # 判成员要按 gid，不能按组名：`id -nG` 是「按 gid 反查名字再列出来」，
-    # 一旦该组的 gid 与用户主组相同（沙箱里就是这样）就列不出这个名字，
-    # 于是会误判成「还没入组」，每次都白跑一遍 usermod。
+    # 这两个判断不能混用（实测过 `id` 的两种语义）：
+    #   · `id -G <用户名>` 查的是 /etc 数据库 —— 回答「这个人配在组里了吗」，
+    #     用来决定要不要跑 usermod；
+    #   · `id -G`（不带参数）读的是**当前会话**的进程组 —— 回答「这个 shell 真的
+    #     具备该组身份了吗」。刚写进 /etc/group 而还没重登时，前者为真、后者为假，
+    #     所以「要不要重新登录」只能用后者，否则会把待重登的用户谎报成已生效。
     SHARED_GID="$(getent group "$SHARED_USER" 2>/dev/null | cut -d: -f3)"
     if [[ "$CURRENT_USER" != "$SHARED_USER" ]] \
         && ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
@@ -765,7 +768,9 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
 
     # 会话里还没有这个组的身份 -> 也要提示（加过组但一直没重登就是这种）。
     # 权限位本身是立即生效的，只有「你个人的组身份」要等新登录会话。
-    if ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
+    # 这里刻意用不带参数的 `id -G`：具名那种是查 /etc 数据库，会把「已写进库、
+    # 但当前 shell 还没这个组」误判成已生效。
+    if ! id -G 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
         RELOGIN_NEEDED=true
     fi
 fi
