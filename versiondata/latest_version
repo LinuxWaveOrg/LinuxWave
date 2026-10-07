@@ -2,4 +2,4 @@ version: "2.5.3"
 release_date: "2026-10-07"
 build_number: "280H0105"
 branch: "HEAD"
-update_command: <<< /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/selfupdate.sh)" >>>
+update_command: <<< /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/selfupdate.sh)" >>>
