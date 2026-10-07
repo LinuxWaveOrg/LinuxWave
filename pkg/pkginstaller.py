@@ -11,6 +11,8 @@ import time
 import platform
 import subprocess
 import re
+import grp
+import pwd
 from pathlib import Path
 
 
@@ -393,21 +395,61 @@ def fetch_max_version(package_name, arch):
 
 # -------------------- 写入权限提示 --------------------
 
+def group_name_for_gid(gid):
+    """gid 对应的组名；gid 0 返回 None。
+
+    树属 root:root（/opt、/usr/local 这类系统级安装就是）时，提示「加入 root 组」
+    是害人的建议，所以那种情况只给 sudo 全路径，不提组。
+    """
+    if gid == 0:
+        return None
+    try:
+        return grp.getgrgid(gid).gr_name
+    except KeyError:
+        return None
+
+
+def tree_group_name():
+    """安装树所属的组；取不到（树没了等）返回 None。"""
+    try:
+        return group_name_for_gid(os.stat(BASE_DIR).st_gid)
+    except OSError:
+        return None
+
+
+def current_user_name():
+    """提示里要给出可直接复制的 usermod 命令，所以得知道自己是谁。"""
+    try:
+        return pwd.getpwuid(os.getuid()).pw_name
+    except KeyError:
+        return os.environ.get("USER", "<your-user>")
+
+
 def print_write_permission_advice(path=""):
     """共用/系统级安装树下普通用户写不进去。
 
     实录里这里原本只抛一个原始 `[Errno 13] Permission denied: ...`，用户看不出
-    该怎么办；而安装器提示过的「root 也能装包」在 `sudo wave` 下必然失败
-    （sudo 用自己那套 PATH，找不到 bin 不在标准位置的 wave）。这里把这两点讲清。
+    该怎么办；而「root 也能装包」这条提示在 `sudo wave` 下必然失败（sudo 用自己
+    那套 PATH，找不到不在标准位置的 wave）。共享安装改成组共享写之后，最常见的
+    原因变成了「刚被加进组、但还没重新登录」—— 这句必须说出来，否则用户会以为
+    是装坏了。
     """
+    group = tree_group_name()
     print(f"{RED_BOLD}🌊 Error: No write permission for the LinuxWave install tree.{RESET}")
     if path:
         print(f"🌊 Path: {path}")
     print(f"🌊 Packages are unpacked into {BASE_DIR}, which belongs to another account.")
     print(f"{YELLOW}🌊 Run it as root, giving the full path ('sudo' has its own PATH):{RESET}")
     print(f"     sudo {BASE_DIR}/lib/wave install <package>")
-    print(f"🌊 To let several users install without sudo, set up the shared-write group;")
-    print(f"🌊 see .templates/SPECIAL/INSTALL_BY_INTERNET.md")
+    if group:
+        print(f"{YELLOW}🌊 Or join the '{group}' group that owns the tree, then log out and back in:{RESET}")
+        print(f"     sudo usermod -aG {group} {current_user_name()}")
+        print(f"🌊 Group membership only takes effect on a new login - if you were added to")
+        print(f"🌊 '{group}' moments ago (a shared install does that), that is what is still")
+        print(f"🌊 missing here. Afterwards plain 'wave install <package>' works, no sudo,")
+        print(f"🌊 no full path.")
+    else:
+        print(f"🌊 Only root can write there, so the 'sudo' form above is the way in.")
 
 
 def ensure_install_writable():

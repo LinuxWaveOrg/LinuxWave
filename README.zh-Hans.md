@@ -16,7 +16,7 @@ macOS 用户？请看 [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 最新版本
 
-2.6.2，发布于 2026-10-07
+2.6.3，发布于 2026-10-08
 
 ## 🌊 LinuxWave 是什么？
 
@@ -95,14 +95,16 @@ bash install.sh --silent --dir-option=4
 共享安装（选项 4）始终使用 `/etc/linuxwave_config`，以保证全机所有用户解析到同一个安装。
 它需要 `patchelf`、Python 3.14+，以及一次性提供 `sudo`；若 `linuxwave` 账号不存在会自动创建。
 
-> **往共享安装树里装软件包，必须用 `sudo` 加全路径。** 只有 `linuxwave` 账号和 root 能写入
-> 该目录。`sudo` 用的是它自己那套 `PATH`，里面没有 `/home/linuxwave/.linuxwave/lib`，所以 `sudo wave install …`
-> 会报「找不到命令」；请直接写出入口：
+> **共享安装是组共享的（Linuxbrew 式）。** 安装树归 `linuxwave` 组，运行安装器的人自动入组，
+> 于是装包就是以你自己的身份在写——无需 `sudo`，也无需写全路径：
 > ```
-> sudo /home/linuxwave/.linuxwave/lib/wave install <package>
+> wave install <package>
 > ```
-> 写不进安装树的用户，会在报错信息里原样拿到这条命令。想让多个用户免 `sudo` 装包，请按
-> `.templates/SPECIAL/INSTALL_BY_INTERNET.md` 里说明配置共享写组。
+> 组身份只在新的登录会话里生效，第一次装包前请退出重登一次（或在当前 shell 跑
+> `newgrp linuxwave`）。让更多用户也能装：`sudo usermod -aG linuxwave <用户>`（他们同样要重登）。
+> 组内成员可以改动整棵树，包括 `lib/wave` 本体。`wave selfupdate` 仍然需要 `sudo`：它要重写
+> root 属主的 `/etc/linuxwave_config`。不在组内的用户会在报错信息里拿到一条可用的 `sudo`
+> 命令——`sudo wave install …` 本身跑不通，因为 `sudo` 用的是它自己那套 `PATH`。
 ## 卸载 LinuxWave
 
 要从系统中彻底移除 LinuxWave，请在终端中运行以下命令：

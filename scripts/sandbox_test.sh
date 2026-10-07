@@ -306,6 +306,18 @@ scenario_shared() {
     check "调用者的 rc 也拿到 PATH" "$(count_in /root/.bashrc "linuxwave/.linuxwave")" "1"
     check "家目录放开到 755" "$(stat -c '%a' /home/linuxwave)" "755"
 
+    # 共享写：Linuxbrew 式组共享（安装器自动完成，不再需要手工配组）
+    check "调用者被加进 linuxwave 组" \
+        "$(awk -F: '$1=="linuxwave"{print $4}' /etc/group)" "root"
+    check "树目录的组写位已打开" \
+        "$(stat -c '%A' /home/linuxwave/.linuxwave | cut -c6)" "w"
+    check "bin 目录带 setgid（组员新建的文件继承组）" \
+        "$(stat -c '%A' /home/linuxwave/.linuxwave/bin | cut -c7)" "s"
+    check "lib 也被组写（代价已写进文档）" \
+        "$(stat -c '%A' /home/linuxwave/.linuxwave/lib | cut -c6)" "w"
+    contains "提示组身份要重新登录才生效" "$OUT" "was just added to 'linuxwave'"
+    contains "提示如何加更多用户" "$OUT" "sudo usermod -aG linuxwave <user>"
+
     uninstall_run --force
     check "共享卸载成功" "$?" "0"
     check "共享卸载删掉安装树" "$([[ -e /home/linuxwave/.linuxwave ]] && echo yes || echo no)" "no"
@@ -317,6 +329,7 @@ scenario_shared() {
     # 配置已被上一次卸载清掉、只剩共享安装树的场景（2.5.2 修过这里）
     reset_state
     install_run --silent --dir-option=4
+    contains "已在组内时不再谎称刚入组" "$OUT" "is already in 'linuxwave'"
     rm -rf /etc/linuxwave_config
     mkdir -p /home/linuxwave/.config/linuxwave_config
     echo '{"base_dir":"/home/linuxwave/.linuxwave"}' > /home/linuxwave/.config/linuxwave_config/config.json
@@ -340,6 +353,23 @@ scenario_shared() {
     # 沙箱里 userdel 必然失败（真正要删的账号是命名空间里唯一被映射的那个 uid），
     # 所以这里只断言「如实报告」，不断言删除成功
     check "失败时不谎报已删除" "$(count_in "$OUT" "User 'linuxwave' removed")" "0"
+
+    # usermod 失败（账号由 LDAP/SSSD 管、/etc/group 有重复条目…）时：
+    # 安装必须照常成功——树已经装好也仍然能用——但要如实报告并给出手工命令
+    reset_state
+    sed -i 's|^\(linuxwave:[^:]*:[^:]*:\).*|\1|' /etc/group
+    cat > /root/bin/usermod << 'STUB'
+#!/bin/sh
+exit 10
+STUB
+    chmod +x /root/bin/usermod
+    install_run --silent --dir-option=4
+    check "usermod 失败时安装仍然成功" "$?" "0"
+    contains "usermod 失败时如实报告" "$OUT" "Could not add 'root' to 'linuxwave'"
+    contains "usermod 失败时给出手工命令" "$OUT" "sudo usermod -aG linuxwave root"
+    check "usermod 失败时仍打开组写位" \
+        "$(stat -c '%A' /home/linuxwave/.linuxwave | cut -c6)" "w"
+    rm -f /root/bin/usermod
 }
 
 scenario_link_regression() {
@@ -455,15 +485,38 @@ scenario_write_permission() {
     check "不可写时退出码为 1" "$rc" "1"
     contains "指出没有写入权限" "$OUT" "No write permission"
     contains "给出可执行的 sudo 全路径命令" "$OUT" "sudo /srv/ro-lw/linuxwave/lib/wave install"
+    # 这棵树属 root:root（系统级安装那种），提示不该劝人去加入 root 组
+    check "不提「加入 root 组」这种害人建议" \
+        "$(count_in "$OUT" "group that owns the tree")" "0"
     # 关键：必须在联网取版本之前就失败，而不是下载到一半才炸
     check "在取版本信息之前就失败" "$(count_in "$OUT" "Fetching version info")" "0"
     check "不再抛原始 errno" "$(count_in "$OUT" "[Errno 13]")" "0"
 
-    # 11.2 安装器的共用提示也要给出可用命令（sudo wave 因 secure_path 必然找不到）
+    # 11.3 组名是「按 gid 反查」的，而且 gid 0（root:root，系统级安装那种）不给加组建议。
+    # 沙箱只能把属组设成 gid 0（外层已说明原因），所以这里直接测这个判定本身。
+    local probe_name probe_gid probe_out
+    read -r probe_name probe_gid < <(awk -F: '$3 != 0 { print $1, $3; exit }' /etc/group)
+    probe_out="$(python3 -c "
+import sys
+sys.path.insert(0, '/srv/ro-lw/linuxwave/surfboard')
+sys.path.insert(0, '/srv/ro-lw/linuxwave/lib')
+sys.path.insert(0, '/srv/ro-lw/linuxwave/pkg')
+import pkginstaller as P
+print(P.group_name_for_gid(0), P.group_name_for_gid($probe_gid))
+" 2>&1)"
+    check "gid 0 不劝人加入 root 组" "$(echo "$probe_out" | cut -d' ' -f1)" "None"
+    check "非 0 的 gid 反查出真实组名（应为 $probe_name）" \
+        "$(echo "$probe_out" | cut -d' ' -f2)" "$probe_name"
+
+    # 11.2 安装器的共用提示：推荐的是免 sudo 的 `wave install`，
+    # 而不是必然失败的 `sudo wave`（sudo 用自己那套 PATH）
     reset_state
     install_run --silent --dir-option=4
     check "共用安装成功" "$?" "0"
-    contains "共用提示给出 sudo 全路径命令" "$OUT" "sudo /home/linuxwave/.linuxwave/lib/wave install"
+    contains "共用提示推荐免 sudo 安装" "$OUT" "wave install <package>"
+    contains "共用提示说明建组这件事" "$OUT" "group for shared installs"
+    check "不再推荐必然失败的 sudo 全路径" \
+        "$(count_in "$OUT" "sudo /home/linuxwave/.linuxwave/lib/wave install")" "0"
 }
 
 scenario_interrupt() {
@@ -798,17 +851,27 @@ mkdir -p "$R/etc/sudoers.d"
 printf 'root ALL=(ALL:ALL) ALL\n' > "$R/etc/sudoers"
 chmod 0440 "$R/etc/sudoers" 2>/dev/null || true
 
-# 预置 linuxwave 账号：复用命名空间里唯一被映射的 uid（见文件头「已知限制」）
+# 预置 linuxwave 账号：复用命名空间里唯一被映射的 uid/gid（见文件头「已知限制」）。
+# 属组只能是 gid 0 —— 换成别的 gid，chown/chgrp 会因「未映射」报 EINVAL，
+# 安装器第一处「把安装树交给 linuxwave」就会失败。
 if grep -q '^linuxwave:' "$R/etc/passwd"; then
     sed -i 's|^linuxwave:[^:]*:[0-9]*:[0-9]*:[^:]*:[^:]*:[^:]*|linuxwave:x:0:0:LinuxWave:/home/linuxwave:/bin/bash|' "$R/etc/passwd"
 else
     echo 'linuxwave:x:0:0:LinuxWave:/home/linuxwave:/bin/bash' >> "$R/etc/passwd"
 fi
 if grep -q '^linuxwave:' "$R/etc/group"; then
-    sed -i 's|^linuxwave:[^:]*:[0-9]*:|linuxwave:x:0:|' "$R/etc/group"
+    sed -i 's|^linuxwave:[^:]*:[0-9]*:.*|linuxwave:x:0:|' "$R/etc/group"
 else
     echo 'linuxwave:x:0:' >> "$R/etc/group"
 fi
+
+# 「调用者还没入组」这个前提，用 root 在 passwd 里的主组表达：linuxwave 组的 gid 是 0，
+# 与 root 的主组撞号，安装器按 gid 一比就会认为「已经在组内」，入组那条路径永远走不到。
+# 给 root 换一个只存在于 /etc 里的主组 gid（进程的实际 gid 仍是 0，不受影响），
+# 就能把「尚未入组 → usermod → 已在组内」完整走一遍。
+NOGROUP_GID="$(awk -F: 'BEGIN { g = 60000 } $3 >= g { g = $3 + 1 } END { print g }' "$R/etc/group")"
+printf 'sandboxnogroup:x:%s:\n' "$NOGROUP_GID" >> "$R/etc/group"
+sed -i 's|^root:\([^:]*\):[0-9]*:[0-9]*:|root:\1:0:'"$NOGROUP_GID"':|' "$R/etc/passwd"
 mkdir -p "$R/home/linuxwave"
 
 # 替身：命名空间内本就是 uid 0；真调 loginctl 会去改宿主 systemd 的状态

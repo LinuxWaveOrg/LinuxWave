@@ -12,7 +12,7 @@ set -eE
 BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.6.2"
+LINUXWAVE_VERSION="2.6.3"
 
 BASE_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/$BRANCH"
 
@@ -108,11 +108,13 @@ print_shared_install_notes() {
     echo ""
     echo "🌊 The '$SHARED_USER' account is created automatically if missing."
     echo "🌊 Every user on this machine will be able to run 'wave'."
-    echo "🌊 Only '$SHARED_USER' and root can install packages. 'sudo' uses its own"
-    echo "🌊 PATH, so give the full path:"
-    echo "     sudo $SHARED_BASE_DIR/lib/wave install <package>"
-    echo "🌊 To let several users install, set up the shared-write group; see"
-    echo "🌊 .templates/SPECIAL/INSTALL_BY_INTERNET.md."
+    echo "🌊 Installs are shared through the '$SHARED_USER' group (Linuxbrew style):"
+    echo "🌊 the tree is handed to that group, and '$CURRENT_USER' joins it, so installing"
+    echo "🌊 needs neither sudo nor a full path:"
+    echo "     wave install <package>"
+    echo "🌊 Group membership only applies to a new login: log out and back in, or run"
+    echo "🌊 'newgrp $SHARED_USER' in this shell, before installing."
+    echo "🌊 More users: sudo usermod -aG $SHARED_USER <user>   (they re-login as well)"
     echo ""
 }
 
@@ -317,6 +319,9 @@ case "$choice" in
         ;;
 esac
 
+# 调用者是谁要早于共享安装提示，提示里要报出「你」会被加进哪个组
+CURRENT_USER=$(whoami)
+
 DISPLAY_DIR=$(home_to_tilde "$BASE_DIR")
 
 if [[ "$SHARED_INSTALL" == "true" ]]; then
@@ -326,8 +331,6 @@ fi
 # ==========================================
 # 判断是否需要 sudo
 # ==========================================
-
-CURRENT_USER=$(whoami)
 
 # 共享安装固定按系统级处理：安装树不在任何个人家目录之下，
 # 且配置必须落在 /etc，否则其他用户会按各自的 $HOME 去找、找不到。
@@ -725,6 +728,36 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     echo "🌊 Opening $SHARED_HOME and $BASE_DIR to all users..."
     sudo chmod 755 "$SHARED_HOME"
     sudo chmod -R a+rX "$BASE_DIR"
+
+    # Linuxbrew 式共享写：整棵树交给 '$SHARED_USER' 组，调用者入组。
+    # 只给读 + 执行是不够的——组员连 downloads/tmp 都建不出来，装包必然失败，
+    # 所以这里把组写位打开。代价是组员能改动整棵树，包括 lib/wave 本体
+    # （见 .templates/SPECIAL/INSTALL_BY_INTERNET.md 末尾对这一点说明）。
+    echo "🌊 Setting up the '$SHARED_USER' group for shared installs..."
+    sudo groupadd -f "$SHARED_USER"
+
+    GROUP_JOIN_HINT=""
+    # 判成员要按 gid，不能按组名：`id -nG` 是「按 gid 反查名字再列出来」，
+    # 一旦该组的 gid 与用户主组相同（沙箱里就是这样）就列不出这个名字，
+    # 于是会误判成「还没入组」，每次都白跑一遍 usermod。
+    SHARED_GID="$(getent group "$SHARED_USER" 2>/dev/null | cut -d: -f3)"
+    if [[ "$CURRENT_USER" != "$SHARED_USER" ]] \
+        && ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
+        # 加组失败不该让整个安装失败：树本身已经装好、也仍然能用，
+        # 用户只是暂时还得按提示用 sudo 装包。失败要说清楚，不能吞掉。
+        if sudo usermod -aG "$SHARED_USER" "$CURRENT_USER"; then
+            GROUP_JOIN_HINT="$CURRENT_USER"
+        else
+            echo -e "${YELLOW}🌊 Could not add '$CURRENT_USER' to '$SHARED_USER' automatically.${RESET}"
+            echo -e "${YELLOW}🌊 Add it by hand: sudo usermod -aG $SHARED_USER $CURRENT_USER${RESET}"
+        fi
+    fi
+
+    sudo chgrp -R "$SHARED_USER" "$BASE_DIR"
+    sudo chmod -R g+w "$BASE_DIR"
+    # setgid 必须加在目录上：否则组员新建的文件会落回他自己的主组，
+    # 下一个组员就写不进去了。
+    sudo find "$BASE_DIR" -type d -exec chmod g+s {} +
 fi
 
 # ==========================================
@@ -878,14 +911,22 @@ echo ""
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     echo "🌊 Shared install ready."
     echo "🌊 Config   : $CONFIG_DIR  (system-level, every user resolves it)"
-    echo "🌊 Owner    : $SHARED_USER"
+    echo "🌊 Owner    : $SHARED_USER:$SHARED_USER  (shared write via the '$SHARED_USER' group)"
     echo "🌊 Other users can enable 'wave' with:"
     echo -e "${YELLOW}    echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc${RESET}"
-    echo "🌊 Only '$SHARED_USER' and root can install packages. 'sudo' uses its own"
-    echo "🌊 PATH, so give the full path:"
-    echo "     sudo $BASE_DIR/lib/wave install <package>"
-    echo "🌊 To let several users install, see the shared-write group setup in"
-    echo "🌊 .templates/SPECIAL/INSTALL_BY_INTERNET.md."
+    echo "🌊 Installs go through that group, so they need no sudo and no full path:"
+    echo "     wave install <package>"
+    if [[ -n "$GROUP_JOIN_HINT" ]]; then
+        echo -e "${YELLOW}🌊 '$GROUP_JOIN_HINT' was just added to '$SHARED_USER'. Log out and back in,${RESET}"
+        echo -e "${YELLOW}🌊 or run 'newgrp $SHARED_USER', before installing - the group only${RESET}"
+        echo -e "${YELLOW}🌊 takes effect on a new login, and until it does the tree is still${RESET}"
+        echo -e "${YELLOW}🌊 unwritable (wave will say so).${RESET}"
+    else
+        echo "🌊 '$CURRENT_USER' is already in '$SHARED_USER'; nothing to re-login for."
+    fi
+    echo "🌊 To let more users install:"
+    echo "     sudo usermod -aG $SHARED_USER <user>   (they re-login as well)"
+    echo "🌊 'wave selfupdate' still needs sudo: it rewrites $CONFIG_DIR, which is root-owned."
     echo ""
 fi
 RC_DISPLAY=$(home_to_tilde "$RC_FILE")

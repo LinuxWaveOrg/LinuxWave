@@ -201,6 +201,11 @@ curl: (28) Failed to connect ... timed out
 
 ## 可选：让多个用户都能安装软件包
 
+**2.6.3 起安装器会自己完成这一步**：选共享安装（选项 4）时，它会自动建 `linuxwave` 组、把运行安装
+器的人加进该组、把安装树交给该组并打开组写位（目录加 `setgid`，让组员新建的文件继承该组），
+收尾提示里也说明「组身份要重新登录才生效」。下面这套手工步骤用于**已经装好的旧安装树**，
+或者要给**另外的用户**开通装包权限。
+
 ⑦ 只授予了「读 + 执行」，其他用户仍**不能写入**（`wave install` 会因权限失败）。要做成真正可共享安装的 Linuxbrew，需要引入用户组与 setgid：
 
 ```console
@@ -211,6 +216,11 @@ mike@mike-Inspiron-16-Plus-7640:~$ sudo chmod -R g+w /home/linuxwave/.linuxwave
 mike@mike-Inspiron-16-Plus-7640:~$ sudo find /home/linuxwave/.linuxwave -type d -exec chmod g+s {} +
 ```
 
-**执行后需要重新登录**（或 `newgrp linuxwave`）组身份才生效。
+只给某一个用户开通，就只跑 `sudo usermod -aG linuxwave <用户名>` 那一行。
+
+**执行后需要重新登录**（或 `newgrp linuxwave`）组身份才生效——安装器自动做的那份也是同一个道理。
+
+配合好的话，装包就不再需要 `sudo` 和全路径了，直接 `wave install <package>`。注意 `wave selfupdate`
+仍然需要 `sudo`：它要重写 root 属主的 `/etc/linuxwave_config/VERSION.json`。
 
 > 多用户共享写入意味着组内任何人都能改动整个安装树，包括 `lib/` 里的 `wave` 本体。若不需要多人安装，**建议只做 ⑦**。
