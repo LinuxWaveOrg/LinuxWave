@@ -36,7 +36,7 @@ surfboard/depsinfo_{arch}/{name}/_{name}@{version}   url / sha256 / deps
 In the terminal, run:
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)" && source ~/.zshrc
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" && source ~/.zshrc
 ```
 
 (If you are using bash instead of zsh, run `source ~/.bashrc`)
