@@ -16,7 +16,7 @@ macOS 用户？请看 [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 最新版本
 
-2.6.4，发布于 2026-10-08
+2.6.5，发布于 2026-10-08
 
 ## 🌊 LinuxWave 是什么？
 

@@ -12,7 +12,7 @@ set -eE
 BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.6.4"
+LINUXWAVE_VERSION="2.6.5"
 
 BASE_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/$BRANCH"
 
