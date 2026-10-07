@@ -2,7 +2,7 @@
 
 # LinuxWave 🌊 Official Installer
 # This script downloads wave.py, installs dependencies, and configures PATH.
-# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)"
+# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 
 # -E（errtrace）让下面那个 ERR 陷阱能看见 run_cmd 等**函数内部**的失败：
 # 默认情况下陷阱不继承进函数，中途失败就只剩一个光秃秃的 curl 退出码。
@@ -14,7 +14,7 @@ BRANCH="HEAD"
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
 LINUXWAVE_VERSION="2.5.3"
 
-BASE_URL="https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/$BRANCH"
+BASE_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/$BRANCH"
 
 # ==========================================
 # 颜色定义
@@ -357,7 +357,7 @@ fi
 # 这一步刻意放在「建目录 / 写配置 / 清旧版」之前：连不上 configdata 就直接退出，
 # 不会留下一个配置已写好、文件却一个都没下的半成品安装。
 
-CONFIGDATA_URL="https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/configdata"
+CONFIGDATA_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/configdata"
 FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
 FILES_INFO_TMP="$(mktemp)"
 FILES_INFO_ATTEMPTS=3
