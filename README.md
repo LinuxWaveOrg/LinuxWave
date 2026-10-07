@@ -106,7 +106,7 @@ on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
 
 > **Installing packages into a shared tree needs `sudo` with the full path.**
 > Only the `linuxwave` account and root may write there. `sudo` searches its own
-> `PATH`, which does not contain `~/.linuxwave/lib`, so `sudo wave install …`
+> `PATH`, which does not contain `/home/linuxwave/.linuxwave/lib`, so `sudo wave install …`
 > fails with *command not found*; name the entry point instead:
 > ```
 > sudo /home/linuxwave/.linuxwave/lib/wave install <package>

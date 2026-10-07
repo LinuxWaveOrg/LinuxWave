@@ -96,7 +96,7 @@ bash install.sh --silent --dir-option=4
 它需要 `patchelf`、Python 3.14+，以及一次性提供 `sudo`；若 `linuxwave` 账号不存在会自动创建。
 
 > **往共享安装树里装软件包，必须用 `sudo` 加全路径。** 只有 `linuxwave` 账号和 root 能写入
-> 该目录。`sudo` 用的是它自己那套 `PATH`，里面没有 `~/.linuxwave/lib`，所以 `sudo wave install …`
+> 该目录。`sudo` 用的是它自己那套 `PATH`，里面没有 `/home/linuxwave/.linuxwave/lib`，所以 `sudo wave install …`
 > 会报「找不到命令」；请直接写出入口：
 > ```
 > sudo /home/linuxwave/.linuxwave/lib/wave install <package>
