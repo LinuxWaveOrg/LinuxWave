@@ -315,7 +315,7 @@ scenario_shared() {
         "$(stat -c '%A' /home/linuxwave/.linuxwave/bin | cut -c7)" "s"
     check "lib 也被组写（代价已写进文档）" \
         "$(stat -c '%A' /home/linuxwave/.linuxwave/lib | cut -c6)" "w"
-    contains "提示组身份要重新登录才生效" "$OUT" "was just added to 'linuxwave'"
+    contains "提示组身份要重新登录才生效" "$OUT" "is now in the 'linuxwave' group"
     contains "提示如何加更多用户" "$OUT" "sudo usermod -aG linuxwave <user>"
 
     uninstall_run --force
@@ -329,7 +329,7 @@ scenario_shared() {
     # 配置已被上一次卸载清掉、只剩共享安装树的场景（2.5.2 修过这里）
     reset_state
     install_run --silent --dir-option=4
-    contains "已在组内时不再谎称刚入组" "$OUT" "is already in 'linuxwave'"
+    contains "已在组内时不再谎称刚入组" "$OUT" "already has the 'linuxwave' group"
     rm -rf /etc/linuxwave_config
     mkdir -p /home/linuxwave/.config/linuxwave_config
     echo '{"base_dir":"/home/linuxwave/.linuxwave"}' > /home/linuxwave/.config/linuxwave_config/config.json

@@ -12,7 +12,7 @@ set -eE
 BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.6.3"
+LINUXWAVE_VERSION="2.6.4"
 
 BASE_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/$BRANCH"
 
@@ -106,14 +106,18 @@ print_shared_install_notes() {
     echo "        Arch          : sudo pacman -S patchelf"
     echo "   3. Python 3.14 or above - required by LinuxWave and by .conda packages"
     echo ""
+    echo -e "${YELLOW}🌊 4. One thing you must do afterwards: log out and back in.${RESET}"
+    echo -e "${YELLOW}🌊    Packages are installed through the '$SHARED_USER' group, and '$CURRENT_USER'${RESET}"
+    echo -e "${YELLOW}🌊    is added to it by this install - but a group only takes effect in a new${RESET}"
+    echo -e "${YELLOW}🌊    login session. Until you re-login the tree is still unwritable and 'wave'${RESET}"
+    echo -e "${YELLOW}🌊    will say so. Nothing is broken; just log out and back in (or run${RESET}"
+    echo -e "${YELLOW}🌊    'newgrp $SHARED_USER' in this shell).${RESET}"
+    echo ""
     echo "🌊 The '$SHARED_USER' account is created automatically if missing."
     echo "🌊 Every user on this machine will be able to run 'wave'."
-    echo "🌊 Installs are shared through the '$SHARED_USER' group (Linuxbrew style):"
-    echo "🌊 the tree is handed to that group, and '$CURRENT_USER' joins it, so installing"
-    echo "🌊 needs neither sudo nor a full path:"
+    echo "🌊 Installs are shared through that group, so they need neither sudo nor a full"
+    echo "🌊 path:"
     echo "     wave install <package>"
-    echo "🌊 Group membership only applies to a new login: log out and back in, or run"
-    echo "🌊 'newgrp $SHARED_USER' in this shell, before installing."
     echo "🌊 More users: sudo usermod -aG $SHARED_USER <user>   (they re-login as well)"
     echo ""
 }
@@ -736,7 +740,7 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     echo "🌊 Setting up the '$SHARED_USER' group for shared installs..."
     sudo groupadd -f "$SHARED_USER"
 
-    GROUP_JOIN_HINT=""
+    RELOGIN_NEEDED=false
     # 判成员要按 gid，不能按组名：`id -nG` 是「按 gid 反查名字再列出来」，
     # 一旦该组的 gid 与用户主组相同（沙箱里就是这样）就列不出这个名字，
     # 于是会误判成「还没入组」，每次都白跑一遍 usermod。
@@ -746,7 +750,7 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         # 加组失败不该让整个安装失败：树本身已经装好、也仍然能用，
         # 用户只是暂时还得按提示用 sudo 装包。失败要说清楚，不能吞掉。
         if sudo usermod -aG "$SHARED_USER" "$CURRENT_USER"; then
-            GROUP_JOIN_HINT="$CURRENT_USER"
+            RELOGIN_NEEDED=true
         else
             echo -e "${YELLOW}🌊 Could not add '$CURRENT_USER' to '$SHARED_USER' automatically.${RESET}"
             echo -e "${YELLOW}🌊 Add it by hand: sudo usermod -aG $SHARED_USER $CURRENT_USER${RESET}"
@@ -758,6 +762,12 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     # setgid 必须加在目录上：否则组员新建的文件会落回他自己的主组，
     # 下一个组员就写不进去了。
     sudo find "$BASE_DIR" -type d -exec chmod g+s {} +
+
+    # 会话里还没有这个组的身份 -> 也要提示（加过组但一直没重登就是这种）。
+    # 权限位本身是立即生效的，只有「你个人的组身份」要等新登录会话。
+    if ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
+        RELOGIN_NEEDED=true
+    fi
 fi
 
 # ==========================================
@@ -914,16 +924,16 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     echo "🌊 Owner    : $SHARED_USER:$SHARED_USER  (shared write via the '$SHARED_USER' group)"
     echo "🌊 Other users can enable 'wave' with:"
     echo -e "${YELLOW}    echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc${RESET}"
+    if [[ "$RELOGIN_NEEDED" == "true" ]]; then
+        echo -e "${YELLOW}🌊 '$CURRENT_USER' is now in the '$SHARED_USER' group, but this shell does${RESET}"
+        echo -e "${YELLOW}🌊 not have it yet: log out and back in (or run 'newgrp $SHARED_USER') before${RESET}"
+        echo -e "${YELLOW}🌊 installing packages. A group only takes effect in a new login session -${RESET}"
+        echo -e "${YELLOW}🌊 until then the tree is still unwritable, and 'wave' will say so.${RESET}"
+    else
+        echo "🌊 '$CURRENT_USER' already has the '$SHARED_USER' group; nothing to re-login for."
+    fi
     echo "🌊 Installs go through that group, so they need no sudo and no full path:"
     echo "     wave install <package>"
-    if [[ -n "$GROUP_JOIN_HINT" ]]; then
-        echo -e "${YELLOW}🌊 '$GROUP_JOIN_HINT' was just added to '$SHARED_USER'. Log out and back in,${RESET}"
-        echo -e "${YELLOW}🌊 or run 'newgrp $SHARED_USER', before installing - the group only${RESET}"
-        echo -e "${YELLOW}🌊 takes effect on a new login, and until it does the tree is still${RESET}"
-        echo -e "${YELLOW}🌊 unwritable (wave will say so).${RESET}"
-    else
-        echo "🌊 '$CURRENT_USER' is already in '$SHARED_USER'; nothing to re-login for."
-    fi
     echo "🌊 To let more users install:"
     echo "     sudo usermod -aG $SHARED_USER <user>   (they re-login as well)"
     echo "🌊 'wave selfupdate' still needs sudo: it rewrites $CONFIG_DIR, which is root-owned."

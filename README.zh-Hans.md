@@ -16,7 +16,7 @@ macOS 用户？请看 [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 最新版本
 
-2.6.3，发布于 2026-10-08
+2.6.4，发布于 2026-10-08
 
 ## 🌊 LinuxWave 是什么？
 
@@ -101,10 +101,11 @@ bash install.sh --silent --dir-option=4
 > wave install <package>
 > ```
 > 组身份只在新的登录会话里生效，第一次装包前请退出重登一次（或在当前 shell 跑
-> `newgrp linuxwave`）。让更多用户也能装：`sudo usermod -aG linuxwave <用户>`（他们同样要重登）。
-> 组内成员可以改动整棵树，包括 `lib/wave` 本体。`wave selfupdate` 仍然需要 `sudo`：它要重写
-> root 属主的 `/etc/linuxwave_config`。不在组内的用户会在报错信息里拿到一条可用的 `sudo`
-> 命令——`sudo wave install …` 本身跑不通，因为 `sudo` 用的是它自己那套 `PATH`。
+> `newgrp linuxwave`）。升级旧的共享安装同理——`wave selfupdate` 也会把安装树交给该组并把你
+> 加进去，所以那之后同样要重登一次。让更多用户也能装：`sudo usermod -aG linuxwave <用户>`
+> （他们同样要重登）。组内成员可以改动整棵树，包括 `lib/wave` 本体。`wave selfupdate` 仍然
+> 需要 `sudo`：它要重写 root 属主的 `/etc/linuxwave_config`。不在组内的用户会在报错信息里拿到
+> 一条可用的 `sudo` 命令——`sudo wave install …` 本身跑不通，因为 `sudo` 用的是它自己那套 `PATH`。
 ## 卸载 LinuxWave
 
 要从系统中彻底移除 LinuxWave，请在终端中运行以下命令：

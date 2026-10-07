@@ -16,7 +16,7 @@ macOS? View [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
-2.6.3, Release on 2026-10-08
+2.6.4, Release on 2026-10-08
 
 ## 🌊 What is LinuxWave?
 
@@ -111,12 +111,14 @@ on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
 > wave install <package>
 > ```
 > Group membership only applies to a new login, so log out and back in (or run
-> `newgrp linuxwave`) once before the first install. More users:
-> `sudo usermod -aG linuxwave <user>` (they re-login as well). Group members can
-> write the whole tree, `lib/wave` included. `wave selfupdate` still needs `sudo`:
-> it rewrites `/etc/linuxwave_config`, which is root-owned. A user who is not in
-> the group gets a working `sudo` command in the error message — `sudo wave
-> install …` cannot work, because `sudo` searches its own `PATH`.
+> `newgrp linuxwave`) once before the first install. Upgrading an older shared
+> install does the same thing — `wave selfupdate` hands the tree to the group and
+> adds you to it — so re-login after that too, if it is the first time. More
+> users: `sudo usermod -aG linuxwave <user>` (they re-login as well). Group
+> members can write the whole tree, `lib/wave` included. `wave selfupdate` still
+> needs `sudo`: it rewrites `/etc/linuxwave_config`, which is root-owned. A user
+> who is not in the group gets a working `sudo` command in the error message —
+> `sudo wave install …` cannot work, because `sudo` searches its own `PATH`.
 ## Uninstall LinuxWave
 
 To completely remove LinuxWave from your system, run the following command in your terminal:

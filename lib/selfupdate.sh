@@ -77,6 +77,11 @@ LIB_DIR="$BASE_DIR/lib"
 PKG_DIR="$BASE_DIR/pkg"
 SURFBOARD_DIR="$BASE_DIR/surfboard"
 
+# 更新下载是拿 root 跑的（NEED_SUDO=true 时 run_cmd 就是 sudo），新文件会落成 root
+# 属主。先把这棵树的属主/属组记下来，收尾时交回去——共享安装树否则会慢慢变成 root 的。
+TREE_OWNER="$(stat -c '%U' "$BASE_DIR" 2>/dev/null)"
+TREE_GROUP="$(stat -c '%G' "$BASE_DIR" 2>/dev/null)"
+
 # ==========================================
 # 判断是否需要 sudo
 # ==========================================
@@ -325,4 +330,60 @@ config_cmd chmod 755 "$CONFIG_DIR"
 config_cmd chmod 644 "$CONFIG_FILE" "$VERSION_FILE"
 
 echo "🌊 Version saved to $VERSION_FILE"
+
+# ==========================================
+# 交回属主，并补上共享写（组共享）
+# ==========================================
+#
+# 安装器从 2.6.3 起会给共享安装自动配好组共享写；这里让**已经存在的**安装树
+# 在升级时就地补上，不必重装。
+#
+# 只对「树属于别的账号」的树做：系统级安装（/opt、/usr/local）的树属 root 或调用者
+# 自己，既不需要这套权限，也不该劝人去加入 root 组——安装器里是同一个判断。
+
+if [[ "$NEED_SUDO" == "true" && -n "$TREE_OWNER" && -n "$TREE_GROUP" ]]; then
+    run_cmd chown -R "$TREE_OWNER:$TREE_GROUP" "$BASE_DIR"
+fi
+
+if [[ "$NEED_SUDO" == "true" && -n "$TREE_GROUP" && "$TREE_GROUP" != "root" \
+    && -n "$TREE_OWNER" && "$TREE_OWNER" != "$CURRENT_USER" ]]; then
+
+    echo "🌊 Setting up shared write through the '$TREE_GROUP' group..."
+
+    SHARED_GID="$(getent group "$TREE_GROUP" 2>/dev/null | cut -d: -f3)"
+    RELOGIN_NEEDED=false
+
+    if [[ -n "$SHARED_GID" ]] \
+        && ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
+        # 加组失败不该让升级失败：代码已经换好了，用户只是还得按提示用 sudo 装包
+        if run_cmd usermod -aG "$TREE_GROUP" "$CURRENT_USER"; then
+            RELOGIN_NEEDED=true
+        else
+            echo -e "${YELLOW}🌊 Could not add '$CURRENT_USER' to '$TREE_GROUP'.${RESET}"
+            echo -e "${YELLOW}🌊 Add it by hand: sudo usermod -aG $TREE_GROUP $CURRENT_USER${RESET}"
+        fi
+    fi
+
+    run_cmd chmod -R g+w "$BASE_DIR"
+    # setgid 加在目录上：否则组员新建的文件会落回他自己的主组，下一个组员就写不进去
+    run_cmd find "$BASE_DIR" -type d -exec chmod g+s {} +
+
+    # 会话里还没有这个组的身份 -> 也要提示（加过但一直没重登就是这种）。
+    # 已经有了、而且这次也没加人，就不必为升级专门重登，什么都不说。
+    if ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
+        RELOGIN_NEEDED=true
+    fi
+
+    if [[ "$RELOGIN_NEEDED" == "true" ]]; then
+        echo ""
+        echo -e "${YELLOW}🌊 '$CURRENT_USER' is now in the '$TREE_GROUP' group, but this shell${RESET}"
+        echo -e "${YELLOW}🌊 does not have it yet: log out and back in (or run 'newgrp $TREE_GROUP')${RESET}"
+        echo -e "${YELLOW}🌊 before installing packages. A group only takes effect in a new login${RESET}"
+        echo -e "${YELLOW}🌊 session - until then the tree is still unwritable, and 'wave' will say so.${RESET}"
+        echo -e "${YELLOW}🌊 The update itself is done; nothing is broken.${RESET}"
+    else
+        echo "🌊 '$CURRENT_USER' already has the '$TREE_GROUP' group; no re-login needed."
+    fi
+fi
+
 exit 0
