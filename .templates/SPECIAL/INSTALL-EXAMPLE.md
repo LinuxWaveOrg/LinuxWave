@@ -108,7 +108,7 @@ Please enter the installation directory:
 🌊 Or simply open a new terminal window.
 
 
-Please read the agreement before use (see bottom of https://linuxwave.macwave.org).
+Please read the agreement before use (see bottom of https://linuxwave.org).
 Have you read and agreed to the agreement? [Y/n]
 y
 You have agreed to the agreement. Installation continues.

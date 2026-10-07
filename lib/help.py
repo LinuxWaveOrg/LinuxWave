@@ -73,7 +73,7 @@ def print_custom_help():
     print(f"  {GREEN}wave unlink <name>{RESET}               Remove that link")
     print("  Links are created on install and re-pointed on uninstall; --unlink never leaves one broken.")
     print()
-    print("For more details, visit: https://linuxwave.macwave.org")
+    print("For more details, visit: https://linuxwave.org")
 
 
 # -------------------- 子命令帮助 --------------------

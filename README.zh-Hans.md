@@ -8,13 +8,13 @@ macOS 用户？请看 [MacWave](https://github.com/MacWaveOrg/MacWave)
 
 ## 🌊 官方网站
 
-[linuxwave.macwave.org](https://linuxwave.macwave.org)
+[linuxwave.org](https://linuxwave.org)
 
 ## 🌊 支持的平台
 Linux (x86_64 / arm64)
 ## 🌊 最新版本
 
-2.6.1，发布于 2026-10-07
+2.6.2，发布于 2026-10-07
 
 ## 🌊 LinuxWave 是什么？
 
