@@ -37,10 +37,10 @@ LinuxWave 是 MacWave 的官方 Linux 移植版。从 MacWave 2.0 起，MacWave 
 在终端中运行：
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" && source ~/.zshrc
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" && source ~/.bashrc
 ```
 
-（如果你使用的是 bash 而非 zsh，请运行 ```source ~/.bashrc```）
+（如果你使用的是 zsh 而非 bash，请运行 ```source ~/.zshrc```）
 
 **环境要求：Linux（x86_64 / arm64）、Python（3.14 及以上）、patchelf（用于依赖库重定位）。**
 

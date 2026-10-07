@@ -37,10 +37,10 @@ LinuxWave is a **package manager** that runs on **Linux**, designed to host comm
 In the terminal, run:
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" && source ~/.zshrc
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" && source ~/.bashrc
 ```
 
-(If you are using bash instead of zsh, run ```source ~/.bashrc```)
+(If you are using zsh instead of bash, run ```source ~/.zshrc```)
 
 **Requirements: Python (3.14 and above), patchelf (for dependency library relocation).**
 
