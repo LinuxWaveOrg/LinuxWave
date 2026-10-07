@@ -10,7 +10,7 @@ A package manager for Linux software developers.
 Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
-2.5.3, Release on 2026-10-07
+2.6.0, Release on 2026-10-07
 
 ## 🌊 What is LinuxWave?
 
