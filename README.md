@@ -6,9 +6,7 @@ macOS? View [MacWave](https://github.com/MacWaveOrg/MacWave)
 
 **English** · [简体中文](./README.zh-Hans.md)
 
-> **Site notice**: the official website has moved to **[linuxwave.org](https://linuxwave.org)**.
-> The old `linuxwave.macwave.org` now returns `404`. Install commands are unchanged, and an
-> existing install only needs one `wave selfupdate` (`2.6.2` carries the change).
+> **Site notice**: the official website has moved to **[linuxwave.org](https://linuxwave.org)** (previously `linuxwave.macwave.org`).
 
 ## 🌊 Official Website
 
