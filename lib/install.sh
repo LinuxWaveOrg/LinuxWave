@@ -12,7 +12,7 @@ set -eE
 BRANCH="HEAD"
 
 # 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.6.0"
+LINUXWAVE_VERSION="2.6.1"
 
 BASE_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/$BRANCH"
 
@@ -108,7 +108,10 @@ print_shared_install_notes() {
     echo ""
     echo "🌊 The '$SHARED_USER' account is created automatically if missing."
     echo "🌊 Every user on this machine will be able to run 'wave'."
-    echo "🌊 To let several users install packages, see the group setup in"
+    echo "🌊 Only '$SHARED_USER' and root can install packages. 'sudo' uses its own"
+    echo "🌊 PATH, so give the full path:"
+    echo "     sudo $SHARED_BASE_DIR/lib/wave install <package>"
+    echo "🌊 To let several users install, set up the shared-write group; see"
     echo "🌊 .templates/SPECIAL/INSTALL_BY_INTERNET.md."
     echo ""
 }
@@ -230,13 +233,7 @@ SHARED_CONFIG_DIR="/etc/linuxwave_config"
 # 交互式目录选择
 # ==========================================
 
-# 目录菜单对 x86_64 与 arm64 完全一致。
-# MacWave 曾把 /usr/local 限制为 Intel Mac（Apple 芯片上不建议写入 /usr/local），
-# Linux 没有这个限制，因此这里不做区分。
-if [[ -n "$CLI_DIR_OPTION" ]]; then
-    choice="$CLI_DIR_OPTION"
-    echo "🌊 Directory option: $choice (from --dir-option)"
-else
+print_dir_menu() {
     echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
     echo "1. ~/.local/linuxwave"
     echo "2. /opt/linuxwave"
@@ -245,8 +242,46 @@ else
     echo "5. other (enter custom directory)"
     echo ""
     echo -e "${YELLOW}Enter your choice:${RESET}"
+}
 
-    read -r choice < /dev/tty
+# 目录菜单对 x86_64 与 arm64 完全一致。
+# MacWave 曾把 /usr/local 限制为 Intel Mac（Apple 芯片上不建议写入 /usr/local），
+# Linux 没有这个限制，因此这里不做区分。
+if [[ -n "$CLI_DIR_OPTION" ]]; then
+    choice="$CLI_DIR_OPTION"
+    echo "🌊 Directory option: $choice (from --dir-option)"
+elif [[ "$CLI_SILENT" == "true" ]]; then
+    # --silent 承诺「自动应答目录菜单」，那就明确地选默认项并说出来，
+    # 而不是去读一个可能不存在的终端、再靠「无效输入」兜底。
+    choice="1"
+    echo "🌊 --silent without --dir-option: using the default, \$HOME/.local/linuxwave"
+else
+    MENU_ATTEMPTS=3
+    menu_try=0
+    while true; do
+        print_dir_menu
+        # `2>/dev/null` 写在输入重定向之前：没有控制终端时打开 /dev/tty 会失败，
+        # 重定向按从左到右处理，先屏蔽 stderr 才不会喷出原始报错。
+        read -r 2>/dev/null choice < /dev/tty || choice=""
+        case "$choice" in
+            1|2|3|4|5)
+                break
+                ;;
+            *)
+                menu_try=$((menu_try + 1))
+                echo ""
+                echo -e "${RED_BOLD}🌊 Error: '$choice' is not one of 1-5.${RESET}" >&2
+                # 绝不静默换到别的目录：那等于把东西装到用户没选的位置。
+                if [[ "$menu_try" -ge "$MENU_ATTEMPTS" ]]; then
+                    echo -e "${RED_BOLD}🌊 Gave up after $MENU_ATTEMPTS attempts. Nothing was installed.${RESET}" >&2
+                    echo "🌊 Re-run the installer, or pass --dir-option=N (see --help)." >&2
+                    exit 1
+                fi
+                echo -e "${YELLOW}🌊 Please enter a number from 1 to 5.${RESET}" >&2
+                echo ""
+                ;;
+        esac
+    done
 fi
 
 case "$choice" in
@@ -275,8 +310,10 @@ case "$choice" in
         BASE_DIR="$validated"
         ;;
     *)
-        echo -e "${RED_BOLD}🌊 Invalid choice. Using default: ~/.local/linuxwave${RESET}"
-        BASE_DIR="$HOME/.local/linuxwave"
+        # 上面已把选择校验到 1-5，这里只是兜底；
+        # 无论如何都不静默换成别的目录。
+        echo -e "${RED_BOLD}🌊 Error: unsupported directory choice '$choice'. Nothing was installed.${RESET}" >&2
+        exit 1
         ;;
 esac
 
@@ -361,6 +398,11 @@ CONFIGDATA_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/configd
 FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
 FILES_INFO_TMP="$(mktemp)"
 FILES_INFO_ATTEMPTS=3
+
+# 每个文件的重试次数。实测网络（尤其是 raw.githubusercontent）经常
+# 在传输中途被重置，而这里只要有一个文件失败，整轮安装就前功尽弃——
+# 不加这一层，用户就得手工重跑很多遍。
+DOWNLOAD_ATTEMPTS=5
 
 cleanup_files_info() {
     rm -f "$FILES_INFO_TMP"
@@ -631,11 +673,34 @@ while IFS=$'\t' read -r repo_path local_path executable; do
         continue
     fi
 
-    if [[ "$CLI_SILENT" != "true" ]]; then
-        echo "🌊 Downloading $repo_path..."
-    fi
     run_cmd mkdir -p "$(dirname "$BASE_DIR/$local_path")"
-    run_cmd curl -fsSL -o "$BASE_DIR/$local_path" "$BASE_URL/$repo_path"
+
+    file_ok=false
+    for attempt in $(seq 1 "$DOWNLOAD_ATTEMPTS"); do
+        if [[ "$attempt" -eq 1 ]]; then
+            # --silent 只省交互，过程仍要留痕；逐文件进度才在 silent 下压掉
+            if [[ "$CLI_SILENT" != "true" ]]; then
+                echo "🌊 Downloading $repo_path..."
+            fi
+        else
+            # 重试必须始终可见：它解释了这次安装为什么变慢
+            echo -e "${YELLOW}🌊 Retrying $repo_path ($attempt/$DOWNLOAD_ATTEMPTS)...${RESET}"
+        fi
+        # 放在 if 条件里：失败不会被 set -e 直接带走（ERR 陷阱也不触发），
+        # 由这里自己决定重试还是放弃。
+        if run_cmd curl -fsSL --connect-timeout 20 --max-time 180 \
+               -o "$BASE_DIR/$local_path" "$BASE_URL/$repo_path"; then
+            file_ok=true
+            break
+        fi
+        sleep "$attempt"
+    done
+
+    if [[ "$file_ok" != "true" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: Cannot download $repo_path after $DOWNLOAD_ATTEMPTS attempts.${RESET}" >&2
+        # 交给 ERR 陷阱：它会打印「未完成 + 残留路径 + 重跑安全」的指引
+        false
+    fi
 
     if [[ "$executable" == "1" ]]; then
         run_cmd chmod +x "$BASE_DIR/$local_path"
@@ -816,8 +881,11 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     echo "🌊 Owner    : $SHARED_USER"
     echo "🌊 Other users can enable 'wave' with:"
     echo -e "${YELLOW}    echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc${RESET}"
-    echo "🌊 Only '$SHARED_USER' and root can install packages; see"
-    echo "🌊 .templates/SPECIAL/INSTALL_BY_INTERNET.md for the shared-write group setup."
+    echo "🌊 Only '$SHARED_USER' and root can install packages. 'sudo' uses its own"
+    echo "🌊 PATH, so give the full path:"
+    echo "     sudo $BASE_DIR/lib/wave install <package>"
+    echo "🌊 To let several users install, see the shared-write group setup in"
+    echo "🌊 .templates/SPECIAL/INSTALL_BY_INTERNET.md."
     echo ""
 fi
 RC_DISPLAY=$(home_to_tilde "$RC_FILE")

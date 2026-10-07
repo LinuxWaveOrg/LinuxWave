@@ -331,7 +331,12 @@ def download_file(url, temp_path, config, input_string, display_name):
 
             try:
                 retry = input().strip().lower()
-            except (EOFError, KeyboardInterrupt):
+            except KeyboardInterrupt:
+                # Ctrl-C 是「打断」，不是「不想重试」——交给顶层统一报成 interrupted，
+                # 否则这里会打印 "Failed to download package"，把用户打断说成下载失败。
+                print("", file=sys.stderr)
+                raise
+            except EOFError:
                 retry = ""
 
             if retry == 'y':
@@ -344,6 +349,11 @@ def download_file(url, temp_path, config, input_string, display_name):
             status_code = e.response.status_code if e.response is not None else 1
             print(f"{RED_BOLD}🌊 Error: ErrorCode {status_code}{RESET}")
             sys.exit(status_code)
+
+        except PermissionError as e:
+            # 写 .partial 失败：共用安装树下这是最常见的一种失败
+            print_write_permission_advice(str(e))
+            sys.exit(1)
 
         except Exception as e:
             print(f"{RED_BOLD}🌊 Error: {e}{RESET}")
@@ -381,6 +391,38 @@ def fetch_max_version(package_name, arch):
         sys.exit(1)
 
 
+# -------------------- 写入权限提示 --------------------
+
+def print_write_permission_advice(path=""):
+    """共用/系统级安装树下普通用户写不进去。
+
+    实录里这里原本只抛一个原始 `[Errno 13] Permission denied: ...`，用户看不出
+    该怎么办；而安装器提示过的「root 也能装包」在 `sudo wave` 下必然失败
+    （sudo 用自己那套 PATH，找不到 bin 不在标准位置的 wave）。这里把这两点讲清。
+    """
+    print(f"{RED_BOLD}🌊 Error: No write permission for the LinuxWave install tree.{RESET}")
+    if path:
+        print(f"🌊 Path: {path}")
+    print(f"🌊 Packages are unpacked into {BASE_DIR}, which belongs to another account.")
+    print(f"{YELLOW}🌊 Run it as root, giving the full path ('sudo' has its own PATH):{RESET}")
+    print(f"     sudo {BASE_DIR}/lib/wave install <package>")
+    print(f"🌊 To let several users install without sudo, set up the shared-write group;")
+    print(f"🌊 see .templates/SPECIAL/INSTALL_BY_INTERNET.md")
+
+
+def ensure_install_writable():
+    """真正开始下载之前就检查能否写入，避免下载到一半才失败。"""
+    for label, path in (("the download directory", DOWNLOAD_TMP),
+                        ("the package directory", BASE_DIR / "bin")):
+        probe = path
+        while not probe.exists() and probe != probe.parent:
+            probe = probe.parent
+        if os.access(probe, os.W_OK):
+            continue
+        print_write_permission_advice(path)
+        sys.exit(1)
+
+
 # -------------------- 核心安装流程 --------------------
 
 def handle_install(input_string):
@@ -409,6 +451,9 @@ def handle_install(input_string):
         sys.exit(1)
 
     # 3. 解析版本号（只看包名 token，避免 --proxy 里的 user:pass@host 被误认）
+    #    放在联网取版本之前先确认能写入：写不进去时没必要先跑一遍网络请求
+    ensure_install_writable()
+
     ParsePkgVersion = None
     if "@" in raw_pkg:
         if "--ver" in input_string:
@@ -484,14 +529,19 @@ def handle_install(input_string):
 
     # 7. 下载
     original_filename = ParsePkgURL.split("/")[-1]
-    DOWNLOAD_TMP.mkdir(parents=True, exist_ok=True)
     temp_path = DOWNLOAD_TMP / f"{original_filename}.partial"
 
-    download_file(ParsePkgURL, temp_path, config, input_string, bin_name)
+    try:
+        DOWNLOAD_TMP.mkdir(parents=True, exist_ok=True)
+        download_file(ParsePkgURL, temp_path, config, input_string, bin_name)
 
-    # 8. 删掉 .partial 后缀
-    final_download_path = DOWNLOAD_TMP / original_filename
-    temp_path.rename(final_download_path)
+        # 8. 删掉 .partial 后缀
+        final_download_path = DOWNLOAD_TMP / original_filename
+        temp_path.rename(final_download_path)
+    except PermissionError as e:
+        # 预检查之后再出现，通常是权限被人改过或目录被换掉
+        print_write_permission_advice(str(e))
+        sys.exit(1)
 
     # 9. 拼接长字符串并传给 pkginstaller.sh（同时带上依赖列表）
     target_dir = BASE_DIR / "bin" / f"{bin_name}@{ParsePkgVersion}"

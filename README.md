@@ -14,7 +14,7 @@ macOS? View [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
-2.6.0, Release on 2026-10-07
+2.6.1, Release on 2026-10-07
 
 ## 🌊 What is LinuxWave?
 
@@ -28,7 +28,9 @@ LinuxWave is a **package manager** that runs on **Linux**, designed to host comm
 4. **No cache, always up to date.** Package metadata is fetched live from the `infosource` branch.
 5. **10 archive formats, CI-verified.** Supports no-extension binaries, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar`, `.gz`, `.xz`, `.bz2`, `.conda`.
 6. **Verify first, extract later.** SHA256 is checked before extraction.
-7. **Resumable downloads.** Interrupted? Resume with `-C`.
+7. **Resumable downloads.** Interrupted? Resume with `-C`. A file that fails
+   mid-transfer is retried up to 5 times automatically, and `Ctrl-C` stops with a
+   one-line message instead of a Python traceback.
 8. **Lightweight and transparent.** Pure Python + Shell. No heavy runtime, no hidden behavior.
 9. **Automatically manage dependencies.** Support for software packages with dependencies, using reference counting and automatic dependency management, with no need to handle dependencies manually.
 
@@ -59,6 +61,8 @@ bash install.sh --silent --dir-option=4
 
 `--silent` (`-S`) answers the directory menu and the agreement automatically. It
 needs passwordless sudo, or root, when the chosen directory requires privilege.
+Without `--dir-option`, it takes menu entry `1` (`~/.local/linuxwave`) and prints
+which default it used, instead of reading a terminal that may not exist.
 `--dir-option=N` picks menu entry `N` (1-5); for the custom entry, append the path
 after `=`, as in `--dir-option=5=/opt/mylw`. Run `install.sh --help` for the list.
 
@@ -97,6 +101,17 @@ Config file is stored in (a system-level install always takes priority):
 A shared install (option 4) always uses `/etc/linuxwave_config`, so every user
 on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
 `sudo` once; the `linuxwave` account is created automatically if missing.
+
+> **Installing packages into a shared tree needs `sudo` with the full path.**
+> Only the `linuxwave` account and root may write there. `sudo` searches its own
+> `PATH`, which does not contain `~/.linuxwave/lib`, so `sudo wave install …`
+> fails with *command not found*; name the entry point instead:
+> ```
+> sudo /home/linuxwave/.linuxwave/lib/wave install <package>
+> ```
+> A user who cannot write to the tree gets that exact command in the error
+> message. To let several users install without `sudo`, set up the shared-write
+> group described in `.templates/SPECIAL/INSTALL_BY_INTERNET.md`.
 ## Uninstall LinuxWave
 
 To completely remove LinuxWave from your system, run the following command in your terminal:

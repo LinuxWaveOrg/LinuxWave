@@ -13,7 +13,9 @@
 #
 # 覆盖：各安装目录选项 → 配置落位 → PATH 写入 / 协议拒绝后的完整回滚 /
 #       卸载的确认语义（无终端、y、n、--force、--remove-user）/
-#       安装中途失败时的指引 / 卸载器自删 / 软链接回归。
+#       安装中途失败时的指引 / 单文件下载重试 / 菜单无效输入不静默换目录 /
+#       --silent 自动应答菜单 / 共用安装树不可写时的提示 / Ctrl-C 不打印 traceback /
+#       Ctrl-C 停在重试提示上时不误报成下载失败 / 卸载器自删 / 软链接回归。
 #
 # 前置条件：util-linux 的 unshare（内核需允许非特权用户命名空间）、curl、python3，
 # 且必须以**非 root** 用户运行（要用 unshare -r 把自己的 uid 映射成命名空间里的 0）。
@@ -103,9 +105,11 @@ uninstall_copy_fresh() {
 
 # 清掉上一场景留下的安装痕迹
 reset_state() {
+    umount /srv/ro-lw 2>/dev/null || true
     rm -rf /root/.local/linuxwave /root/.config/linuxwave_config
     rm -rf /opt/linuxwave /usr/local/linuxwave /srv/mylw /etc/linuxwave_config
     rm -rf /home/linuxwave/.linuxwave /home/linuxwave/.config/linuxwave_config
+    rm -rf /srv/ro-lw
     rm -f /root/.bashrc /root/.profile /root/.zshrc
     rm -f /home/linuxwave/.bashrc /root/lw-uninstall.sh
 }
@@ -356,6 +360,300 @@ scenario_link_regression() {
     check "link_test.sh 有跑过断言" "$([[ "$(count_in "$OUT" "PASS")" -gt 0 ]] && echo yes || echo no)" "yes"
 }
 
+scenario_install_menu() {
+    echo ""
+    echo "========== 9. 安装目录菜单与 --silent =========="
+
+    if command -v script > /dev/null 2>&1; then
+        # 9.1 无效输入：绝不能静默装到别的目录去（用户明确没选那里）
+        reset_state
+        printf '9\n9\n9\n' | script -qec "/bin/bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
+        local rc=$?
+        check "连续无效输入后退出码非 0" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)" "yes"
+        contains "无效输入被明确指出" "$OUT" "is not one of 1-5"
+        contains "放弃时说明什么都没装" "$OUT" "Nothing was installed"
+        check "无效输入没有装到任何目录" \
+            "$([[ -e /root/.local/linuxwave || -e /opt/linuxwave || -e /usr/local/linuxwave ]] && echo yes || echo no)" "no"
+        check "无效输入时配置也没留下" \
+            "$([[ -e /root/.config/linuxwave_config || -e /etc/linuxwave_config ]] && echo yes || echo no)" "no"
+
+        # 9.2 有效输入照常工作（菜单 → 协议）
+        reset_state
+        printf '2\ny\n' | script -qec "/bin/bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
+        check "菜单选 2 能装成功" "$([[ -d /opt/linuxwave ]] && echo yes || echo no)" "yes"
+    else
+        skip "菜单场景（缺 script，无法提供 pty）"
+    fi
+
+    # 9.3 --silent 单独使用：按 README 承诺自动应答菜单，且必须说出来用了哪个默认值
+    reset_state
+    install_run --silent
+    check "--silent 单独使用能装成功" "$?" "0"
+    check "--silent 不打印菜单" "$(count_in "$OUT" "Where do you want to install")" "0"
+    contains "--silent 说明使用了默认目录" "$OUT" "using the default"
+    check "--silent 装到默认目录" "$([[ -d /root/.local/linuxwave ]] && echo yes || echo no)" "yes"
+    check "--silent 不再泄漏 /dev/tty 原始报错" "$(count_in "$OUT" "No such device")" "0"
+}
+
+scenario_download_retry() {
+    echo ""
+    echo "========== 10. 单文件下载重试 =========="
+
+    local victim="$MIRROR_BASE/lib/help.py"
+    local rc
+
+    # 10.1 文件短暂缺失（模拟传输被重置）：重试应能自愈，用户不必手工重跑
+    reset_state
+    mv "$victim" "$victim.hold"
+    ( sleep 2; mv "$victim.hold" "$victim" ) &
+    install_run --silent --dir-option=1
+    rc=$?
+    wait
+    check "短暂失败后重试成功" "$rc" "0"
+    contains "打印了重试提示" "$OUT" "Retrying lib/help.py"
+    check "自愈后 20 个文件齐备" "$(find /root/.local/linuxwave -type f | wc -l | tr -d ' ')" "20"
+    # 自愈那次失败发生在 if 条件里，ERR 陷阱不该开火——
+    # 否则一次已经自己恢复的抖动会留下「未完成」的误导说明
+    check "自愈后不谎报未完成" "$(count_in "$OUT" "did not finish")" "0"
+
+    # 10.2 一直失败：重试到底后明确报错，不谎报成功
+    reset_state
+    mv "$victim" "$victim.hold"
+    install_run --silent --dir-option=1
+    rc=$?
+    check "持续失败后退出码非 0" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)" "yes"
+    contains "说明尝试了几次" "$OUT" "after 5 attempts"
+    contains "给出未完成的指引" "$OUT" "Installation did not finish"
+    mv "$victim.hold" "$victim"
+}
+
+scenario_write_permission() {
+    echo ""
+    echo "========== 11. 共用安装树的写入权限提示 =========="
+
+    # 用一个只读挂载来真实复现「树属于别人、自己写不进去」——
+    # 只读挂载连 uid 0 也会被判为不可写，因此在沙箱里能诚实测试。
+    reset_state
+    install_run --silent --dir-option=1
+    check "准备阶段安装到默认目录" "$([[ -x /root/.local/linuxwave/lib/wave ]] && echo yes || echo no)" "yes"
+
+    mkdir -p /srv/ro-lw/linuxwave
+    if ! mount -t tmpfs tmpfs /srv/ro-lw 2>/dev/null; then
+        skip "写入权限场景（无法挂载 tmpfs）"
+        return
+    fi
+    cp -a /root/.local/linuxwave/. /srv/ro-lw/linuxwave/
+    echo '{"base_dir":"/srv/ro-lw/linuxwave"}' > /root/.config/linuxwave_config/config.json
+    if ! mount -t tmpfs -o remount,ro tmpfs /srv/ro-lw 2>/dev/null; then
+        skip "写入权限场景（无法 remount 成只读）"
+        umount /srv/ro-lw 2>/dev/null || true
+        return
+    fi
+
+    /srv/ro-lw/linuxwave/lib/wave install jq > "$OUT" 2>&1
+    local rc=$?
+    check "不可写时退出码为 1" "$rc" "1"
+    contains "指出没有写入权限" "$OUT" "No write permission"
+    contains "给出可执行的 sudo 全路径命令" "$OUT" "sudo /srv/ro-lw/linuxwave/lib/wave install"
+    # 关键：必须在联网取版本之前就失败，而不是下载到一半才炸
+    check "在取版本信息之前就失败" "$(count_in "$OUT" "Fetching version info")" "0"
+    check "不再抛原始 errno" "$(count_in "$OUT" "[Errno 13]")" "0"
+
+    # 11.2 安装器的共用提示也要给出可用命令（sudo wave 因 secure_path 必然找不到）
+    reset_state
+    install_run --silent --dir-option=4
+    check "共用安装成功" "$?" "0"
+    contains "共用提示给出 sudo 全路径命令" "$OUT" "sudo /home/linuxwave/.linuxwave/lib/wave install"
+}
+
+scenario_interrupt() {
+    echo ""
+    echo "========== 12. Ctrl-C 不再打印 traceback =========="
+
+    reset_state
+    install_run --silent --dir-option=1
+    local W="/root/.local/linuxwave/lib/wave"
+
+    # 用本地「挂起」代理让下载稳定地卡在读取上：接受连接但永不回应。
+    # 不用黑洞地址——它在不同机器上可能立即失败而不是挂起，那样进程会在
+    # 发 SIGINT 之前就退出，测不到想测的路径。
+    #
+    # 端口交给内核挑（bind 到 0）再经文件回传：写死端口会撞上开发机上别的
+    # 进程，代理起不来时 requests 会改走直连，测出来的就不是这条路径了。
+    local PORT_FILE="$SANDBOX_DIR/proxy_port"
+    rm -f "$PORT_FILE"
+    python3 - "$PORT_FILE" << 'PY' &
+import socket
+import sys
+
+server = socket.socket()
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind(("127.0.0.1", 0))
+server.listen(8)
+with open(sys.argv[1], "w") as handle:
+    handle.write(str(server.getsockname()[1]))
+
+held = []
+while True:
+    conn, _ = server.accept()
+    held.append(conn)
+PY
+    local proxy_pid=$!
+
+    # 起始后必须确认真的在听，否则立刻收摊——不能拿「代理没起来」的结果当通过
+    local waited=0
+    while [[ ! -s "$PORT_FILE" && $waited -lt 50 ]]; do
+        sleep 0.2
+        waited=$((waited + 1))
+    done
+    if [[ ! -s "$PORT_FILE" ]]; then
+        kill "$proxy_pid" 2> /dev/null || true
+        wait "$proxy_pid" 2> /dev/null || true
+        fail "Ctrl-C 场景：本地代理无法启动，无法复现传输中打断"
+        return
+    fi
+    local proxy_url="http://127.0.0.1:$(< "$PORT_FILE")"
+
+    # 带上 @版本号 跳过「取最新版本」这一步，尽快走到下载。
+    #
+    # 注意：元数据是几个小文件，这台机器上 raw.githubusercontent 抖动很厉害，
+    # 若在按 Ctrl-C 之前进程就已经退出，说明这一轮根本没走到下载阶段——
+    # 那种情况如实记为 SKIP，不能算通过，也不能算失败。
+    local attempt rc reached=false
+    for attempt in 1 2 3 4 5; do
+        : > "$OUT"
+        # 必须开 job control：非交互 shell 的后台任务会把 SIGINT 设成 SIG_IGN，
+        # python 继承到 SIG_IGN 就不会装 default_int_handler，kill -INT 完全无效，
+        # 进程只会一直等到 requests 自己超时。set -m 让子进程回到默认处置，
+        # 这也正是真实终端里 Ctrl-C 生效的前提。
+        set -m
+        "$W" install jq@1.8.2 --proxy "$proxy_url" > "$OUT" 2>&1 &
+        local pid=$!
+        set +m
+        sleep 4
+        if ! kill -0 "$pid" 2> /dev/null; then
+            wait "$pid" 2> /dev/null
+            continue
+        fi
+        reached=true
+        kill -INT "$pid" 2> /dev/null
+        wait "$pid"
+        rc=$?
+        break
+    done
+
+    kill "$proxy_pid" 2> /dev/null || true
+    wait "$proxy_pid" 2> /dev/null || true
+
+    if [[ "$reached" != "true" ]]; then
+        skip "Ctrl-C 场景（网络抖动，未能走到下载阶段）"
+        return
+    fi
+
+    check "Ctrl-C 后退出码为 130" "$rc" "130"
+    contains "给出简短的中止提示" "$OUT" "Interrupted"
+    check "输出中没有 Traceback" "$(count_in "$OUT" "Traceback")" "0"
+    check "没有打印调用栈帧" "$(count_in "$OUT" 'File "')" "0"
+    # 打断不该被说成「下载失败」
+    check "没有把它说成下载失败" "$(count_in "$OUT" "Failed to download package")" "0"
+
+    scenario_interrupt_at_prompt
+}
+
+# Ctrl-C 停在「Do you want to retry?」提示上。
+#
+# 这条路径和上面那条不同：异常是从 input() 里抛出来的，最容易被顺手写成
+# 「用户不想重试」，于是把「打断」谎报成「下载失败」。
+#
+# 真实网络里要走到这个提示，得先让元数据下载成功、只有包文件那一步失败，
+# 而元数据来自 api.github.com / raw.githubusercontent.com——离线又确定地做不到。
+# 所以这里直接调用真正下载用的那个函数，只给它一个真实的失败：本机一个
+# 没人监听的端口。requests 抛出来的就是货真价实的 ConnectionError，
+# 走的是和线上完全一样的那条 except 分支，只是不必经过网络。
+scenario_interrupt_at_prompt() {
+    local OUT2="$SANDBOX_DIR/output-prompt.txt"
+    local FIFO="$SANDBOX_DIR/stdin.fifo"
+    local DRIVER="$SANDBOX_DIR/retry_prompt_driver.py"
+    local TREE
+    TREE="$(dirname "$(dirname "$W")")"
+    rm -f "$FIFO"
+    : > "$OUT2"
+
+    cat > "$DRIVER" << 'PY'
+import pathlib
+import sys
+
+import pkginstaller
+
+config = {
+    "skip_ssl_verify": False,
+    "proxy": None,
+    "resume": False,
+    "limit_rate": 0,
+    "verbose": False,
+}
+
+try:
+    pkginstaller.download_file(
+        "http://127.0.0.1:1/victim.bin",
+        pathlib.Path(sys.argv[1]),
+        config,
+        "",
+        "jq",
+    )
+except KeyboardInterrupt:
+    # 提示那里若把它吞掉，就走不到这里，会径直打印「下载失败」
+    print("LW_INTERRUPT_PROPAGATED")
+    sys.exit(130)
+
+print("LW_INTERRUPT_SWALLOWED")
+sys.exit(3)
+PY
+
+    # 这个 FIFO 只用来把 stdin 撑住不 EOF，不会往里写任何东西
+    mkfifo "$FIFO"
+    sleep 120 > "$FIFO" &
+    local holder_pid=$!
+
+    set -m
+    PYTHONPATH="$TREE/lib:$TREE/pkg:$TREE/surfboard" \
+        python3 "$DRIVER" "$SANDBOX_DIR/victim.bin" < "$FIFO" > "$OUT2" 2>&1 &
+    local pid=$!
+    set +m
+
+    local waited=0
+    while [[ $waited -lt 50 ]] && ! grep -qF "Do you want to retry?" "$OUT2" 2> /dev/null; do
+        sleep 0.2
+        waited=$((waited + 1))
+    done
+
+    if ! grep -qF "Do you want to retry?" "$OUT2" 2> /dev/null; then
+        kill -INT "$pid" 2> /dev/null
+        wait "$pid"
+        local early_rc=$?
+        kill "$holder_pid" 2> /dev/null
+        wait "$holder_pid" 2> /dev/null
+        rm -f "$FIFO" "$DRIVER"
+        fail "重试提示处 Ctrl-C：未能走到重试提示（退出码 $early_rc），输出："
+        sed 's/^/    | /' "$OUT2" >&2
+        return
+    fi
+
+    kill -INT "$pid" 2> /dev/null
+    wait "$pid"
+    local rc=$?
+
+    kill "$holder_pid" 2> /dev/null
+    wait "$holder_pid" 2> /dev/null
+    rm -f "$FIFO" "$DRIVER"
+
+    check "重试提示处 Ctrl-C 后退出码为 130" "$rc" "130"
+    contains "重试提示处 KeyboardInterrupt 被原样抛出" "$OUT2" "LW_INTERRUPT_PROPAGATED"
+    check "重试提示处没有 Traceback" "$(count_in "$OUT2" "Traceback")" "0"
+    # 关键：用户按的是 Ctrl-C，不是「不重试」
+    check "重试提示处没有说成下载失败" "$(count_in "$OUT2" "Failed to download package")" "0"
+}
+
 run_scenarios() {
     reset_state
     scenario_install_dirs
@@ -366,6 +664,10 @@ run_scenarios() {
     scenario_self_delete
     scenario_shared
     scenario_link_regression
+    scenario_install_menu
+    scenario_download_retry
+    scenario_write_permission
+    scenario_interrupt
 
     echo ""
     echo "=========================================="
@@ -483,6 +785,10 @@ R="$SANDBOX_DIR/run"
 mkdir -p "$R"/home "$R"/opt "$R"/usrlocal "$R"/root "$R"/var/tmp "$R"/srv
 chmod 1777 "$R"/var/tmp
 cp -a /etc "$R"/etc 2>/dev/null || true
+
+# 开发机上可能真的装着 LinuxWave。把它的系统级配置从影子副本里去掉，
+# 否则 configpaths 会优先选中那份（指向真实安装树），用例就跑到别处去了。
+rm -rf "$R"/etc/linuxwave_config
 
 # 宿主只有 root 能读的这几份，用最小内容补齐：
 # 沙箱内 uid=0，足够 sudo 与 useradd 使用
