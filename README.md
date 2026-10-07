@@ -5,7 +5,7 @@ dependency comes from, its `sha256`, and what it depends on.
 
 # 🌊 Official Website
 
-[linuxwave.macwave.org](https://linuxwave.macwave.org)
+[linuxwave.org](https://linuxwave.org)
 
 # 🌊 What is this branch?
 
