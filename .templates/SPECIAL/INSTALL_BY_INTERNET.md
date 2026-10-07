@@ -50,7 +50,7 @@ Python 3.14.4
 一条命令，从仓库的默认分支拉取安装器：
 
 ```console
-mike@mike-Inspiron-16-Plus-7640:~$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)"
+mike@mike-Inspiron-16-Plus-7640:~$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 ```
 
 交互共三处：
@@ -76,7 +76,7 @@ mike@mike-Inspiron-16-Plus-7640:~$ /bin/bash -c "$(curl -fsSL https://raw.github
 因此推荐后者。若无法切换到该用户（例如 sudoers 不允许 `sudo -u`），可以显式指定 `HOME` 并事后交出属主：
 
 ```console
-mike@mike-Inspiron-16-Plus-7640:~$ sudo HOME=/home/linuxwave bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)"
+mike@mike-Inspiron-16-Plus-7640:~$ sudo HOME=/home/linuxwave bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 mike@mike-Inspiron-16-Plus-7640:~$ sudo chown -R linuxwave:linuxwave /home/linuxwave
 ```
 

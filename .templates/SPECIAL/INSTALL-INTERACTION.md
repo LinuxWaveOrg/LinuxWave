@@ -100,7 +100,7 @@ mike@mike-Inspiron-16-Plus-7640:~$
 本实录以本地镜像启动（原因见 [INSTALL-EXAMPLE.md](INSTALL-EXAMPLE.md)）。改用网络安装时，只把最后那条启动命令换成：
 
 ```console
-mike@mike-Inspiron-16-Plus-7640:~$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)"
+mike@mike-Inspiron-16-Plus-7640:~$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 ```
 
 其后的提示、选项与输出完全相同，流程见 [INSTALL_BY_INTERNET.md](INSTALL_BY_INTERNET.md)。

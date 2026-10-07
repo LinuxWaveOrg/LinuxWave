@@ -32,8 +32,8 @@ RESET = '\033[0m'
 # -------------------- 常量 --------------------
 
 BRANCH = "infosource"
-RAW_BASE = f"https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/{BRANCH}"
-TREE_API = f"https://api.github.com/repos/Sha0huaZhang/LinuxWave/git/trees/{BRANCH}?recursive=1"
+RAW_BASE = f"https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/{BRANCH}"
+TREE_API = f"https://api.github.com/repos/LinuxWaveOrg/LinuxWave/git/trees/{BRANCH}?recursive=1"
 CONFIG_FILES = (
     Path("/etc/linuxwave_config/config.json"),          # 系统级优先
     Path.home() / ".config" / "linuxwave_config" / "config.json",

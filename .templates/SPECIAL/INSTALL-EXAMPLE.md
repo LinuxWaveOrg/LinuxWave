@@ -42,7 +42,7 @@ mike@mike-Inspiron-16-Plus-7640:~/Projects/LinuxWave$ chmod -R a+rX /tmp/lw-mirr
 > **网络正常时跳过本步**，直接用官方一行命令：
 >
 > ```console
-> mike@mike-Inspiron-16-Plus-7640:~$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)"
+> mike@mike-Inspiron-16-Plus-7640:~$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 > ```
 
 > 注意：镜像放在 `/tmp` 下，重启后可能被清理。

@@ -33,7 +33,7 @@ LinuxWave is a **package manager** that runs on **Linux**, designed to host comm
 In the terminal, run:
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)" && source ~/.zshrc
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" && source ~/.zshrc
 ```
 
 (If you are using bash instead of zsh, run ```source ~/.bashrc```)
@@ -49,7 +49,7 @@ For scripts and batch use, the installer takes flags so it never waits for input
 bash install.sh --silent --dir-option=4
 
 # straight from the repository
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/install.sh)" \
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" \
   -- --silent --dir-option=4
 ```
 
@@ -98,7 +98,7 @@ on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
 To completely remove LinuxWave from your system, run the following command in your terminal:
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Sha0huaZhang/LinuxWave/HEAD/lib/uninstall.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/uninstall.sh)"
 ```
 
 ## 🌊 Run Packages
