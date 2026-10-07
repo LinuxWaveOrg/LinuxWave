@@ -2,6 +2,10 @@
 
 A package manager for Linux software developers.
 
+macOS? View [MacWave](https://github.com/MacWaveOrg/MacWave)
+
+**English** · [简体中文](./README.zh-Hans.md)
+
 ## 🌊 Official Website
 
 [linuxwave.macwave.org](https://linuxwave.macwave.org)
