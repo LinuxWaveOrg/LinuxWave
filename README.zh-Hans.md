@@ -14,7 +14,7 @@ macOS 用户？请看 [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 最新版本
 
-2.6.0，发布于 2026-10-07
+2.6.1，发布于 2026-10-07
 
 ## 🌊 LinuxWave 是什么？
 
@@ -28,7 +28,8 @@ LinuxWave 是 MacWave 的官方 Linux 移植版。从 MacWave 2.0 起，MacWave 
 4. **无缓存，始终最新。** 软件包元数据实时从 `infosource` 分支获取。
 5. **支持 10 种归档格式，经 CI 验证。** 支持无扩展名二进制文件、`.zip`、`.tar.gz`、`.tar.bz2`、`.tar.xz`、`.tar`、`.gz`、`.xz`、`.bz2`、`.conda`。
 6. **先校验，后解压。** 解压前先校验 SHA256。
-7. **支持断点续传。** 下载中断了？用 `-C` 继续。
+7. **支持断点续传。** 下载中断了？用 `-C` 继续。单个文件传输失败会自动重试，最多 5 次；
+   按 `Ctrl-C` 只会打印一行提示，不再喷出 Python traceback。
 8. **轻量透明。** 纯 Python + Shell，无重型运行时，无隐藏行为。
 9. **自动管理依赖。** 支持带依赖的软件包，采用引用计数与自动依赖管理，无需手动处理依赖。
 
@@ -58,8 +59,10 @@ bash install.sh --silent --dir-option=4
 ```
 
 `--silent`（`-S`）会自动应答目录菜单与许可协议；当选中的目录需要提权时，它要求免密 sudo
-或以 root 运行。`--dir-option=N` 免菜单直接选定第 `N` 项（1-5）；自定义项要在 `=` 之后附上
-路径，例如 `--dir-option=5=/opt/mylw`。完整参数列表可运行 `install.sh --help` 查看。
+或以 root 运行。不带 `--dir-option` 时它会选用默认项 `1`（`~/.local/linuxwave`）并说明
+用的是哪个默认值，而不是去读一个可能并不存在的终端。`--dir-option=N` 免菜单直接选定第 `N` 项
+（1-5）；自定义项要在 `=` 之后附上路径，例如 `--dir-option=5=/opt/mylw`。完整参数列表可运行
+`install.sh --help` 查看。
 
 > **用 `/bin/bash -c` 取脚本，并把参数放在 `--` 之后。** 以绝对路径调用 `/bin/bash`，
 > 意味着被篡改的 `PATH` 无法决定由哪个 shell 来执行脚本；而 `curl` 会先跑完，`bash` 才开始
@@ -89,6 +92,15 @@ bash install.sh --silent --dir-option=4
 ```
 共享安装（选项 4）始终使用 `/etc/linuxwave_config`，以保证全机所有用户解析到同一个安装。
 它需要 `patchelf`、Python 3.14+，以及一次性提供 `sudo`；若 `linuxwave` 账号不存在会自动创建。
+
+> **往共享安装树里装软件包，必须用 `sudo` 加全路径。** 只有 `linuxwave` 账号和 root 能写入
+> 该目录。`sudo` 用的是它自己那套 `PATH`，里面没有 `~/.linuxwave/lib`，所以 `sudo wave install …`
+> 会报「找不到命令」；请直接写出入口：
+> ```
+> sudo /home/linuxwave/.linuxwave/lib/wave install <package>
+> ```
+> 写不进安装树的用户，会在报错信息里原样拿到这条命令。想让多个用户免 `sudo` 装包，请按
+> `.templates/SPECIAL/INSTALL_BY_INTERNET.md` 里说明配置共享写组。
 ## 卸载 LinuxWave
 
 要从系统中彻底移除 LinuxWave，请在终端中运行以下命令：

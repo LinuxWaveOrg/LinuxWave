@@ -123,4 +123,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # 下载卡住时用户多半会按 Ctrl-C。默认行为是把整个调用栈打出来，
+        # 那对用户毫无用处，也不像一次「正常中止」。
+        print("", file=sys.stderr)
+        print("🌊 Interrupted. Nothing was installed.", file=sys.stderr)
+        sys.exit(130)
+    except BrokenPipeError:
+        # 例如 `wave list | head`：下游提前关掉管道时安静退出
+        sys.exit(0)
