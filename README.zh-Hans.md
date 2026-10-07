@@ -6,6 +6,10 @@ macOS 用户？请看 [MacWave](https://github.com/MacWaveOrg/MacWave)
 
 [English](./README.md) · **简体中文**
 
+> **站点公告**：官网已迁移至 **[linuxwave.org](https://linuxwave.org)**。
+> 旧地址 `linuxwave.macwave.org` 现已返回 `404`。安装命令没有变化，
+> 已安装的用户只需跑一次 `wave selfupdate`（`2.6.2` 携带此修复）。
+
 ## 🌊 官方网站
 
 [linuxwave.org](https://linuxwave.org)
