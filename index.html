@@ -610,6 +610,56 @@
             环境要求：Linux（x86_64 / arm64）、Python（3.14 及以上）、<code>patchelf</code>（用于依赖库重定位）。
         </p>
 
+        <h3 style="font-size: 1.35rem; margin-top: 32px; margin-bottom: 12px;" data-lang="en">Unattended install</h3>
+        <h3 style="font-size: 1.35rem; margin-top: 32px; margin-bottom: 12px;" data-lang="zh">无人值守安装</h3>
+
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
+            For scripts and batch use, the installer takes flags so it never waits for input:
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            面向脚本与批量场景，安装器提供若干参数，全程不会停下来等待输入：
+        </p>
+        <div class="code-container has-copy-btn">
+            <button class="copy-btn" onclick="copyCode(this)">
+                <div class="copy-icon">
+                    <div class="square-back"></div>
+                    <div class="square-front"></div>
+                </div>
+            </button>
+            <pre># script already on disk
+<span class="code-dollar">$</span> bash install.sh --silent --dir-option=4
+
+# straight from the repository
+<span class="code-dollar">$</span> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" \
+  -- --silent --dir-option=4</pre>
+        </div>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
+            <code>--silent</code> (<code>-S</code>) answers the directory menu and the agreement automatically. It needs passwordless sudo, or root, when the chosen directory requires privilege. <code>--dir-option=N</code> picks menu entry <code>N</code> (1-5); for the custom entry, append the path after <code>=</code>, as in <code>--dir-option=5=/opt/mylw</code>. Run <code>install.sh --help</code> for the list.
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            <code>--silent</code>（<code>-S</code>）会自动应答目录菜单与许可协议；当选中的目录需要提权时，它要求免密 sudo 或以 root 运行。<code>--dir-option=N</code> 免菜单直接选定第 <code>N</code> 项（1-5）；自定义项要在 <code>=</code> 之后附上路径，例如 <code>--dir-option=5=/opt/mylw</code>。完整参数列表可运行 <code>install.sh --help</code> 查看。
+        </p>
+
+        <p class="install-note" data-lang="en">
+            <strong>Fetch with <code>/bin/bash -c</code>, and put options after <code>--</code>.</strong> Calling <code>/bin/bash</code> by absolute path means a tampered <code>PATH</code> cannot decide which shell runs the script, and <code>curl</code> runs to completion before <code>bash</code> executes anything, so a download that fails partway is not executed as it arrives. <code>--</code> ends bash&rsquo;s own options, so everything after it reaches the installer. Writing <code>&hellip; --silent</code> instead makes <code>--silent</code> the script name (<code>$0</code>), so it is silently dropped and the installer stops at a prompt nobody is watching; the installer warns when it sees an option in <code>$0</code>.
+        </p>
+        <p class="install-note" data-lang="zh">
+            <strong>用 <code>/bin/bash -c</code> 取脚本，并把参数放在 <code>--</code> 之后。</strong>以绝对路径调用 <code>/bin/bash</code>，意味着被篡改的 <code>PATH</code> 无法决定由哪个 shell 来执行脚本；而 <code>curl</code> 会先跑完，<code>bash</code> 才开始执行，因此下载中途失败的内容不会被一边到达一边执行。<code>--</code> 会结束 bash 自身的选项，其后的一切都原样传给安装器。若写成 <code>&hellip; --silent</code>，<code>--silent</code> 就成了脚本名（<code>$0</code>）而被静默丢弃，安装器会停在一个没人看的提示符上；当安装器发现 <code>$0</code> 里是选项时会给出警告。
+        </p>
+
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
+            <code>uninstall.sh</code> is scriptable in the same way: <code>--force</code> skips both confirmations and keeps the <code>linuxwave</code> account, while <code>--remove-user</code> also deletes that account. Add both for a fully unattended removal.
+        </p>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="zh">
+            <code>uninstall.sh</code> 同样支持脚本化调用：<code>--force</code> 跳过两次确认并<strong>保留</strong> <code>linuxwave</code> 账号；<code>--remove-user</code> 则会连同该账号一并删除。两者同时使用即可完全无人值守地卸载。
+        </p>
+
+        <p class="install-note" data-lang="en">
+            <strong>Without <code>--force</code>, the uninstaller needs a terminal.</strong> It reads the confirmation from <code>/dev/tty</code> and <strong>stops</strong> when there is none, instead of treating a closed stdin as &ldquo;yes&rdquo; - deleting is not reversible. Scripts and CI must say <code>--force</code> explicitly.
+        </p>
+        <p class="install-note" data-lang="zh">
+            <strong>不加 <code>--force</code> 时，卸载器需要一个终端。</strong>它从 <code>/dev/tty</code> 读取确认，读不到就<strong>中止</strong>，而不会把已关闭的 stdin 当作「同意」——删除不可逆。脚本与 CI 必须显式写上 <code>--force</code>。
+        </p>
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="en">Uninstall LinuxWave</h2>
         <h2 style="font-size: 1.8rem; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; margin-top: 40px;" data-lang="zh">卸载 LinuxWave</h2>
         <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;" data-lang="en">
@@ -901,7 +951,8 @@ zoxide        by Ajeet D'Souza
             const pre = btn.parentElement.querySelector('pre');
             if (!pre) return;
             let text = pre.textContent;
-            text = text.replace(/^\$\s/, '');
+            // 多行代码块里每一行都可能带 "$ " 提示符，逐行剥离（单行块行为不变）
+            text = text.replace(/^\$\s/gm, '');
             navigator.clipboard.writeText(text).then(() => {
                 btn.classList.add('copied');
                 setTimeout(() => {
