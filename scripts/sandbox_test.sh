@@ -138,8 +138,10 @@ scenario_install_dirs() {
         check "--dir-option=$opt 文件数 20" "$(find "$dir" -type f 2>/dev/null | wc -l | tr -d ' ')" "20"
         check "--dir-option=$opt 配置在 $cfg" "$(tree_base_dir "$cfg/config.json")" "$dir"
         check "--dir-option=$opt 入口可执行" "$([[ -x "$dir/lib/wave" ]] && echo yes || echo no)" "yes"
-        check "--dir-option=$opt VERSION.json 版本与脚本一致" \
-            "$(tree_version "$cfg/VERSION.json")" "$(sed -n 's/^LINUXWAVE_VERSION="\(.*\)"$/\1/p' "$OFFLINE_INSTALLER")"
+        check "--dir-option=$opt VERSION.json 版本与 configdata 一致" \
+            "$(tree_version "$cfg/VERSION.json")" \
+            "$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' \
+                "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version" | head -n 1)"
         check "--dir-option=$opt 写入了 PATH" "$(count_in /root/.bashrc "$dir")" "1"
     done <<< "1 /root/.local/linuxwave /root/.config/linuxwave_config ~/.local/linuxwave
 2 /opt/linuxwave /etc/linuxwave_config /opt/linuxwave
@@ -816,6 +818,16 @@ else
             done
         done
     } > "$SANDBOX_DIR/mirror/configdata/versiondata/files_info"
+
+    # install.sh 还会从 configdata 读版本号与代码来源分支，一并生成一份
+    {
+        echo 'version: "0.0.0"'
+        echo 'release_date: "2026-01-01"'
+        echo 'build_number: "000A0000"'
+        echo 'branch: "HEAD"'
+        echo 'update_command: <<< true >>>'
+    } > "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version"
+
     echo -e "${YELLOW}🌊 configdata branch not found; generated files_info from the repo tree.${RESET}"
     echo -e "${YELLOW}🌊 Set LINUXWAVE_CONFIGDATA=<path> to test the real one.${RESET}"
 fi

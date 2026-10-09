@@ -9,12 +9,8 @@
 # 显式 `return 1`、调用方用 `||` 容忍的失败、`if` 条件里的失败都不会误触发。
 set -eE
 
-BRANCH="HEAD"
-
-# 版本号只在这里定义：欢迎语与写入 VERSION.json 都引用它
-LINUXWAVE_VERSION="2.6.5"
-
-BASE_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/$BRANCH"
+# 数据仓库：版本号、代码分支与文件清单都从这里读
+CONFIGDATA_URL="https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main"
 
 # ==========================================
 # 颜色定义
@@ -24,6 +20,27 @@ RED_BOLD='\033[1;31m'
 GREEN='\033[32m'
 YELLOW='\033[33m'
 RESET='\033[0m'
+
+# ==========================================
+# 版本号与代码分支（从 configdata 读取，不写死在脚本里）
+# ==========================================
+#
+# latest_version 里的 version 是这次要安装的版本，branch 是配套的代码分支：
+# 两者一起读，保证「下载的代码」和「写进 VERSION.json 的版本号」对应同一个版本。
+
+LATEST_VERSION_DATA="$(curl -fsSL --max-time 30 "$CONFIGDATA_URL/versiondata/latest_version" 2>/dev/null)"
+
+LINUXWAVE_VERSION="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+LATEST_BRANCH="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+
+if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
+    echo -e "${RED_BOLD}🌊 Error: Cannot read the latest version from configdata.${RESET}" >&2
+    echo -e "${RED_BOLD}🌊 Check your network or proxy, then run the installer again.${RESET}" >&2
+    exit 1
+fi
+
+BRANCH="$LATEST_BRANCH"
+BASE_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/$BRANCH"
 
 # ==========================================
 # 辅助函数：将路径中的 $HOME 替换为 ~
@@ -401,7 +418,6 @@ fi
 # 这一步刻意放在「建目录 / 写配置 / 清旧版」之前：连不上 configdata 就直接退出，
 # 不会留下一个配置已写好、文件却一个都没下的半成品安装。
 
-CONFIGDATA_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/configdata"
 FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
 FILES_INFO_TMP="$(mktemp)"
 FILES_INFO_ATTEMPTS=3

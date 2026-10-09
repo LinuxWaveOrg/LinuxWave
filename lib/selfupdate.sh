@@ -25,7 +25,8 @@ RESET='\033[0m'
 REPO="LinuxWaveOrg/LinuxWave"
 BRANCH="${LINUXWAVE_UPDATE_BRANCH:-${1:-HEAD}}"
 BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH"
-VERSION_DATA_URL="https://raw.githubusercontent.com/$REPO/configdata/versiondata/latest_version"
+CONFIGDATA_URL="https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main"
+VERSION_DATA_URL="$CONFIGDATA_URL/versiondata/latest_version"
 
 # 配置目录：系统级优先，其次用户级（与 lib/configpaths.py 的规则一致）
 # 迁移可能把配置搬到用户级位置，所以做成函数，迁移之后要再解析一次。
@@ -137,16 +138,54 @@ fi
 echo "🌊 Updating LinuxWave to $VERSION"
 
 # ==========================================
+# 大版本守卫（跨大版本不允许 selfupdate）
+# ==========================================
+#
+# 每个大版本的第一个版本、以及任何跨大版本升级，都必须用 install.sh 完整安装：
+# 这类升级通常同时改仓库与目录结构，selfupdate 只适合同大版本内的小版本升级。
+# selfupdate.sh 是从「目标分支」拉下来执行的，守卫放在这里，以后每个大版本自带的
+# selfupdate.sh 都会带上它，规则自动生效，不必逐版本写死在 configdata 里。
+
+CURRENT_VERSION="$(python3 - "$VERSION_FILE" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1]) as handle:
+        print(json.load(handle).get("version", ""))
+except Exception:
+    print("")
+PY
+)"
+
+major_of() {
+    # 取版本号里第一段数字当大版本号："2.6.5" -> "2"，"3.0" -> "3"
+    python3 -c 'import re, sys
+match = re.search(r"[0-9]+", sys.argv[1])
+print(match.group(0) if match else "")' "$1"
+}
+
+CURRENT_MAJOR="$(major_of "$CURRENT_VERSION")"
+TARGET_MAJOR="$(major_of "$VERSION")"
+
+if [[ -n "$CURRENT_MAJOR" && -n "$TARGET_MAJOR" && "$CURRENT_MAJOR" != "$TARGET_MAJOR" ]]; then
+    echo -e "${RED_BOLD}🌊 Error: selfupdate cannot cross major versions ($CURRENT_VERSION -> $VERSION).${RESET}" >&2
+    echo -e "${RED_BOLD}🌊 A new major version must be installed with install.sh:${RESET}" >&2
+    echo -e "${YELLOW}   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)\"${RESET}" >&2
+    exit 1
+fi
+
+# ==========================================
 # 版本目录结构变更迁移（configdata/updatedata/{版本号}）
 # ==========================================
 #
-# configdata 的 updatedata/{版本号}/dir_structure_change 只有**一个字符**：
+# configdata 仓库的 updatedata/{版本号}/dir_structure_change 只有**一个字符**：
 #     Y/y → 该版本改变了目录结构，执行同目录下的 transfer_commands 完成迁移
 #     N/n → 没有改变，跳过（文件不存在也按「没有改变」处理）
 # 目标版本号用这次要升级到的版本（上面刚确定的 $VERSION）。
 # 迁移可能把配置搬到用户级位置，所以执行完要重新解析一次配置目录。
 
-UPDATEDATA_URL="https://raw.githubusercontent.com/$REPO/configdata/updatedata/$VERSION"
+UPDATEDATA_URL="$CONFIGDATA_URL/updatedata/$VERSION"
 
 DIR_STRUCTURE_CHANGE="$(curl -fsSL --max-time 30 "$UPDATEDATA_URL/dir_structure_change" 2>/dev/null | tr -d '[:space:]')" || DIR_STRUCTURE_CHANGE=""
 
@@ -193,7 +232,7 @@ fi
 # 唯一的特例：lib/wave.py 装成可执行的 lib/wave（它是 PATH 里的入口名）。
 # 以后新增文件只要改 configdata 的这份清单，不用再动本脚本。
 
-FILES_INFO_URL="https://raw.githubusercontent.com/$REPO/configdata/versiondata/files_info"
+FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
 FILES_INFO_TMP="$(mktemp)"
 
 cleanup_files_info() {
