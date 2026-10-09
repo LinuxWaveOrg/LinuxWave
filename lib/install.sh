@@ -160,6 +160,8 @@ Options:
                           --dir-option the default (option 1) is used.
                           Requires passwordless sudo when privilege is needed.
       --dir-option=N      Pick menu entry N without prompting (1-5).
+      --dir-option=DIR    Use DIR as the installation directory (shorthand for
+                          --dir-option=5=DIR).
       --dir-option=N=DIR  Pick entry N and, for the custom entry (5), use DIR
                           as the installation directory.
   -h, --help              Show this help.
@@ -175,6 +177,7 @@ Examples:
   install.sh --silent --dir-option=4
   install.sh -S --dir-option=1
   install.sh --silent --dir-option=5=/opt/mylw
+  install.sh --silent --dir-option=/opt/mylw
 USAGE_EOF
 }
 
@@ -185,7 +188,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dir-option=*)
             _value="${1#--dir-option=}"
-            if [[ "$_value" == *=* ]]; then
+            # 只有 N=DIR（前缀是数字）才拆分；--dir-option=<路径> 里若本身带 '='，
+            # 整条按路径处理，不会被误拆。
+            if [[ "$_value" == *=* && "${_value%%=*}" =~ ^[0-9]+$ ]]; then
                 CLI_DIR_OPTION="${_value%%=*}"
                 CLI_CUSTOM_DIR="${_value#*=}"
             else
@@ -216,6 +221,13 @@ case "$0" in
         echo "🌊   /bin/bash -c \"\$(curl -fsSL <url>)\" -- $0" >&2
         ;;
 esac
+
+# --dir-option=<路径> 是 --dir-option=5=<路径> 的简写：值不是纯数字时，
+# 直接把该值当作自定义安装目录（纯数字仍走下面的 1-5 校验，超范围会报错）。
+if [[ -n "$CLI_DIR_OPTION" && ! "$CLI_DIR_OPTION" =~ ^[0-9]+$ ]]; then
+    CLI_CUSTOM_DIR="$CLI_DIR_OPTION"
+    CLI_DIR_OPTION="5"
+fi
 
 if [[ -n "$CLI_DIR_OPTION" && ! "$CLI_DIR_OPTION" =~ ^[1-5]$ ]]; then
     echo -e "${RED_BOLD}🌊 Error: --dir-option must be 1-5, got '$CLI_DIR_OPTION'.${RESET}" >&2

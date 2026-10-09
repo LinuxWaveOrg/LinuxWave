@@ -155,6 +155,22 @@ scenario_install_dirs() {
     check "用户级安装成功" "$rc" "0"
     check "用户级安装不写 /etc/linuxwave_config" \
         "$([[ -e /etc/linuxwave_config ]] && echo yes || echo no)" "no"
+
+    # --dir-option=<路径> 简写：省掉菜单号码，直接给目录（等同自定义项）
+    reset_state
+    install_run --silent "--dir-option=/srv/lw-short"
+    check "简写 --dir-option=<路径> 安装成功" "$?" "0"
+    check "简写安装树就位" "$([[ -d /srv/lw-short ]] && echo yes || echo no)" "yes"
+    check "简写配置在 /etc/linuxwave_config" \
+        "$(tree_base_dir /etc/linuxwave_config/config.json)" "/srv/lw-short"
+
+    # 路径带空格：需要用户自己加引号，其余照常
+    reset_state
+    install_run --silent "--dir-option=/srv/lw space"
+    check "空格路径安装成功" "$?" "0"
+    check "空格路径安装树就位" "$([[ -d "/srv/lw space" ]] && echo yes || echo no)" "yes"
+    check "空格路径配置在 /etc/linuxwave_config" \
+        "$(tree_base_dir /etc/linuxwave_config/config.json)" "/srv/lw space"
 }
 
 scenario_cli_errors() {

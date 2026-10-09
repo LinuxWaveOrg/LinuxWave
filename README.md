@@ -66,7 +66,8 @@ needs passwordless sudo, or root, when the chosen directory requires privilege.
 Without `--dir-option`, it takes menu entry `1` (`~/.local/linuxwave`) and prints
 which default it used, instead of reading a terminal that may not exist.
 `--dir-option=N` picks menu entry `N` (1-5); for the custom entry, append the path
-after `=`, as in `--dir-option=5=/opt/mylw`. Run `install.sh --help` for the list.
+after `=`, as in `--dir-option=5=/opt/mylw`, or just pass the path on its own, as in
+`--dir-option=~/mylw`. Run `install.sh --help` for the list.
 
 > **Fetch with `/bin/bash -c`, and put options after `--`.** Calling `/bin/bash`
 > by absolute path means a tampered `PATH` cannot decide which shell runs the

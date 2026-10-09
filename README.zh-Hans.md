@@ -63,8 +63,8 @@ bash install.sh --silent --dir-option=4
 `--silent`（`-S`）会自动应答目录菜单与许可协议；当选中的目录需要提权时，它要求免密 sudo
 或以 root 运行。不带 `--dir-option` 时它会选用默认项 `1`（`~/.local/linuxwave`）并说明
 用的是哪个默认值，而不是去读一个可能并不存在的终端。`--dir-option=N` 免菜单直接选定第 `N` 项
-（1-5）；自定义项要在 `=` 之后附上路径，例如 `--dir-option=5=/opt/mylw`。完整参数列表可运行
-`install.sh --help` 查看。
+（1-5）；自定义项要附上路径，写成 `--dir-option=5=/opt/mylw`，或直接写 `--dir-option=~/mylw`。
+完整参数列表可运行 `install.sh --help` 查看。
 
 > **用 `/bin/bash -c` 取脚本，并把参数放在 `--` 之后。** 以绝对路径调用 `/bin/bash`，
 > 意味着被篡改的 `PATH` 无法决定由哪个 shell 来执行脚本；而 `curl` 会先跑完，`bash` 才开始
