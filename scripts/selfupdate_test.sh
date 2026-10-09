@@ -171,10 +171,11 @@ fi
 # 线上版本形如 x.0 时，「同大版本且更旧」的版本并不存在（x.0 已是该大版本的最低版本），
 # 所以这里直接给 selfupdate.sh 指定一个同大版本、更高的目标版本号，走完真实的更新流程
 # （读文件清单 → 下载文件 → 写 VERSION.json）。
-PUBLISHED="$(curl -fsSL --max-time 60 "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main/versiondata/latest_version" \
-    | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+LATEST_DATA="$(curl -fsSL --max-time 60 "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main/versiondata/latest_version")"
+PUBLISHED="$(printf '%s\n' "$LATEST_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+RELEASE_BRANCH="$(printf '%s\n' "$LATEST_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
 
-if [[ -z "$PUBLISHED" ]]; then
+if [[ -z "$PUBLISHED" || -z "$RELEASE_BRANCH" ]]; then
     echo -e "${RED_BOLD}🌊 FAIL: cannot read the published version${RESET}"
     FAILED=$((FAILED + 1))
 else
@@ -192,7 +193,7 @@ PYEOF
 
     LOG_FILE="$(mktemp)"
     RC=0
-    LINUXWAVE_UPDATE_VERSION="$TARGET" LINUXWAVE_UPDATE_BRANCH=HEAD bash "$SELFUPDATE_SH" > "$LOG_FILE" 2>&1 || RC=$?
+    LINUXWAVE_UPDATE_VERSION="$TARGET" LINUXWAVE_UPDATE_BRANCH="$RELEASE_BRANCH" bash "$SELFUPDATE_SH" > "$LOG_FILE" 2>&1 || RC=$?
     cat "$LOG_FILE"
 
     if [[ "$RC" -ne 0 ]]; then
