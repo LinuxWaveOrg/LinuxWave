@@ -17,7 +17,18 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
-from configpaths import load_base_dir
+from configpaths import load_base_dir, require_safe_token
+
+
+def github_api_headers(url):
+    # 与 pkg/pkginstaller.py 一致：有 token 就只给 api.github.com 带上，
+    # 缓解未认证 60 次/小时的限流。
+    if "api.github.com" not in url:
+        return {}
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
 
 BASE_DIR = load_base_dir()
 BIN_DIR = BASE_DIR / "bin"
@@ -66,9 +77,10 @@ def fetch_remote_versions(pkg_name, arch):
     # 通过 GitHub API 遍历 infosource 中的版本文件，返回所有可安装版本号列表。
     # 数据在 LinuxWaveOrg/infosource 仓库的 main 分支。
     
+    pkg_name = require_safe_token(pkg_name, "package name")
     api_url = f"https://api.github.com/repos/LinuxWaveOrg/infosource/contents/pkg/pkginfo_{arch}/{pkg_name}?ref=main"
     try:
-        resp = requests.get(api_url, timeout=30)
+        resp = requests.get(api_url, timeout=30, headers=github_api_headers(api_url))
         if resp.status_code != 200:
             return []
         file_list = resp.json()
@@ -88,6 +100,7 @@ def fetch_remote_info(pkg_name, arch):
     
     # 从 infosource 拉取 @common 文件，返回描述信息。
     
+    pkg_name = require_safe_token(pkg_name, "package name")
     common_url = f"https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main/pkg/pkginfo_{arch}/{pkg_name}/_{pkg_name}@common"
     try:
         resp = requests.get(common_url, timeout=30)
@@ -136,7 +149,7 @@ def handle_search(query):
     api_url = f"https://api.github.com/repos/LinuxWaveOrg/infosource/contents/pkg/pkginfo_{arch}?ref=main"
 
     try:
-        resp = requests.get(api_url, timeout=30)
+        resp = requests.get(api_url, timeout=30, headers=github_api_headers(api_url))
         if resp.status_code != 200:
             print(f"{RED_BOLD}🌊 Error: Cannot fetch package list.{RESET}")
             print(f"{RED_BOLD}🌊 URL: {api_url}{RESET}")
@@ -233,10 +246,13 @@ def handle_info_command(input_string):
             sys.exit(1)
         handle_search(words[2])
     elif subcommand == "info":
-        if len(words) < 3:
+        # 与其他命令一致：忽略 flag（不是包名），并容忍 <包名>@<版本号> 这种写法
+        operands = [word for word in words[2:] if not word.startswith("-")]
+        pkg_name = operands[0].partition("@")[0] if operands else ""
+        if not pkg_name:
             print(f"{RED_BOLD}🌊 Error: Missing package name.{RESET}")
             sys.exit(1)
-        handle_info(words[2])
+        handle_info(pkg_name)
     else:
         print(f"{RED_BOLD}🌊 Error: Unknown subcommand '{subcommand}'.{RESET}")
         sys.exit(1)

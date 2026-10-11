@@ -25,7 +25,24 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
-from configpaths import VERSION_FILE, load_base_dir
+from configpaths import (
+    VERSION_FILE,
+    assert_inside,
+    load_base_dir,
+    require_safe_token,
+)
+
+
+def github_api_headers(url):
+    # api.github.com 未认证只有 60 次/小时，CI Runner / 办公网常常整栋楼共用一个出口 IP，
+    # 很容易被限流（表现是 "Cannot fetch package list."）。有 token 就带上；
+    # 只发给 api.github.com，raw.githubusercontent.com 与各下载站都不带。
+    if "api.github.com" not in url:
+        return {}
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
 
 
 def get_version():
@@ -107,7 +124,7 @@ def _check_disk_space(path: Path, required_bytes: int = 10 * 1024 * 1024) -> boo
 ALLOWED_FLAGS = {
     "-v", "-C",
     "--verbose", "--skip-ssl", "--continue",
-    "--limit-rate", "--proxy", "--unlink"
+    "--limit-rate", "--proxy", "--unlink", "--ver"
 }
 
 def parse_flags(input_string):
@@ -115,7 +132,7 @@ def parse_flags(input_string):
     # 截取所有 "-开头"（且 - 前是空格）至下一个空格的内容。
     # 规则：
     # 1. 单独的 "-" 表示参数结束，后续不统计。
-    # 2. "--" 开头保持不变。
+    # 2. "--" 开头保持不变；`--name=value` 归一化成 `--name`，值交给 flag_value 取。
     # 3. "-" 开头（但不是 "--"）将其每个字母拆开，如 -abc = -a -b -c。
     # 4. 参数必须在白名单内，否则报错。
 
@@ -131,7 +148,7 @@ def parse_flags(input_string):
             continue
 
         if token.startswith("--"):
-            flags.append(token)
+            flags.append(token.split("=", 1)[0])
         elif token.startswith("-") and len(token) > 1:
             for ch in token[1:]:
                 flags.append(f"-{ch}")
@@ -145,15 +162,26 @@ def parse_flags(input_string):
     return flags
 
 
+def flag_value(input_string, name):
+    # 取旗标的值，`--name value` 与 `--name=value` 都支持；没有该旗标时返回 None。
+    tokens = input_string.split()
+    for index, token in enumerate(tokens):
+        if token == name:
+            return tokens[index + 1] if index + 1 < len(tokens) else ""
+        if token.startswith(name + "="):
+            return token[len(name) + 1:]
+    return None
+
+
 def first_package_token(input_string):
-    # 取第一个真正的包名（跳过 flag 和 --limit-rate / --proxy 后面的值），
+    # 取第一个真正的包名（跳过 flag 和带值的旗标后面的值），
     # 这样 `wave install --unlink wget@1.25.0` 与 `wave install wget@1.25.0 --unlink` 等价
     skip_next = False
     for word in input_string.split()[2:]:
         if skip_next:
             skip_next = False
             continue
-        if word in ("--limit-rate", "--proxy"):
+        if word in ("--limit-rate", "--proxy", "--ver"):
             skip_next = True
             continue
         if word.startswith("-"):
@@ -194,16 +222,14 @@ def handle_download_args(input_string):
 
     # 4. 限速
     if "--limit-rate" in flags:
-        parts = input_string.split("--limit-rate")
-        if len(parts) > 1:
-            rate_str = parts[1].strip().split(" ")[0]
+        rate_str = flag_value(input_string, "--limit-rate")
+        if rate_str:
             config["limit_rate"] = _parse_rate_limit(rate_str)
 
     # 5. 代理
     if "--proxy" in flags:
-        parts = input_string.split("--proxy")
-        if len(parts) > 1:
-            proxy_value = parts[1].strip().split(" ")[0]
+        proxy_value = flag_value(input_string, "--proxy")
+        if proxy_value is not None:
             if not (proxy_value.startswith("http://") or
                     proxy_value.startswith("https://") or
                     proxy_value.startswith("socks5://")):
@@ -371,7 +397,7 @@ def fetch_max_version(package_name, arch):
     # 否则默认分支（main）下没有 pkginfo_{arch} 目录，会直接 404
     api_url = f"https://api.github.com/repos/LinuxWaveOrg/infosource/contents/pkg/pkginfo_{arch}/{package_name}?ref=main"
     try:
-        response = requests.get(api_url, timeout=30)
+        response = requests.get(api_url, timeout=30, headers=github_api_headers(api_url))
         if response.status_code != 200:
             print(f"{RED_BOLD}🌊 Error: Cannot fetch package list.{RESET}")
             print(f"{RED_BOLD}🌊 URL: {api_url}{RESET}")
@@ -482,6 +508,9 @@ def handle_install(input_string):
     else:
         ParsePkgName = raw_pkg
 
+    # 包名会同时进入 URL 与文件路径，先过白名单（剔除 / \ % @ 空白等）
+    ParsePkgName = require_safe_token(ParsePkgName, "package name")
+
     # 2. 获取架构
     machine = platform.machine().lower()
     if machine in ["arm64", "aarch64"]:
@@ -496,19 +525,25 @@ def handle_install(input_string):
     #    放在联网取版本之前先确认能写入：写不进去时没必要先跑一遍网络请求
     ensure_install_writable()
 
+    ver_flag = flag_value(input_string, "--ver")
     ParsePkgVersion = None
     if "@" in raw_pkg:
-        if "--ver" in input_string:
+        if ver_flag is not None:
             print(f"{RED_BOLD}🌊 Error: Repeated Version Number{RESET}")
             sys.exit(1)
-        else:
-            ParsePkgVersion = raw_pkg.split("@", 1)[1].strip()
-    elif "--ver" in input_string:
-        ParsePkgVersion = input_string.split("--ver")[1].strip().split(" ")[0]
+        ParsePkgVersion = raw_pkg.split("@", 1)[1].strip()
+    elif ver_flag is not None:
+        if not ver_flag:
+            print(f"{RED_BOLD}🌊 Error: Missing version number after --ver{RESET}")
+            sys.exit(1)
+        ParsePkgVersion = ver_flag
     else:
         print("🌊 Fetching version info...")
         ParsePkgVersion = fetch_max_version(ParsePkgName, ARCH)
         print("🌊 Version info fetched successfully.")
+
+    # 版本号同样会进 URL 与目录名：`%`、`/`、`..` 这类一律拒绝
+    ParsePkgVersion = require_safe_token(ParsePkgVersion, "package version")
 
     # 4. 获取 bin_name（从 @common 文件）
     common_url = f"https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@common"
@@ -526,6 +561,9 @@ def handle_install(input_string):
     if not bin_name:
         print(f"{RED_BOLD}🌊 Missing \"bin_name\" field, Please contact the administrator.{RESET}")
         sys.exit(1)
+
+    # bin_name 来自远端 @common，却要当目录名与文件名用，必须过白名单
+    bin_name = require_safe_token(bin_name, "bin_name")
 
     # 5. 获取 URL 和 SHA256（deps 也写在该版本文件里）
     pkg_version_url = f"https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@{ParsePkgVersion}"
@@ -572,6 +610,7 @@ def handle_install(input_string):
     # 7. 下载
     original_filename = ParsePkgURL.split("/")[-1]
     temp_path = DOWNLOAD_TMP / f"{original_filename}.partial"
+    assert_inside(temp_path, DOWNLOAD_TMP, "download path")
 
     try:
         DOWNLOAD_TMP.mkdir(parents=True, exist_ok=True)
@@ -579,6 +618,7 @@ def handle_install(input_string):
 
         # 8. 删掉 .partial 后缀
         final_download_path = DOWNLOAD_TMP / original_filename
+        assert_inside(final_download_path, DOWNLOAD_TMP, "download path")
         temp_path.rename(final_download_path)
     except PermissionError as e:
         # 预检查之后再出现，通常是权限被人改过或目录被换掉
@@ -587,6 +627,7 @@ def handle_install(input_string):
 
     # 9. 拼接长字符串并传给 pkginstaller.sh（同时带上依赖列表）
     target_dir = BASE_DIR / "bin" / f"{bin_name}@{ParsePkgVersion}"
+    assert_inside(target_dir, BASE_DIR / "bin", "install target")
     pkg_info_string = "\n".join([
         ParsePkgName,
         ParsePkgVersion,

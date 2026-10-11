@@ -13,6 +13,7 @@
 # 否则才回落到 ~/.config/linuxwave_config —— 也就是优先跑系统级的 LinuxWave。
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -67,6 +68,66 @@ def load_base_dir():
     print(f"{RED_BOLD}🌊 Error: Configuration file not found or invalid.{RESET}")
     print(f"{RED_BOLD}🌊 Please run the install script again to reinstall LinuxWave.{RESET}")
     sys.exit(1)
+
+
+# -------------------- 名字与版本号的安全校验 --------------------
+#
+# 包名、版本号、可执行文件名既来自命令行，也来自远端数据（@common / deps 字段），
+# 之后会被拼进 URL 和文件路径，还会以换行分隔的长字符串形式交给 shell。
+# 所以这里做统一的白名单校验，外加"最终路径必须在 BASE_DIR 之内"的兜底。
+
+# 允许的字符：字母、数字、点、下划线、加号、减号，且必须以字母或数字开头。
+# 刻意不含 / \ % @ : 空白 与换行——它们要么能改变目录层级（路径穿越），
+# 要么能做 URL 注入（%2f 之类），要么能往 shell 里注入额外字段。
+SAFE_TOKEN_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._+-]*\Z')
+
+
+def is_safe_token(value):
+    value = str(value)
+    if not value or len(value) > 128:
+        return False
+    if '..' in value or value in ('-', '.'):
+        return False
+    return bool(SAFE_TOKEN_RE.match(value))
+
+
+def require_safe_token(value, what):
+    # 不合法直接退出：这类输入没有任何"宽松解释"的余地
+    if not is_safe_token(value):
+        print(f"{RED_BOLD}🌊 Error: Unsafe {what}: {value!r}{RESET}")
+        print(f"{RED_BOLD}🌊 Allowed: letters, digits, and . _ + - (must start with a letter or digit).{RESET}")
+        sys.exit(1)
+    return str(value)
+
+
+def _inside_failure(resolved, resolved_root, what):
+    print(f"{RED_BOLD}🌊 Error: Unsafe {what} escapes {resolved_root}: {resolved}{RESET}")
+    sys.exit(1)
+
+
+def assert_inside(path, root, what):
+    # 归一化后确认路径没有跑到 root 外面（防 ../ 与软链接穿越）。
+    # 只做校验、不改写调用方的路径，避免改变既有行为。
+    # **跟随**最后一段的软链接：用于会被写进去或递归删除的路径。
+    resolved_root = Path(root).resolve()
+    resolved = Path(path).resolve()
+    if resolved != resolved_root and resolved_root not in resolved.parents:
+        _inside_failure(resolved, resolved_root, what)
+    return resolved
+
+
+def assert_inside_entry(path, root, what):
+    # 与 assert_inside 相同，但**不跟随**最后一段的软链接。links/ 下的链接本身就
+    # 是软链接，指向 bin/ 里的可执行文件：跟随过去会把"删除/重指这个链接"这种
+    # 再正常不过的操作误判成越界。只能用于"操作链接本身"、不会穿透写入的调用点。
+    resolved_root = Path(root).resolve()
+    candidate = Path(path)
+    if candidate.name in ("", ".", ".."):
+        _inside_failure(candidate, resolved_root, what)
+    resolved = candidate.parent.resolve() / candidate.name
+    if resolved != resolved_root and resolved_root not in resolved.parents:
+        _inside_failure(resolved, resolved_root, what)
+    return resolved
 
 
 # -------------------- 当前生效的配置 --------------------
