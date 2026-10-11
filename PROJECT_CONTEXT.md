@@ -137,12 +137,28 @@ updatedata/{版本号}/dir_structure_change   只有一个字符：Y/y = 目录�
 updatedata/{版本号}/transfer_commands      Y/y 时执行这个脚本（bash -c "$(curl …)"）
 ```
 
-- `{版本号}`：`install.sh` 用脚本里写死的 `LINUXWAVE_VERSION`（正在安装的版本）；`selfupdate.sh` 用 `latest_version` 里的目标版本
+- `{版本号}`：`install.sh` 与 `selfupdate.sh` 都取 `latest_version` 里的目标版本（**3.0 起** `install.sh` 也从 configdata 读 `version`/`branch`，不再写死在脚本里）
 - 标记文件拉不到（不存在/网络失败）→ 按「没变」处理，静默跳过；标记为 Y/y 但**迁移脚本拉不到** → 报错退出（避免留下半迁移状态）
 - 执行迁移脚本前会 `export LINUXWAVE_INSTALL_DIR`（安装目录）/ `LINUXWAVE_CONFIG_DIR`（配置目录）/ `LINUXWAVE_TARGET_VERSION`，脚本据此**自己判断要不要搬**（例如只对用户级安装迁移）
 - **迁移会搬走配置目录，所以迁移后必须重新解析**：`selfupdate.sh` 会再解析一次（否则 `VERSION.json` 会被写回旧位置）；`selfupdate.py` 的升级后复核也用 `version_file()` 每次重新解析（否则会误报「更新没有完成」）。`configpaths.py` 的模块级常量只在**进程启动时**解析一次，跨迁移的复核不能用它
 - ⚠️ **从 2.5 之前的版本升级必须用 `install.sh`**：2.5 之前发布的 `selfupdate.py` 把 `VERSION_FILE` 写死在 `/etc/linuxwave_config/VERSION.json`，配置被搬走后升级完的复核会读不到、**误报失败**（其实升级成功了）。2.5 及以后没有这个问题，可以正常用 `wave selfupdate`
 - 以后目录结构再变，只需在 configdata 加 `updatedata/{新版本}/` 这两个文件，**不用改任何代码**
+
+### 构建号（`versiondata/latest_version` 的 `build_number`）
+
+形如 `284D2306`，三段分别是：
+
+| 段 | 含义 |
+| --- | --- |
+| `284` | 生成当天的**日序号**（2026-10-11 是当年第 284 天） |
+| `D` | **星期几**：周一~周日依次为 `A`~`G`。`H` **只**用于法定节假日或公司年假，没有特殊说明就不要用 |
+| `2306` | 生成时刻的 `HH:MM`（**本地时间**） |
+
+取的是**生成时刻**，不是发布时刻 —— 例如 `283F2358` 是 10-10（周六 → `F`）23:58 生成、10-11 00:22 发布的，所以日序号是 283 而不是 284。
+
+已知的历史偏差：`LinuxWave 3.0` 与 `3.0.1` 用的都是 `282D…`，但 10-09（日序号 282）是**周五**，按规则应为 `E`。
+
+`versiondata/latest_version` 同时是**发布开关**：`install.sh` 从它读 `version` 与 `branch`，`selfupdate.py` 拿它的 `version` 与本地 `VERSION.json` 比较，所以把这份文件更新到新版本号，就等于把线上版本切过去了。
 
 ## 六、关键机制
 
