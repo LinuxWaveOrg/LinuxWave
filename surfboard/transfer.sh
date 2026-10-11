@@ -123,9 +123,11 @@ done < "$LIB_DIRS_FILE"
 tree_add_tree() {
     local root="$1"
     local file
+    # 软链接也要进索引：conda 的库里 libfoo.so.1 往往是指向 libfoo.so.1.2.3 的
+    # 软链接，只找 -type f 会漏掉它，于是"我们有但没接上"会被误判成"不属于我们"。
     while IFS= read -r file; do
         basename "$file"
-    done < <(find "$root" -type f 2>/dev/null)
+    done < <(find "$root" \( -type f -o -type l \) 2>/dev/null)
 }
 
 tree_add_tree "$TARGET_DIR" >> "$TREE_FILE"
