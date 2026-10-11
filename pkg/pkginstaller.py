@@ -474,6 +474,10 @@ def print_write_permission_advice(path=""):
         print(f"🌊 '{group}' moments ago (a shared install does that), that is what is still")
         print(f"🌊 missing here. Afterwards plain 'wave install <package>' works, no sudo,")
         print(f"🌊 no full path.")
+        print(f"🌊 If it is still unwritable after a re-login, the user manager started at")
+        print(f"🌊 your first login is holding the old credentials: run")
+        print(f"     systemctl --user exit")
+        print(f"🌊 then log in again (a reboot does the same).")
     else:
         print(f"🌊 Only root can write there, so the 'sudo' form above is the way in.")
 

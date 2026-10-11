@@ -962,6 +962,10 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         echo -e "${YELLOW}🌊 not have it yet: log out and back in (or run 'newgrp $SHARED_USER') before${RESET}"
         echo -e "${YELLOW}🌊 installing packages. A group only takes effect in a new login session -${RESET}"
         echo -e "${YELLOW}🌊 until then the tree is still unwritable, and 'wave' will say so.${RESET}"
+        echo -e "${YELLOW}🌊 If it is still unwritable after a re-login, the user manager started at${RESET}"
+        echo -e "${YELLOW}🌊 your first login is holding the old credentials: run${RESET}"
+        echo -e "${YELLOW}     systemctl --user exit${RESET}"
+        echo -e "${YELLOW}🌊 then log in again (a reboot does the same).${RESET}"
     else
         echo "🌊 '$CURRENT_USER' already has the '$SHARED_USER' group; nothing to re-login for."
     fi

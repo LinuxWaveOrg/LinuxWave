@@ -420,6 +420,10 @@ if [[ "$NEED_SUDO" == "true" && -n "$TREE_GROUP" && "$TREE_GROUP" != "root" \
         echo -e "${YELLOW}🌊 does not have it yet: log out and back in (or run 'newgrp $TREE_GROUP')${RESET}"
         echo -e "${YELLOW}🌊 before installing packages. A group only takes effect in a new login${RESET}"
         echo -e "${YELLOW}🌊 session - until then the tree is still unwritable, and 'wave' will say so.${RESET}"
+        echo -e "${YELLOW}🌊 If it is still unwritable after a re-login, the user manager started at${RESET}"
+        echo -e "${YELLOW}🌊 your first login is holding the old credentials: run${RESET}"
+        echo -e "${YELLOW}     systemctl --user exit${RESET}"
+        echo -e "${YELLOW}🌊 then log in again (a reboot does the same).${RESET}"
         echo -e "${YELLOW}🌊 The update itself is done; nothing is broken.${RESET}"
     else
         echo "🌊 '$CURRENT_USER' already has the '$TREE_GROUP' group; no re-login needed."
