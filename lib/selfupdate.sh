@@ -28,9 +28,27 @@ BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH"
 CONFIGDATA_URL="https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main"
 VERSION_DATA_URL="$CONFIGDATA_URL/versiondata/latest_version"
 
+# -------------------- 测试根（隔离） --------------------
+# LINUXWAVE_TEST 指向一个目录时，把它当作 /：HOME 和所有系统路径都挂到它下面，
+# 整条链路都落在那个目录里，完全不碰真实系统。
+# 没设置时 SYS_ROOT 为空，下面 "$SYS_ROOT/etc/..." 就还是 "/etc/..."，行为不变。
+SYS_ROOT=""
+if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
+    _lw_root="$LINUXWAVE_TEST"
+    if [[ "$_lw_root" == "~"* ]]; then
+        _lw_root="${HOME}${_lw_root#\~}"
+    fi
+    mkdir -p "$_lw_root"
+    SYS_ROOT="$(cd "$_lw_root" && pwd)"
+    export HOME="$SYS_ROOT${HOME}"
+    export LINUXWAVE_TEST_ROOT="$SYS_ROOT"
+    mkdir -p "$HOME"
+    echo "🌊 Test root: $SYS_ROOT"
+fi
+
 # 配置目录：系统级优先，其次用户级（与 lib/configpaths.py 的规则一致）
 # 迁移可能把配置搬到用户级位置，所以做成函数，迁移之后要再解析一次。
-SYSTEM_CONFIG_DIR="/etc/linuxwave_config"
+SYSTEM_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 USER_CONFIG_DIR="$HOME/.config/linuxwave_config"
 
 resolve_config_dir() {

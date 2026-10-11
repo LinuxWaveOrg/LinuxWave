@@ -4,6 +4,24 @@
 # This script downloads wave.py, installs dependencies, and configures PATH.
 # Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 
+# -------------------- 测试根（隔离） --------------------
+# LINUXWAVE_TEST 指向一个目录时，把它当作 /：HOME 和所有系统路径都挂到它下面，
+# 整条链路都落在那个目录里，完全不碰真实系统。
+# 没设置时 SYS_ROOT 为空，下面 "$SYS_ROOT/etc/..." 就还是 "/etc/..."，行为不变。
+SYS_ROOT=""
+if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
+    _lw_root="$LINUXWAVE_TEST"
+    if [[ "$_lw_root" == "~"* ]]; then
+        _lw_root="${HOME}${_lw_root#\~}"
+    fi
+    mkdir -p "$_lw_root"
+    SYS_ROOT="$(cd "$_lw_root" && pwd)"
+    export HOME="$SYS_ROOT${HOME}"
+    export LINUXWAVE_TEST_ROOT="$SYS_ROOT"
+    mkdir -p "$HOME"
+    echo "🌊 Test root: $SYS_ROOT"
+fi
+
 # -E（errtrace）让下面那个 ERR 陷阱能看见 run_cmd 等**函数内部**的失败：
 # 默认情况下陷阱不继承进函数，中途失败就只剩一个光秃秃的 curl 退出码。
 # 显式 `return 1`、调用方用 `||` 容忍的失败、`if` 条件里的失败都不会误触发。
@@ -262,7 +280,7 @@ SHARED_INSTALL=false
 SHARED_USER="linuxwave"
 SHARED_HOME="/home/$SHARED_USER"
 SHARED_BASE_DIR="$SHARED_HOME/.linuxwave"
-SHARED_CONFIG_DIR="/etc/linuxwave_config"
+SHARED_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 
 # ==========================================
 # 交互式目录选择
@@ -324,10 +342,10 @@ case "$choice" in
         BASE_DIR="$HOME/.local/linuxwave"
         ;;
     2)
-        BASE_DIR="/opt/linuxwave"
+        BASE_DIR="$SYS_ROOT/opt/linuxwave"
         ;;
     3)
-        BASE_DIR="/usr/local/linuxwave"
+        BASE_DIR="$SYS_ROOT/usr/local/linuxwave"
         ;;
     4)
         SHARED_INSTALL=true
@@ -482,7 +500,7 @@ DOWNLOAD_DIR="$BASE_DIR/downloads/tmp"
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     CONFIG_DIR="$SHARED_CONFIG_DIR"
 elif [[ "$NEED_SUDO" == "true" ]]; then
-    CONFIG_DIR="/etc/linuxwave_config"
+    CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 else
     CONFIG_DIR="$HOME/.config/linuxwave_config"
 fi

@@ -2,7 +2,25 @@
 # LinuxWave Uninstaller
 # 卸载 LinuxWave 及清理环境配置
 
-SYSTEM_CONFIG_DIR="/etc/linuxwave_config"
+# -------------------- 测试根（隔离） --------------------
+# LINUXWAVE_TEST 指向一个目录时，把它当作 /：HOME 和所有系统路径都挂到它下面，
+# 整条链路都落在那个目录里，完全不碰真实系统。
+# 没设置时 SYS_ROOT 为空，下面 "$SYS_ROOT/etc/..." 就还是 "/etc/..."，行为不变。
+SYS_ROOT=""
+if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
+    _lw_root="$LINUXWAVE_TEST"
+    if [[ "$_lw_root" == "~"* ]]; then
+        _lw_root="${HOME}${_lw_root#\~}"
+    fi
+    mkdir -p "$_lw_root"
+    SYS_ROOT="$(cd "$_lw_root" && pwd)"
+    export HOME="$SYS_ROOT${HOME}"
+    export LINUXWAVE_TEST_ROOT="$SYS_ROOT"
+    mkdir -p "$HOME"
+    echo "🌊 Test root: $SYS_ROOT"
+fi
+
+SYSTEM_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 USER_CONFIG_DIR="$HOME/.config/linuxwave_config"
 
 # 共享安装（install.sh 的菜单选项 4）
@@ -93,8 +111,8 @@ fi
 # 2. 如果读取失败（或文件不存在），把所有可能的路径都加入列表
 if [ ${#BASE_DIRS[@]} -eq 0 ]; then
     BASE_DIRS+=("$HOME/.local/linuxwave")
-    BASE_DIRS+=("/opt/linuxwave")
-    BASE_DIRS+=("/usr/local/linuxwave")
+    BASE_DIRS+=("$SYS_ROOT/opt/linuxwave")
+    BASE_DIRS+=("$SYS_ROOT/usr/local/linuxwave")
     BASE_DIRS+=("$SHARED_BASE_DIR")
 fi
 
