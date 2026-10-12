@@ -5,7 +5,13 @@
 # RPATH/RUNPATH 改写成 $ORIGIN 相对路径，指向产物自己的 lib/ 与 _DEPS
 # 列出的依赖的 lib/，让运行时 ld.so 真正找得到依赖包里的共享库。
 #
-# 用法: bash transfer.sh <目标目录> <BASE_DIR> 或 /bin/bash bash transfer.sh <目标目录> <BASE_DIR>
+# 用法: bash transfer.sh <目标目录> <BASE_DIR> [共享索引目录]
+#   /bin/bash bash transfer.sh <目标目录> <BASE_DIR> [共享索引目录]
+#
+# 第三个参数（或用环境变量 LINUXWAVE_SHARED_INDEX）给一个目录时，依赖侧的索引
+# （整棵依赖树的名字表、依赖 lib 里的库名）会缓存到那个目录、只建一次。统一收尾
+# 会对**每个**已装依赖各调一次本脚本，每次都重扫全部依赖树就是 O(依赖数²)：
+# 18 个依赖 = 324 次全树扫描。不给这个参数时行为与以前一致（每次都现场建）。
 #
 # 解析优先级：
 #   1. 目标目录内部（产物自己的 lib/ lib64/）
@@ -31,6 +37,7 @@ RESET='\033[0m'
 
 TARGET_DIR="$1"
 BASE_DIR="$2"
+SHARED_INDEX_DIR="${3:-${LINUXWAVE_SHARED_INDEX:-}}"
 
 if [[ -z "$TARGET_DIR" || -z "$BASE_DIR" ]]; then
     echo -e "${RED_BOLD}🌊 Error: Missing target directory or base directory.${RESET}"
@@ -58,24 +65,30 @@ MISSING_FILE="$(mktemp)"
 EXTERNAL_FILE="$(mktemp)"
 FAILED_FILE="$(mktemp)"
 ERROR_FILE="$(mktemp)"
+ELF_LIST_FILE="$(mktemp)"
 
 cleanup() {
     rm -f "$LIB_DIRS_FILE" "$PROVIDED_FILE" "$SYSTEM_FILE" "$TREE_FILE" \
-          "$UNRESOLVED_FILE" "$MISSING_FILE" "$EXTERNAL_FILE" "$FAILED_FILE" "$ERROR_FILE"
+          "$UNRESOLVED_FILE" "$MISSING_FILE" "$EXTERNAL_FILE" "$FAILED_FILE" \
+          "$ERROR_FILE" "$ELF_LIST_FILE"
 }
 trap cleanup EXIT
 
 # -------------------- 库目录索引（有序、去重） --------------------
 
+declare -A SEEN_LIB_DIRS
+
+# 目录去重改用关联数组，不再每个目录 fork 一次 grep。
 add_lib_dir() {
     local dir="$1"
     if [[ ! -d "$dir" ]]; then
         return 0
     fi
-    if grep -qxF "$dir" "$LIB_DIRS_FILE" 2>/dev/null; then
+    if [[ -n "${SEEN_LIB_DIRS[$dir]+set}" ]]; then
         return 0
     fi
-    echo "$dir" >> "$LIB_DIRS_FILE"
+    SEEN_LIB_DIRS[$dir]=1
+    printf '%s\n' "$dir" >> "$LIB_DIRS_FILE"
 }
 
 # 1. 目标目录自身
@@ -110,32 +123,84 @@ done
 
 # -------------------- 已经在我们树里的库名 --------------------
 
-# PROVIDED：出现在上面这些 lib 目录里的库文件名 —— 能靠 RUNPATH 解析的
-while IFS= read -r dir; do
-    for file in "$dir"/*; do
-        if [[ -f "$file" ]]; then
-            basename "$file" >> "$PROVIDED_FILE"
+# 列出这些目录里的库名。逐文件 fork 一个 basename，在 libevent/ncurses 那种几百个
+# 符号链接的库里会直接压过重定位本身，所以用内建 ${f##*/} 取名字，重定向放循环外。
+dir_lib_names() {
+    local dir file
+    for dir in "$@"; do
+        if [[ ! -d "$dir" ]]; then
+            continue
         fi
+        for file in "$dir"/*; do
+            if [[ -f "$file" ]]; then
+                printf '%s\n' "${file##*/}"
+            fi
+        done
     done
-done < "$LIB_DIRS_FILE"
-
-# TREE：整棵树里出现过的文件名 —— 用于分辨“我们有但没接上”与“根本不属于我们”
-tree_add_tree() {
-    local root="$1"
-    local file
-    # 软链接也要进索引：conda 的库里 libfoo.so.1 往往是指向 libfoo.so.1.2.3 的
-    # 软链接，只找 -type f 会漏掉它，于是"我们有但没接上"会被误判成"不属于我们"。
-    while IFS= read -r file; do
-        basename "$file"
-    done < <(find "$root" \( -type f -o -type l \) 2>/dev/null)
+    return 0
 }
 
-tree_add_tree "$TARGET_DIR" >> "$TREE_FILE"
-for dep_tree in "$BASE_DIR"/deps/*/*; do
-    if [[ -d "$dep_tree" ]]; then
-        tree_add_tree "$dep_tree" >> "$TREE_FILE"
+# 整棵树里出现过的文件名 —— 用于分辨“我们有但没接上”与“根本不属于我们”。
+# 软链接也要进索引：conda 的库里 libfoo.so.1 往往是指向 libfoo.so.1.2.3 的软链接，
+# 只找 -type f 会漏掉它，于是"我们有但没接上"会被误判成"不属于我们"。
+tree_add_tree() {
+    local file
+    while IFS= read -r file; do
+        printf '%s\n' "${file##*/}"
+    done < <(find "$1" \( -type f -o -type l \) 2>/dev/null)
+}
+
+# 依赖侧的内容对所有 target 都一样：走共享索引只建一次，先写临时文件再 mv，
+# 避免半截索引被后面的 target 复用。否则统一收尾时每个 target 都要把全部依赖重扫一遍。
+dep_lib_names() {
+    local dep_tree
+    for dep_tree in "$BASE_DIR"/deps/*/*; do
+        if [[ -d "$dep_tree" ]]; then
+            dir_lib_names "$dep_tree/lib" "$dep_tree/lib64"
+        fi
+    done
+    return 0
+}
+
+dep_tree_names() {
+    local dep_tree
+    for dep_tree in "$BASE_DIR"/deps/*/*; do
+        if [[ -d "$dep_tree" ]]; then
+            tree_add_tree "$dep_tree"
+        fi
+    done
+    return 0
+}
+
+# 缓存到共享目录；没有共享目录（或建不出来）时就地现算，行为与优化前一致。
+cached_dep_scan() {
+    local cache_name="$1" builder="$2"
+    local cache_path="" cache_tmp
+    if [[ -n "$SHARED_INDEX_DIR" ]] && mkdir -p "$SHARED_INDEX_DIR" 2>/dev/null; then
+        cache_path="$SHARED_INDEX_DIR/$cache_name"
     fi
-done
+
+    if [[ -n "$cache_path" && ! -f "$cache_path" ]]; then
+        cache_tmp="$(mktemp)"
+        "$builder" > "$cache_tmp"
+        mv -f "$cache_tmp" "$cache_path"
+    fi
+
+    if [[ -n "$cache_path" ]]; then
+        cat "$cache_path"
+    else
+        "$builder"
+    fi
+}
+
+# PROVIDED：这些 lib 目录里的库名 —— 能靠 RUNPATH 解析的。
+# 依赖那一份必须独立扫 deps/*/*，不能用上面那份去重后的目录表：那份表会把“本 target
+# 自己”的 lib 目录剔掉，而缓存是给所有 target 复用的，别的 target 就此看不到这些库名。
+dir_lib_names "$TARGET_DIR/lib" "$TARGET_DIR/lib64" > "$PROVIDED_FILE"
+cached_dep_scan dep_lib_names dep_lib_names >> "$PROVIDED_FILE"
+
+tree_add_tree "$TARGET_DIR" >> "$TREE_FILE"
+cached_dep_scan dep_tree_names dep_tree_names >> "$TREE_FILE"
 
 # -------------------- 系统库名（不计入“未声明依赖”） --------------------
 
@@ -158,6 +223,12 @@ done
 if command -v ldconfig >/dev/null 2>&1; then
     ldconfig -p 2>/dev/null | awk '/=>/ {print $1}' >> "$SYSTEM_FILE" || true
 fi
+
+# 系统库名单装进关联数组：每个未解析的 DT_NEEDED 都要查一次，逐次 fork grep 很贵。
+declare -A SYSTEM_SET
+while IFS= read -r name; do
+SYSTEM_SET[$name]=1
+done < "$SYSTEM_FILE"
 
 # -------------------- 辅助函数 --------------------
 
@@ -185,7 +256,7 @@ is_system_lib() {
             return 0
             ;;
     esac
-    grep -qxF "$name" "$SYSTEM_FILE" 2>/dev/null
+    [[ -n "${SYSTEM_SET[$name]+set}" ]]
 }
 
 declare -A RPATH_REL_CACHE
@@ -231,13 +302,50 @@ build_rpath_for_file() {
 
 # -------------------- 逐个 ELF 替换 --------------------
 
+# 后面两轮判断（是不是我们提供的库名 / 树里有没有同名文件）都是纯查表，
+# 装进关联数组即可，免得每个符号都去 fork 一次 grep。
+declare -A PROVIDED_SET TREE_SET
+while IFS= read -r name; do
+    PROVIDED_SET[$name]=1
+done < "$PROVIDED_FILE"
+while IFS= read -r name; do
+    TREE_SET[$name]=1
+done < "$TREE_FILE"
+
+# 一次 Python 扫描挑出 ELF：原来是 find -type f 之后每个文件再 fork
+# head|od|tr 三个进程去读魔数，文件一多就是几万次 fork。python3 不可用时退回老办法。
+ELF_FILES=()
+if command -v python3 >/dev/null 2>&1 && python3 -c '
+import os, stat, sys
+
+MAGIC = b"\x7fELF"
+
+for root, _dirs, files in os.walk(sys.argv[1]):
+    for name in files:
+        path = os.path.join(root, name)
+        try:
+            # 与 find -type f 对齐：不跟随软链接，只要普通文件
+            if not stat.S_ISREG(os.lstat(path).st_mode):
+                continue
+            with open(path, "rb") as handle:
+                if handle.read(4) != MAGIC:
+                    continue
+        except OSError:
+            continue
+        sys.stdout.write(path + "\n")
+' "$TARGET_DIR" > "$ELF_LIST_FILE"; then
+    mapfile -t ELF_FILES < "$ELF_LIST_FILE"
+else
+    while IFS= read -r candidate; do
+        if is_elf "$candidate"; then
+            ELF_FILES+=("$candidate")
+        fi
+    done < <(find "$TARGET_DIR" -type f 2>/dev/null)
+fi
+
 CHANGED=0
 
-while IFS= read -r file; do
-    if ! is_elf "$file"; then
-        continue
-    fi
-
+for file in "${ELF_FILES[@]}"; do
     # 没有 .dynamic（静态链接）的 ELF 不参与重定位
     if ! current_rpath="$(patchelf --print-rpath "$file" 2>/dev/null)"; then
         continue
@@ -261,7 +369,7 @@ while IFS= read -r file; do
         fi
 
         # 我们的树里有同名库 → 能靠 RUNPATH 解析
-        if grep -qxF "$needed" "$PROVIDED_FILE" 2>/dev/null; then
+        if [[ -n "${PROVIDED_SET[$needed]+set}" ]]; then
             continue
         fi
 
@@ -272,7 +380,7 @@ while IFS= read -r file; do
 
         echo "$needed" >> "$UNRESOLVED_FILE"
     done < <(patchelf --print-needed "$file" 2>/dev/null || true)
-done < <(find "$TARGET_DIR" -type f 2>/dev/null)
+done
 
 # -------------------- 输出 --------------------
 
@@ -296,7 +404,7 @@ if [[ -s "$UNRESOLVED_FILE" ]]; then
     # 分流：我们树里存在同名文件 → 真的没接上（警告）；
     #       树里根本没有 → 外部/未声明的依赖，LinuxWave 无从接，只作提示。
     while IFS= read -r ref; do
-        if grep -qxF "$ref" "$TREE_FILE" 2>/dev/null; then
+        if [[ -n "${TREE_SET[$ref]+set}" ]]; then
             echo "$ref" >> "$MISSING_FILE"
         else
             echo "$ref" >> "$EXTERNAL_FILE"

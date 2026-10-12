@@ -10,6 +10,17 @@ on:
 jobs:
   format-test:
     runs-on: ubuntu-latest
+    # api.github.com 未认证只有 60 次/小时，Runner 共用出口 IP 很容易被限流；
+    # pkg/pkginstaller.py、pkg/pkginfohelper.py 与 scripts/audit_deps.py 会在拿到 GH_TOKEN 时带上它。
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PYTHONUNBUFFERED: "1"
+    strategy:
+      # 3.14 与 3.15 各跑一条线；一条挂了不要取消另一条，否则看不出是哪个版本的问题
+      fail-fast: false
+      matrix:
+        # 3.14 是环境下限（.conda 需要 compression.zstd），3.15 是上游最新正式版
+        python-version: ['3.14', '3.15']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,13 +40,37 @@ jobs:
           path: infosource-data
 
       - name: Setup Python
+        if: matrix.python-version != '3.15'
         uses: actions/setup-python@v5
         with:
-          # .conda 包需要 Python 3.14 的 compression.zstd
-          python-version: '3.14'
+          python-version: ${{ matrix.python-version }}
+
+      # 3.15 这条线得自己装：actions/python-versions 里还没有 3.15.0 正式版
+      # （setup-python 报 "The version '3.15' ... was not found"）。改用 uv 拉
+      # python-build-standalone 的 3.15.0。
+      - name: Setup Python 3.15 (uv / python-build-standalone)
+        if: matrix.python-version == '3.15'
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.15'
+
+      # setup-uv 只把解释器登记给自己用，PATH 上的 python3 还是 runner 自带的那个。
+      # 所以显式建一个带 pip 的 venv 并插到 PATH 最前，让后面的 python3 真是 3.15。
+      - name: Create the Python 3.15 environment
+        if: matrix.python-version == '3.15'
+        run: |
+          uv venv --seed --python 3.15 "$RUNNER_TEMP/py315"
+          echo "$RUNNER_TEMP/py315/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/py315/bin/python3" -VV
+
+      # 版本不匹配就直接失败，免得 3.15 这条线悄悄跑在 3.14 上还报绿
+      - name: Verify the interpreter version
+        run: |
+          python3 -VV
+          python3 -c 'import sys; v = "%d.%d" % sys.version_info[:2]; assert v == "${{ matrix.python-version }}", v'
 
       - name: Install Python dependencies
-        run: pip install requests packaging rich
+        run: python3 -m pip install requests packaging rich
 
       - name: Setup LinuxWave config
         run: |

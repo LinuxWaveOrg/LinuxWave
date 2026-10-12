@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -216,13 +217,19 @@ def download_dependency(dep_url, dep_display_name, config, input_string):
     return original_filename
 
 
-def transfer_paths(target_dir):
+def transfer_paths(target_dir, shared_index_dir=None):
 
     # 路径替换（Homebrew 式）：交给 surfboard/transfer.sh，
     # 把产物里 ELF 的 RPATH/RUNPATH 改写成指向依赖 lib/ 的 $ORIGIN 相对路径。
+    # 给出 shared_index_dir 时，依赖侧的索引（整棵依赖树的名字表、依赖 lib 里的库名）
+    # 会缓存到该目录供同一批 target 复用，不必每个 target 重扫一遍。
+
+    command = ['bash', str(TRANSFER_SCRIPT), str(target_dir), str(BASE_DIR)]
+    if shared_index_dir is not None:
+        command.append(str(shared_index_dir))
 
     result = subprocess.run(
-        ['bash', str(TRANSFER_SCRIPT), str(target_dir), str(BASE_DIR)],
+        command,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
 
@@ -238,6 +245,10 @@ def transfer_installed_artifacts(*extra_dirs):
     # 否则“先装的依赖引用了后装的依赖”（例如 libidn2 → libunistring）会解析不到，
     # 留下未解析引用导致运行时 ld.so 加载失败。
     # 每个目录单独处理，解析时优先该产物自己的 lib/。
+    # 依赖侧的内容对所有 target 都一样，所以整个批次共用一个索引目录：
+    # 否则每个 target 都要把全部依赖树重扫一遍，18 个依赖就是 300+ 次全树扫描。
+
+    targets = []
 
     deps_root = BASE_DIR / "deps"
     if deps_root.is_dir():
@@ -246,10 +257,16 @@ def transfer_installed_artifacts(*extra_dirs):
                 continue
             for version_dir in sorted(owner_dir.iterdir()):
                 if version_dir.is_dir():
-                    transfer_paths(version_dir)
+                    targets.append(version_dir)
 
-    for extra_dir in extra_dirs:
-        transfer_paths(extra_dir)
+    targets.extend(extra_dirs)
+
+    if not targets:
+        return
+
+    with tempfile.TemporaryDirectory(prefix="linuxwave-transfer-index-") as index_dir:
+        for target_dir in targets:
+            transfer_paths(target_dir, index_dir)
 
 
 def install_dependency_shell(dep_name, dep_version, dep_sha256, dep_display_name,
