@@ -374,6 +374,34 @@ def resolve_base_dir(base_dir):
     return root if root.is_dir() else None
 
 
+def system_lib_names():
+    # 系统加载器自己能找到的库名：`ldconfig -p` 登记过的，加上动态加载器本身。
+    #
+    # 审计只该盯「系统给不了、只能由依赖树提供」的引用。否则会出现一类误报：
+    # 某个引用系统本来就有（比如 zstd 的 liblzma.so.5、libz.so.1），恰好又有某个
+    # 已装依赖也提供同名库（xz 提供 liblzma.so.5），就会被报成“漏声明”——而它
+    # 一直都解析成功：实测只装 zstd、不装 xz，`zstd --version` 照样能跑。
+    #
+    # 与之相对，libidn2 的 libiconv.so.2 在这里查不到（glibc 的 iconv 在 libc 里，
+    # 发行版不带 GNU libiconv），才是必须声明的真实缺口：只按数据声明装
+    # libidn2 + libunistring 时，`idn2 --version` 会直接报
+    # `libiconv.so.2: cannot open shared object file`。
+    names = set()
+    if shutil.which('ldconfig'):
+        result = subprocess.run(['ldconfig', '-p'], capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            fields = line.split()
+            if fields and '=>' in line:
+                names.add(fields[0])
+    return names
+
+
+def is_system_lib(name, system_names):
+    if name.startswith('ld-linux') or name.startswith('ld.so'):
+        return True
+    return name in system_names
+
+
 def audit_edges(files, base_dir, arch):
     deps_root = base_dir / "deps"
     if not deps_root.is_dir():
@@ -384,6 +412,8 @@ def audit_edges(files, base_dir, arch):
         fail("neither 'patchelf' nor 'readelf' found. Install patchelf (apt install patchelf) or binutils.")
 
     print(f"🌊 Auditing dependency edges in {deps_root}...")
+
+    system_names = system_lib_names()
 
     # 库文件名 -> 提供它的依赖名
     provider = {}
@@ -425,15 +455,20 @@ def audit_edges(files, base_dir, arch):
                 warnings.append(f"{name}@{version}: 没有对应的数据文件，用已安装的 _DEPS 代替")
 
             referenced = set()
+            # 系统给不了、只能由依赖树满足的引用：只有这些漏声明才算问题
+            referenced_required = set()
             for path in list(version_dir.rglob("lib/*")) + list(version_dir.rglob("bin/*")):
                 if not path.is_file() or not is_elf(path):
                     continue
                 for ref in elf_needed(path):
-                    owner = provider.get(os.path.basename(ref))
+                    base = os.path.basename(ref)
+                    owner = provider.get(base)
                     if owner and owner != name:
                         referenced.add(owner)
+                        if not is_system_lib(base, system_names):
+                            referenced_required.add(owner)
 
-            for owner in sorted(referenced - declared):
+            for owner in sorted(referenced_required - declared):
                 problems.append(f"{name}@{version} 实际引用了 {owner}，但数据里没有声明")
             for owner in sorted(declared - referenced):
                 warnings.append(f"{name}@{version} 声明了 {owner}，但本机产物里没有引用")

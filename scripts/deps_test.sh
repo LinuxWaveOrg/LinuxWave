@@ -185,11 +185,20 @@ for PKG in "${PKGS[@]}"; do
     fi
 
     # 2. 二进制要能真正跑起来（relink 漏改会在这里以 ld.so 报错暴露）
+    #    版本开关不统一：wget/ncdu/htop 认 --version，tmux 只认 -V。逐个试，
+    #    能跑起来就算过——加载不到库时任何参数都会以退出码 127 失败，不会被这里放过。
     echo "---------- run $PKG ----------"
-    if "$LINKS_DIR/$PKG" --version > /dev/null 2>&1; then
-        echo -e "${GREEN}🌊 OK: $PKG --version${RESET}"
+    RUN_FLAG=""
+    for flag in --version -V -v version; do
+        if "$LINKS_DIR/$PKG" "$flag" > /dev/null 2>&1; then
+            RUN_FLAG="$flag"
+            break
+        fi
+    done
+    if [[ -n "$RUN_FLAG" ]]; then
+        echo -e "${GREEN}🌊 OK: $PKG $RUN_FLAG${RESET}"
     else
-        echo -e "${RED_BOLD}🌊 FAIL: $PKG --version${RESET}"
+        echo -e "${RED_BOLD}🌊 FAIL: $PKG cannot report its version (tried --version -V -v version)${RESET}"
         FAILED=$((FAILED + 1))
     fi
 
