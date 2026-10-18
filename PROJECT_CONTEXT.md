@@ -161,6 +161,22 @@ updatedata/{版本号}/transfer_commands      Y/y 时执行这个脚本（bash -
 
 `versiondata/latest_version` 同时是**发布开关**：`install.sh` 从它读 `version` 与 `branch`，`selfupdate.py` 拿它的 `version` 与本地 `VERSION.json` 比较，所以把这份文件更新到新版本号，就等于把线上版本切过去了。
 
+### 发版时必须一起刷新的位置
+
+版本号和日期是两样东西，只改版本号会留下「最新版本 3.0.5 / 发布于 2026-10-11」这种自相矛盾的展示 —— 3.0.3 与 3.0.4 就漏过日期，直到 3.0.5 才发现。每次发版按这张单子过一遍：
+
+| 位置 | 要改什么 |
+| --- | --- |
+| `main/README.md` 第 19 行附近 | `3.0.x, Release on YYYY-MM-DD` |
+| `main/README.zh-Hans.md` 第 19 行附近 | `3.0.x，发布于 YYYY-MM-DD` |
+| `pages-site/index.html` 的 `version-block`（英文与中文两处） | **版本号 + 发布日期的两行都要改** |
+| `configdata` 的 `versiondata/latest_version` | `version` / `release_date` / `build_number` / `branch` |
+| `configdata` 的 `updatedata/3.0.x/dir_structure_change` | 新增，单字节 `N` |
+
+改完用远端内容复核，不要只看本地：`main` 与发布分支（`3.0`）是镜像，两边都要对；官网还要等 Pages 构建后再抓一次首页确认。
+
+`.templates/` 下的 `version`（`9.9.9` / `1.2.0` / `3.0.0`）是样例占位值，不参与发版，**不要跟着改**。`2.5` / `2.6` 等历史分支保留各自的版本号，也不要动。
+
 ## 六、关键机制
 
 1. **目录 + 软链接**：包与依赖都不再以“单个文件”形式存在，而是目录；`links/` 里放软链接并已加入 PATH。`名字@版本号` 永远可用；想让 `名字` 也能直接跑，用 `wave link <名>` 建一条不带版本号的软链接（自动跟随最高已装版本），或装的时候默认就会建（`--unlink` 可关掉）
