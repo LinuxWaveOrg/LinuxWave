@@ -56,7 +56,7 @@ PROJECT_CONTEXT.md 本文件：项目结构与关键机制
 
 | 文件 | 作用 |
 | --- | --- |
-| `depsinstaller.py` | **依赖安装编排（Python）**。校验/解析依赖引用 → 拉 `_依赖名@common` 取 `dep_name` → 拉 `_依赖名@版本号` 取 `url` / `sha256` / `deps` → 复用 `pkginstaller.download_file` 下载（进度条与软件包一致）→ 调 `depsinstaller.sh` → 递归安装子依赖；依赖已安装时只补标记（走 `tagger.sh` 命令行）。统一收尾的 `transfer_installed_artifacts()` 会**先收集全部 target**（所有 `deps/*/*` + 传入的包目录），再建**一个** `TemporaryDirectory` 当共享索引目录交给每个 target，收尾时自动清理 |
+| `depsinstaller.py` | **依赖安装编排（Python）**。校验/解析依赖引用 → 拉 `_依赖名@common` 取 `dep_name` → 拉 `_依赖名@版本号` 取 `url` / `sha256` / `deps` → 复用 `pkginstaller.download_file` 下载（进度条与软件包一致）→ 调 `depsinstaller.sh` → 递归安装子依赖；依赖已安装时只补标记（走 `tagger.sh` 命令行），并**优先读该依赖自己落盘的 `_DEPS`** 来递归补它自己的依赖 —— 只有 `_DEPS` 不存在（上次安装真的中断了）时才回源取版本文件。以前这里无条件回源，网络一抖，一个**已经装好**的依赖就会让整条安装失败（软件包本体已落盘，却连不带版本号的链接都没建）。统一收尾的 `transfer_installed_artifacts()` 会**先收集全部 target**（所有 `deps/*/*` + 传入的包目录），再建**一个** `TemporaryDirectory` 当共享索引目录交给每个 target，收尾时自动清理 |
 | `depsinstaller.sh` | **依赖安装入口（tree 模式）**：`source depsmanager.sh` → 调 `mw_install_artifact` → 在依赖目录里创建 `.depped_pkg_*` / `.depped_dep_*` 标记 |
 | `depsmanager.sh` | **通用安装核心**（被 `pkginstaller.sh` 与 `depsinstaller.sh` source，不单独执行）：定位下载到的原文件、SHA256 校验、解压、落盘（`binary` / `tree` 两种形态）、创建 `links/` 软链接、写 `_DEPS`、标记文件辅助函数。`mw_extract_binary` 与 `mw_extract_all` 里各有一串扩展名，**加新格式时两处都得补**，漏一个就会出现“把压缩包当二进制装下去”的静默错误。`mw_extract_all` 里“载荷只有一个顶层目录就剥掉它”的兜底带**内容目录白名单**（`lib`/`bin`/`sbin`/`include`/`share`/`man`/`etc`/`libexec`）：命中就**不剥**，否则像 `libcxx` 那种只含 `lib/` 的载荷会被摊平，依赖的 `lib/` 结构被破坏（MacWave 3.0.3 的实测 bug，LinuxWave 当前 30 个依赖都是 `.tar.bz2`、都带 `info/`，所以暂时踩不到，属预防性对齐） |
 | `tagger.sh` | `.depped_*` 标记文件原语：`tagger_create` / `tagger_delete` / `tagger_has_any`，既可 `bash tagger.sh <动作> …` 调用，也可被 source |
