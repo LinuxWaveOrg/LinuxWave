@@ -299,7 +299,13 @@ def audit_data(files, check_urls=False):
 
         sha256 = (fields.get("sha256") or [""])[0]
         if not sha256:
-            warnings.append(f"{label}: 未声明 sha256（安装器会跳过校验）")
+            # 安装器现在会直接拒绝没有校验值的记录，所以这对真实软件包是硬故障；
+            # 只有 test_* 测试夹具是故意留空的（test_no_sha256 就是用来验证拒绝分支的），
+            # 对它们保留警告、不判失败。
+            if ref.startswith("test_"):
+                warnings.append(f"{label}: 未声明 sha256（测试夹具，用于验证安装器的拒绝分支）")
+            else:
+                problems.append(f"{label}: 未声明 sha256（安装器会拒绝安装这个包）")
         elif not re.fullmatch(r'[0-9a-f]{64}', sha256):
             problems.append(f"{label}: sha256 不是 64 位小写十六进制 -> {sha256}")
 

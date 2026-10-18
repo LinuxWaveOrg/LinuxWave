@@ -107,6 +107,11 @@ jobs:
         run: |
           bash scripts/format_test.sh
 
+      # 负向回归：没有合法 sha256 就必须拒绝安装（缺值 / 畸形 / 值不符）
+      - name: Run checksum test
+        run: |
+          bash scripts/checksum_test.sh
+
       - name: Run dependency chain test
         run: |
           bash scripts/deps_test.sh
