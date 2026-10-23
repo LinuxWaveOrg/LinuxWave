@@ -695,10 +695,9 @@ for raw in open(sys.argv[1], encoding="utf-8"):
     else:
         repo_path = "/".join([directory for _, directory in stack] + [name])
 
-    if repo_path == "lib/wave.py":
-        local_path, executable = "lib/wave", 1
-    else:
-        local_path, executable = repo_path, int(repo_path.endswith(".sh"))
+    # lib/wave.py 按原名落盘；PATH 上的入口 lib/wave 由后面的 write_launcher 生成
+    # （它要按私有 venv 与解释器路径决定怎么启动，不能直接复制脚本本体）。
+    local_path, executable = repo_path, int(repo_path.endswith(".sh"))
 
     lines.append(f"{repo_path}\t{local_path}\t{executable}")
 
@@ -761,6 +760,336 @@ while IFS=$'\t' read -r repo_path local_path executable; do
 done <<< "$FILE_ENTRIES"
 
 # ==========================================
+# Python 运行环境（自带解释器 + 私有 venv + 启动器）
+# ==========================================
+#
+# 为什么不用 PATH 上的 python3 当入口：
+#   Linux 上 `python3` 可能来自 apt / pyenv / Homebrew / conda，换个版本就换了路径，
+#   而三个第三方依赖仍留在旧那个解释器的 site-packages 里。入口写死
+#   `#!/usr/bin/env python3` 就会在升级后全线报错（"module not available"）。
+#   Linux 上还多一层：现代 Debian/Ubuntu 的系统 Python 受 PEP 668 保护，
+#   `pip3 install requests` 直接以 externally-managed-environment 失败，而本脚本是
+#   `set -eE` + ERR 陷阱，于是整次安装就此中止 —— 全新机器根本装不上。
+#
+# 做法：
+#   1. 下载上游便携 CPython（地址与校验值在 configdata 的 pythondata/latest_python），
+#      校验 sha256 后解到 $BASE_DIR/python/<版本>/，并建 current 符号链接；
+#   2. 在安装根目录建私有 venv，把 requests / packaging / rich 装进去；
+#   3. lib/wave 变成一个 sh 启动器，按「venv → 自带解释器 → 安装时的解释器 → PATH」
+#      顺序挑选，并且只有能真正 import 到三个依赖时才使用。
+#
+# 下载失败（网络问题）时回退系统 python3，安装不因此中断。
+#
+# 注意：这一整段刻意放在「把所有权交还给用户」之前 —— 紧随其后的 chown -R /
+# chmod -R a+rX / g+s 会一并覆盖新生成的 python/ 与 venv/，共享安装的组员才用得了。
+# 也正因为此时 BASE_DIR 可能还不属于当前用户，写操作统一走 run_cmd（必要时 sudo）。
+
+portable_python_arch() {
+    case "$(uname -m)" in
+        arm64|aarch64) echo "arm64" ;;
+        x86_64|amd64)  echo "amd64" ;;
+        *)             echo "" ;;
+    esac
+}
+
+portable_python_binary() {
+    # 不同构建产物的目录布局不同，这里按常见位置逐个试探。
+    local root="$1" candidate
+    for candidate in \
+        "$root/install/bin/python3" \
+        "$root/bin/python3" \
+        "$root/python/install/bin/python3" \
+        "$root/python/bin/python3"
+    do
+        if [[ -x "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    candidate="$(find "$root" -maxdepth 4 -type f \( -name 'python3' -o -name 'python3.*' \) -perm -u+x 2>/dev/null | head -n 1)"
+    if [[ -n "$candidate" ]]; then
+        echo "$candidate"
+        return 0
+    fi
+    return 1
+}
+
+normalize_portable_python() {
+    # 把各种布局归一化成 <target>/bin/python3。
+    # 启动器只认 python/current/bin/python3，不归一化的话自带解释器在第 2 层永远命中不了。
+    local target="$1"
+    local py="$2"
+    local link="$target/bin/python3"
+    local relative
+
+    run_cmd mkdir -p "$target/bin" 2>/dev/null || return 0
+    if [[ "$py" == "$link" ]]; then
+        return 0
+    fi
+    if [[ "$py" != "$target"/* ]]; then
+        return 0
+    fi
+
+    # 用相对链接：整个 python/ 目录搬走以后仍然有效
+    relative="../${py#"$target"/}"
+    run_cmd ln -sfn "$relative" "$link" 2>/dev/null || true
+    return 0
+}
+
+ensure_portable_python() {
+    # 成功时把解释器路径打到 stdout，失败返回 1（调用方回退系统 python3）。
+    local base_dir="$1"
+    local arch="$2"
+    local data_url="$CONFIGDATA_URL/pythondata/latest_python"
+    local data_file version url sha target current archive actual py
+    local attempt
+
+    [[ -n "$arch" ]] || return 1
+
+    # 隔离测试根里不下载 30MB+ 的解释器：那是离线环境，且装完也跑不出真实安装流程。
+    # 真实产物的校验与功能由 .github/workflows/portable-python.yml 负责。
+    if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
+        return 1
+    fi
+
+    data_file="$(mktemp)"
+    if ! curl -fsSL --max-time 30 -o "$data_file" "$data_url" 2>/dev/null; then
+        rm -f "$data_file"
+        return 1
+    fi
+    version="$(sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' "$data_file" | head -n 1)"
+    url="$(sed -n "s/^${arch}_url:[[:space:]]*\"\(.*\)\"/\1/p" "$data_file" | head -n 1)"
+    sha="$(sed -n "s/^${arch}_sha256:[[:space:]]*\"\(.*\)\"/\1/p" "$data_file" | head -n 1)"
+    rm -f "$data_file"
+
+    if [[ -z "$version" || -z "$url" || -z "$sha" ]]; then
+        return 1
+    fi
+
+    target="$base_dir/python/$version"
+    current="$base_dir/python/current"
+
+    if py="$(portable_python_binary "$target" 2>/dev/null)"; then
+        :
+    else
+        archive="$base_dir/downloads/tmp/portable-python-$version.tar.gz"
+        run_cmd mkdir -p "$base_dir/downloads/tmp" 2>/dev/null || true
+        # 30~36MB 的下载在烂链路上很容易断，重试几次比让用户重装划算。
+        for attempt in 1 2 3; do
+            # 每次重试前清掉上次的半截文件：否则「文件存在」会被当成下载成功，
+            # 最后倒在 sha256 比对那一步，报错方向就错了。
+            run_cmd rm -f "$archive" 2>/dev/null || true
+            if run_cmd curl -fsSL --retry 2 --retry-all-errors --retry-delay 3 \
+                   --connect-timeout 20 --max-time 600 -o "$archive" "$url" 2>/dev/null; then
+                break
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+                echo -e "${YELLOW}🌊 Retrying the bundled Python download ($((attempt + 1))/3)...${RESET}"
+                sleep 3
+            fi
+        done
+        if [[ ! -f "$archive" ]]; then
+            return 1
+        fi
+        actual="$(sha256sum "$archive" 2>/dev/null | awk '{print $1}')"
+        if [[ -z "$actual" && -n "$(command -v shasum)" ]]; then
+            actual="$(shasum -a 256 "$archive" | awk '{print $1}')"
+        fi
+        if [[ "$actual" != "$sha" ]]; then
+            run_cmd rm -f "$archive" 2>/dev/null || true
+            echo -e "${RED_BOLD}🌊 Error: the bundled Python download failed its checksum check.${RESET}" >&2
+            return 1
+        fi
+        run_cmd mkdir -p "$target" 2>/dev/null || true
+        if ! run_cmd tar -xzf "$archive" -C "$target" 2>/dev/null; then
+            run_cmd rm -f "$archive" 2>/dev/null || true
+            return 1
+        fi
+        run_cmd rm -f "$archive" 2>/dev/null || true
+        py="$(portable_python_binary "$target" 2>/dev/null)" || return 1
+    fi
+
+    if ! "$py" -c 'import sys; sys.exit(0)' >/dev/null 2>&1; then
+        return 1
+    fi
+
+    normalize_portable_python "$target" "$py"
+
+    run_cmd mkdir -p "$base_dir/python" 2>/dev/null || true
+    run_cmd ln -sfn "$version" "$current" 2>/dev/null || true
+    echo "$py"
+    return 0
+}
+
+write_launcher() {
+    # 生成 lib/wave 启动器：把「当前选定的解释器」烘进去作为 venv 失效时的第二选择。
+    # 注意：调用本函数时**不能**写 run_cmd write_launcher —— sudo 无法执行 shell 函数。
+    local base_dir="$1"
+    local recorded="$2"
+    local target="$base_dir/lib/wave"
+    local tmp escaped rendered
+
+    tmp="$(mktemp)"
+    cat > "$tmp" <<'LAUNCHER'
+#!/bin/sh
+# LinuxWave launcher
+# 由 install.sh / selfupdate.sh 生成，会被覆盖，请不要手工编辑。
+#
+# 选择一个**真正能 import 到依赖**的解释器来运行 lib/wave.py：
+#   1. 安装根目录下的私有 venv（与系统 Python 升级完全解耦）
+#   2. 自带的便携 Python（venv 坏掉时的第一选择）
+#   3. 生成这个启动器时的解释器路径
+#   4. PATH 上的 python3（最后兜底，wave.py 会明确指出缺哪个依赖）
+
+set -u
+
+# 解析自身真实路径（可能经由 PATH 上的符号链接调用）
+self="$0"
+while [ -L "$self" ]; do
+    link="$(readlink "$self")"
+    case "$link" in
+        /*) self="$link" ;;
+        # 不用 dirname：它是外部命令，PATH 不正常时启动器就起不来了。
+        *)  case "$self" in */*) self="${self%/*}/$link" ;; *) self="$link" ;; esac ;;
+    esac
+done
+case "$self" in
+    */*) self_dir="${self%/*}" ;;
+    *)   self_dir="." ;;
+esac
+lib_dir="$(cd -- "$self_dir" && pwd)" || exit 1
+root_dir="$(cd -- "$lib_dir/.." && pwd)" || exit 1
+entry="$lib_dir/wave.py"
+
+#__LINUXWAVE_PYTHON__
+
+deps_ok() {
+    [ -x "$1" ] || return 1
+    "$1" -c 'import requests, packaging, rich' >/dev/null 2>&1
+}
+
+# 1. 私有 venv（正常情况下就是它）
+if deps_ok "$root_dir/venv/bin/python3"; then
+    exec "$root_dir/venv/bin/python3" "$entry" "$@"
+fi
+if deps_ok "$root_dir/venv/bin/python"; then
+    exec "$root_dir/venv/bin/python" "$entry" "$@"
+fi
+
+# 2. 自带的便携 Python（它自带的 site-packages 里没有我们的依赖，
+#    但如果 venv 被删了、依赖被装进过它，这里仍然能救场）
+if [ -x "$root_dir/python/current/bin/python3" ] && deps_ok "$root_dir/python/current/bin/python3"; then
+    exec "$root_dir/python/current/bin/python3" "$entry" "$@"
+fi
+
+# 3. 安装时记录的解释器
+if [ -n "${LINUXWAVE_PYTHON:-}" ] && deps_ok "$LINUXWAVE_PYTHON"; then
+    exec "$LINUXWAVE_PYTHON" "$entry" "$@"
+fi
+
+# 4. 最后才用 PATH 上的 python3（wave.py 会明确指出缺哪个依赖）
+if command -v python3 >/dev/null 2>&1; then
+    exec python3 "$entry" "$@"
+fi
+
+echo "🌊 Error: no usable Python 3 interpreter was found." >&2
+echo "🌊 Reinstall LinuxWave with lib/install.sh." >&2
+exit 1
+LAUNCHER
+
+    escaped="$(printf '%s' "$recorded" | sed 's/[\\"`$]/\\&/g')"
+    rendered="$(mktemp)"
+    sed "s|#__LINUXWAVE_PYTHON__|LINUXWAVE_PYTHON=\"$escaped\"|" "$tmp" > "$rendered"
+    rm -f "$tmp"
+
+    run_cmd mkdir -p "$(dirname "$target")"
+    run_cmd cp "$rendered" "$target"
+    run_cmd chmod 755 "$target"
+    rm -f "$rendered"
+}
+
+VENV_DIR="$BASE_DIR/venv"
+VENV_PY=""
+PYTHON_BIN=""
+PYTHON_SOURCE=""
+
+echo "🌊 Preparing the Python runtime..."
+BUNDLED_PY="$(ensure_portable_python "$BASE_DIR" "$(portable_python_arch)")" || BUNDLED_PY=""
+
+if [[ -n "$BUNDLED_PY" ]]; then
+    PYTHON_BIN="$BUNDLED_PY"
+    PYTHON_SOURCE="bundled"
+    echo "🌊 Using the bundled Python: ${BUNDLED_PY#"$BASE_DIR"/}"
+else
+    PYTHON_BIN="$(command -v python3 || true)"
+    PYTHON_SOURCE="system"
+    if [[ -z "$PYTHON_BIN" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: no Python 3 interpreter is available.${RESET}"
+        echo -e "${RED_BOLD}🌊 The bundled Python could not be downloaded and python3 is not in PATH.${RESET}"
+        exit 1
+    fi
+    echo -e "${YELLOW}🌊 Warning: could not prepare the bundled Python; using $PYTHON_BIN instead.${RESET}"
+    echo -e "${YELLOW}🌊 Re-run the installer when the network is available to make this installation self-contained.${RESET}"
+fi
+
+run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
+
+if run_cmd "$PYTHON_BIN" -m venv "$VENV_DIR" >/dev/null 2>&1; then
+    VENV_PY="$VENV_DIR/bin/python3"
+    [[ -x "$VENV_PY" ]] || VENV_PY="$VENV_DIR/bin/python"
+    echo "🌊 Private Python environment ready: ${VENV_DIR#"$BASE_DIR"/}"
+else
+    VENV_PY=""
+    echo -e "${YELLOW}🌊 Warning: could not create a private virtualenv; using the ${PYTHON_SOURCE} interpreter directly.${RESET}"
+fi
+
+deps_present() {
+    # 判断一个解释器是否真的能 import 到三个依赖（启动器用的是同一条判据）
+    [[ -n "$1" ]] || return 1
+    "$1" -c 'import requests, packaging, rich' >/dev/null 2>&1
+}
+
+if [[ -n "$VENV_PY" && -x "$VENV_PY" ]]; then
+    echo "🌊 Installing Python dependencies into the private environment..."
+    # --timeout/--retries 收小：离线环境里让 pip 尽快失败，好走到下面的降级分支，
+    # 而不是死等默认的长超时（隔离测试根里每次安装都会走一遍）。
+    run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 --upgrade pip >/dev/null 2>&1 || true
+    run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 requests packaging rich >/dev/null 2>&1 || true
+
+    if deps_present "$VENV_PY"; then
+        :
+    else
+        # 拿不到 PyPI 时（离线安装、镜像不可达），退回「继承父解释器 site-packages」
+        # 的 venv —— 系统 python3 上通常已经有这三个包（apt 的 python3-requests 等），
+        # 这样离线环境也能装完并跑起来，而不是直接失败。
+        echo -e "${YELLOW}🌊 Could not install the dependencies into the venv; retrying with the parent's packages.${RESET}"
+        run_cmd rm -rf "$VENV_DIR" 2>/dev/null || true
+        run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
+        if run_cmd "$PYTHON_BIN" -m venv --system-site-packages "$VENV_DIR" >/dev/null 2>&1; then
+            VENV_PY="$VENV_DIR/bin/python3"
+            [[ -x "$VENV_PY" ]] || VENV_PY="$VENV_DIR/bin/python"
+        fi
+        if ! deps_present "$VENV_PY"; then
+            VENV_PY=""
+        fi
+    fi
+fi
+
+if [[ -z "$VENV_PY" ]]; then
+    echo -e "${YELLOW}🌊 Warning: no private environment with the dependencies; using $PYTHON_BIN directly.${RESET}"
+fi
+
+# 最后一道判据：选定解释器必须真的能 import。给不出可用的解释器就不要谎报安装成功。
+if ! deps_present "$VENV_PY" && ! deps_present "$PYTHON_BIN"; then
+    echo -e "${RED_BOLD}🌊 Error: no Python interpreter with requests/packaging/rich is available.${RESET}"
+    echo -e "${RED_BOLD}🌊 Install them for one interpreter and re-run, or retry when the network is up.${RESET}"
+    echo -e "${RED_BOLD}🌊   python3 -m pip install requests packaging rich${RESET}"
+    exit 1
+fi
+
+write_launcher "$BASE_DIR" "$PYTHON_BIN"
+
+# ==========================================
 # 把所有权交还给用户（下载后再次确保）
 # ==========================================
 
@@ -819,37 +1148,6 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     if ! id -G 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
         RELOGIN_NEEDED=true
     fi
-fi
-
-# ==========================================
-# 安装 Python 依赖
-# ==========================================
-
-echo "🌊 Checking Python dependencies..."
-if ! python3 -c "import requests" 2>/dev/null; then
-    echo "🌊 Installing 'requests' library..."
-    pip3 install requests --quiet
-else
-    echo "🌊 'requests' library is already installed."
-fi
-
-if ! python3 -c "from packaging.version import parse" 2>/dev/null; then
-    echo "🌊 Installing 'packaging' library..."
-    pip3 install packaging --quiet
-else
-    echo "🌊 'packaging' library is already installed."
-fi
-
-if ! python3 -c "import rich" 2>/dev/null; then
-    echo "🌊 Installing 'rich' library for progress bar..."
-    if pip3 install rich --quiet; then
-        echo "🌊 'rich' installed successfully."
-    else
-        echo -e "${RED_BOLD}🌊 Warning: 'rich' installation failed. Progress bar will not be available.${RESET}"
-        echo "🌊 You can install it manually later: pip3 install rich"
-    fi
-else
-    echo "🌊 'rich' library is already installed."
 fi
 
 # ==========================================

@@ -1,0 +1,142 @@
+name: Portable Python
+
+# 校验「自带解释器」这条链路里唯一可能静默失效的外部依赖：
+# configdata 的 pythondata/latest_python 指向的上游产物是否还在、校验值是否还对、
+# 解开后是否真有 python/bin/python3，以及它能否满足 LinuxWave 的硬要求
+# （compression.zstd 装 .conda、内置 pip、venv、三个第三方依赖）。
+#
+# 为什么需要它：URL 指向 astral-sh/python-build-standalone 的 tag。上游清理旧 tag
+# 时地址会失效，而那时用户装到一半才会发现。每月跑一次，另外可用 workflow_dispatch
+# 手动触发（换了版本号、或怀疑上游动了资产时）。
+#
+# 两个架构都下载并核对 sha256（在 amd64 runner 上也能做），但只有本机架构能真的
+# 执行 —— arm64 的解释器无法在 x86_64 上跑，所以「能跑起来」那部分只覆盖 native。
+
+on:
+  schedule:
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+  push:
+    branches: [main, 3.0, 3.1]
+    paths:
+      - '.github/workflows/portable-python.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch pythondata/latest_python
+        run: |
+          set -euo pipefail
+          url="https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main/pythondata/latest_python"
+          curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 --max-time 60 -o /tmp/latest_python "$url"
+          echo "--- /tmp/latest_python ---"
+          grep -vE '^\s*(#|$)' /tmp/latest_python
+
+      - name: Parse and sanity-check the data
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' /tmp/latest_python | head -n1)"
+          [[ -n "$version" ]] || { echo "::error::no version in latest_python"; exit 1; }
+          echo "BUNDLED_VERSION=$version" >> "$GITHUB_ENV"
+
+          for arch in arm64 amd64; do
+            url="$(sed -n "s/^${arch}_url:[[:space:]]*\"\(.*\)\"/\1/p" /tmp/latest_python | head -n1)"
+            sha="$(sed -n "s/^${arch}_sha256:[[:space:]]*\"\(.*\)\"/\1/p" /tmp/latest_python | head -n1)"
+            [[ "$url" == https://* ]] || { echo "::error::$arch url is not https: '$url'"; exit 1; }
+            [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::$arch sha256 is not 64 lowercase hex: '$sha'"; exit 1; }
+            echo "  $arch: $url"
+          done
+
+      # 两个架构都下载并核对：arm64 的产物在 x86_64 上跑不了，但能证明「地址还在、
+      # 内容没被替换」。真正的执行验证在下一步只用 native 架构。
+      - name: Download and verify both architectures
+        run: |
+          set -euo pipefail
+          for arch in arm64 amd64; do
+            url="$(sed -n "s/^${arch}_url:[[:space:]]*\"\(.*\)\"/\1/p" /tmp/latest_python | head -n1)"
+            sha="$(sed -n "s/^${arch}_sha256:[[:space:]]*\"\(.*\)\"/\1/p" /tmp/latest_python | head -n1)"
+            out="/tmp/py-$arch.tar.gz"
+            echo "::group::$arch"
+            curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 \
+                 --connect-timeout 20 --max-time 900 -o "$out" "$url"
+            echo "$sha  $out" | sha256sum -c -
+            ls -l "$out"
+            # 解开后必须能找到解释器（布局约定见 pythondata/latest_python 的注释）
+            rm -rf "/tmp/py-$arch"
+            mkdir -p "/tmp/py-$arch"
+            tar -xzf "$out" -C "/tmp/py-$arch"
+            found=""
+            for c in install/bin/python3 bin/python3 python/install/bin/python3 python/bin/python3; do
+              [[ -x "/tmp/py-$arch/$c" ]] && found="/tmp/py-$arch/$c" && break
+            done
+            if [[ -z "$found" ]]; then
+              echo "::error::$arch archive has no python3 in any expected location"
+              find "/tmp/py-$arch" -maxdepth 4 -name 'python3*' || true
+              exit 1
+            fi
+            echo "  interpreter: ${found#/tmp/py-$arch/}"
+            echo "::endgroup::"
+          done
+          # native 架构交给下一步
+          case "$(uname -m)" in
+            x86_64|amd64) echo "NATIVE_ARCH=amd64" >> "$GITHUB_ENV" ;;
+            aarch64|arm64) echo "NATIVE_ARCH=arm64" >> "$GITHUB_ENV" ;;
+            *) echo "::error::unsupported runner arch $(uname -m)"; exit 1 ;;
+          esac
+
+      - name: Exercise the bundled interpreter (native arch)
+        run: |
+          set -euo pipefail
+          py="/tmp/py-$NATIVE_ARCH/python/bin/python3"
+          [[ -x "$py" ]] || py="$(find "/tmp/py-$NATIVE_ARCH" -maxdepth 4 -type f -name 'python3' -perm -u+x | head -n1)"
+          echo "Interpreter: $py"
+
+          echo "--- version ---"
+          "$py" -VV
+          "$py" -c 'import sys; assert sys.version_info[:2] >= (3, 14), sys.version_info'
+
+          echo "--- hard requirements ---"
+          # .conda 包必须靠 compression.zstd 解开；低于 3.14 就没有这个模块
+          "$py" -c 'from compression import zstd; print("compression.zstd OK")'
+          "$py" -c 'import ssl, sqlite3, lzma, bz2, zlib, ctypes, venv; print("stdlib OK")'
+          "$py" -m pip --version
+
+          echo "--- venv + dependencies ---"
+          "$py" -m venv /tmp/bundled-venv
+          /tmp/bundled-venv/bin/python3 -m pip install --quiet --upgrade pip
+          /tmp/bundled-venv/bin/python3 -m pip install --quiet requests packaging rich
+          /tmp/bundled-venv/bin/python3 -c 'import requests, packaging, rich; print("three dependencies OK")'
+          /tmp/bundled-venv/bin/python3 -c 'from compression import zstd; print("zstd still OK in venv")'
+
+          echo "--- run the real code under it ---"
+          root=/tmp/lw-root
+          base=/tmp/lw-base
+          mkdir -p "$root/etc/linuxwave_config" "$base"/{bin,links,pkg,surfboard,lib,downloads/tmp}
+          printf '{"base_dir": "%s"}\n' "$base" > "$root/etc/linuxwave_config/config.json"
+          printf '{"version": "0.0.0", "components": {}}\n' > "$root/etc/linuxwave_config/VERSION.json"
+          cp pkg/*.py pkg/*.sh "$base/pkg/"
+          cp surfboard/*.py surfboard/*.sh "$base/surfboard/"
+          cp lib/*.py lib/*.sh "$base/lib/"
+          LINUXWAVE_TEST="$root" /tmp/bundled-venv/bin/python3 "$base/lib/wave.py" -V
+          LINUXWAVE_TEST="$root" /tmp/bundled-venv/bin/python3 -c "
+          import sys
+          sys.path[:0] = ['$base/lib', '$base/pkg', '$base/surfboard']
+          for name in ('pkginstaller', 'depsinstaller', 'uninstaller', 'linker', 'selfupdate', 'configpaths'):
+              __import__(name)
+          print('every module imports under the bundled Python')
+          "
+
+      - name: Fail loudly if the data is stale
+        run: |
+          set -euo pipefail
+          echo "Bundled Python $BUNDLED_VERSION verified end to end for $NATIVE_ARCH (and download-verified for the other arch)."

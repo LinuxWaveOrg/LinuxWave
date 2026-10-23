@@ -92,7 +92,10 @@ jobs:
           mkdir -p /tmp/linuxwave-test/lib
           cp lib/*.py /tmp/linuxwave-test/lib/
           cp lib/*.sh /tmp/linuxwave-test/lib/
-          cp lib/wave.py /tmp/linuxwave-test/lib/wave
+          # lib/wave.py 按原名落盘；入口 lib/wave 是 install.sh 生成的启动器。
+          # 这里只放一个最小等价物（真的启动器由 sandbox_test 走安装脚本时验证）。
+          printf '#!/bin/sh\nexec python3 /tmp/linuxwave-test/lib/wave.py "$@"\n' \
+            > /tmp/linuxwave-test/lib/wave
           chmod +x /tmp/linuxwave-test/lib/wave /tmp/linuxwave-test/lib/*.sh
 
       - name: Run config path test

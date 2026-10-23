@@ -64,6 +64,13 @@ check() {
     fi
 }
 
+# 安装树里只有「源码文件」数量是确定的：python/ 与 venv/ 是运行时环境，
+# 文件数随解释器版本与装进去的依赖包变化（实测 2200+），不能用固定数字断言。
+source_file_count() {
+    find "$1" -type f \
+        -not -path "$1/python/*" -not -path "$1/venv/*" 2>/dev/null | wc -l | tr -d ' '
+}
+
 # contains <描述> <文件> <关键字>
 contains() {
     if grep -qF -- "$3" "$2" 2>/dev/null; then
@@ -135,9 +142,27 @@ scenario_install_dirs() {
         install_run --silent "$opt_arg"
         check "--dir-option=$opt 安装成功" "$?" "0"
         check "--dir-option=$opt 落到 $display" "$([[ -d "$dir" ]] && echo yes || echo no)" "yes"
-        check "--dir-option=$opt 文件数 20" "$(find "$dir" -type f 2>/dev/null | wc -l | tr -d ' ')" "20"
+        check "--dir-option=$opt 源码文件数 21" "$(source_file_count "$dir")" "21"
         check "--dir-option=$opt 配置在 $cfg" "$(tree_base_dir "$cfg/config.json")" "$dir"
         check "--dir-option=$opt 入口可执行" "$([[ -x "$dir/lib/wave" ]] && echo yes || echo no)" "yes"
+        # 3.1.0：入口从「wave.py 的副本」变成 sh 启动器，且自带私有环境
+        check "--dir-option=$opt 入口是 sh 启动器" \
+            "$(head -n 1 "$dir/lib/wave" 2>/dev/null | tr -d '\r')" "#!/bin/sh"
+        check "--dir-option=$opt 启动器指向 wave.py" \
+            "$([[ "$(count_in "$dir/lib/wave" "wave.py")" -ge 1 ]] && echo yes || echo no)" "yes"
+        check "--dir-option=$opt 仍是 python 源码（不是副本）" \
+            "$(head -n 1 "$dir/lib/wave.py" 2>/dev/null | cut -c1-12)" "#!/usr/bin/e"
+        check "--dir-option=$opt 私有环境能 import 依赖" \
+            "$("$dir/venv/bin/python3" -c 'import requests, packaging, rich' >/dev/null 2>&1 && echo yes || echo no)" "yes"
+        # 最关键的一条：入口不再依赖 PATH 上的 python3 —— 把 PATH 清空也能起来
+        local bare_rc bare_out
+        bare_out="$(env -i HOME=/root PATH=/nonexistent "$dir/lib/wave" -V 2>&1)"
+        bare_rc=$?
+        check "--dir-option=$opt PATH 无 python3 时仍能运行" "$bare_rc" "0"
+        case "$bare_out" in
+            *"LinuxWave "*[0-9]*) check "--dir-option=$opt PATH 无 python3 时打印版本" "yes" "yes" ;;
+            *) check "--dir-option=$opt PATH 无 python3 时打印版本" "$bare_out" "expected a version line" ;;
+        esac
         check "--dir-option=$opt VERSION.json 版本与 configdata 一致" \
             "$(tree_version "$cfg/VERSION.json")" \
             "$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' \
@@ -243,7 +268,7 @@ scenario_mid_failure() {
     reset_state
     install_run --silent --dir-option=1
     check "修好后重跑可自愈" "$?" "0"
-    check "自愈后文件数 20" "$(find /root/.local/linuxwave -type f | wc -l | tr -d ' ')" "20"
+    check "自愈后源码文件数 21" "$(source_file_count /root/.local/linuxwave)" "21"
     check "正常安装不误报失败指引" "$(count_in "$OUT" "did not finish")" "0"
 }
 
@@ -459,7 +484,7 @@ scenario_download_retry() {
     wait
     check "短暂失败后重试成功" "$rc" "0"
     contains "打印了重试提示" "$OUT" "Retrying lib/help.py"
-    check "自愈后 20 个文件齐备" "$(find /root/.local/linuxwave -type f | wc -l | tr -d ' ')" "20"
+    check "自愈后 21 个源码文件齐备" "$(source_file_count /root/.local/linuxwave)" "21"
     # 自愈那次失败发生在 if 条件里，ERR 陷阱不该开火——
     # 否则一次已经自己恢复的抖动会留下「未完成」的误导说明
     check "自愈后不谎报未完成" "$(count_in "$OUT" "did not finish")" "0"
