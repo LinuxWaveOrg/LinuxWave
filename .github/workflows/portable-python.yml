@@ -140,3 +140,48 @@ jobs:
         run: |
           set -euo pipefail
           echo "Bundled Python $BUNDLED_VERSION verified end to end for $NATIVE_ARCH (and download-verified for the other arch)."
+
+  # 真实安装一遍：走 install.sh 的完整流程（含下载自带解释器、建私有 venv、
+  # 生成 lib/wave 启动器），然后验证入口在「PATH 上没有 python3」时仍能运行。
+  #
+  # 只在手动/月度触发：它按 configdata 声明的分支下载代码，push 时那两边可能
+  # 还没准备好（例如新分支刚建），会把分支顺序问题误报成安装失败。
+  install-end-to-end:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install with the real installer
+        run: |
+          set -euo pipefail
+          target="$HOME/.linuxwave-e2e"
+          # 用户级安装目录：不需要 sudo、不动 /etc，也不会污染 runner 的其它部分
+          bash lib/install.sh --silent --dir-option="$target"
+
+      - name: The entry point must not need python3 on PATH
+        run: |
+          set -euo pipefail
+          target="$HOME/.linuxwave-e2e"
+          echo "--- tree ---"
+          ls -l "$target/lib/wave" "$target/lib/wave.py"
+          head -n 1 "$target/lib/wave"
+          du -sh "$target/python" "$target/venv"
+
+          echo "--- bundled interpreter ---"
+          "$target/python/current/bin/python3" -VV
+          "$target/python/current/bin/python3" -c 'from compression import zstd; print("compression.zstd OK")'
+
+          echo "--- runs with no python3 on PATH ---"
+          out="$(env -i HOME="$HOME" PATH=/nonexistent "$target/lib/wave" -V)"
+          echo "$out"
+          case "$out" in
+            *LinuxWave*3.1.*) ;;
+            *) echo "::error::the launcher did not report a 3.1.x version"; exit 1 ;;
+          esac
+
+          echo "--- and a normal invocation works too ---"
+          "$target/lib/wave" -V
+          "$target/lib/wave" list || true
