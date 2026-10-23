@@ -131,6 +131,78 @@ config_cmd() {
     fi
 }
 
+# fetch_to_file 的 default runner：原样执行，不碰 sudo。
+# 写出来是因为 fetch_to_file 里统一用 "$runner" 前缀，直接写命令名会被当成可执行文件。
+direct() {
+    "$@"
+}
+
+# ==========================================
+# 带超时与重试的下载# ==========================================
+#
+# 一次网络抖动不该让整个自更新前功尽弃：每个请求都有超时，失败按 curl 的退出码
+# 判断值不值得重试，并且先写 <目标>.linuxwave-part 再 mv —— 重试期间目标位置
+# 不会出现半个文件，全部失败时原地那份好文件也不受影响。
+#
+# 这解决的是实测过的问题：链路被重置时 `Recv failure: 连接被对方重置` 会让
+# 「更新到一半」直接失败，而那时 VERSION.json 还没写，版本号仍是旧的。
+
+FETCH_ATTEMPTS=3
+RETRY_DELAY=2
+
+# 单个文件的超时。取值思路：一个几十 KB 的源码在 2 KB/s 的烂链路上也只要十几秒，
+# 180 秒足够，又不会让一个真挂住的连接把整轮更新拖死。
+FILE_TIMEOUT=180
+
+fetch_to_file() {
+    # fetch_to_file <url> <目标文件> <超时秒> [runner] [尝试次数]
+    # runner 为 run_cmd 时按安装目录的权限决定要不要 sudo。
+    local url="$1"
+    local destination="$2"
+    local timeout="$3"
+    local runner="${4:-direct}"
+    local attempts="${5:-$FETCH_ATTEMPTS}"
+    local partial="$destination.linuxwave-part"
+    local attempt status code
+
+    "$runner" mkdir -p "$(dirname "$destination")"
+
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
+        status=0
+        # 同时取 HTTP 状态码：curl 的退出码并不总能反映「404」。
+        # raw.githubusercontent 在 404 时常常报 (56) 收数据失败而不是 (22)，
+        # 只看退出码会把「这个文件不存在」当成网络抖动重试三次。
+        code="$("$runner" curl -fsSL --max-time "$timeout" -w '%{http_code}' \
+            -o "$partial" "$url" 2>/dev/null)" || status=$?
+        if [[ "$status" -eq 0 ]]; then
+            "$runner" mv -f "$partial" "$destination"
+            return 0
+        fi
+        "$runner" rm -f "$partial" 2>/dev/null || true
+
+        case "$code" in
+            4??)
+                # 4xx 是「请求本身不对」，重试不会变好：404 就是没有这个文件。
+                return 1
+                ;;
+        esac
+
+        case "$status" in
+            22|23|1|2|3)
+                # 22=HTTP 错误、23=写盘失败、1~3=用法错误。同样不值得重试。
+                return 1
+                ;;
+        esac
+
+        if ((attempt < attempts)); then
+            echo -e "${YELLOW}🌊 Retrying ($((attempt + 1))/$attempts): $url${RESET}" >&2
+            sleep "$RETRY_DELAY"
+        fi
+    done
+
+    return 1
+}
+
 if [[ "$NEED_SUDO" == "true" || "$CONFIG_NEED_SUDO" == "true" ]]; then
     echo -e "${YELLOW}🌊 Requesting temporary administrator access for the update...${RESET}"
     sudo -v
@@ -143,13 +215,19 @@ fi
 VERSION="${LINUXWAVE_UPDATE_VERSION:-}"
 
 if [[ -z "$VERSION" ]]; then
-    VERSION=$(curl -fsSL --max-time 30 "$VERSION_DATA_URL" \
-        | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' \
-        | head -n 1)
+    # 直接调用 selfupdate.sh（不经 wave selfupdate）时才需要自己取版本号。
+    # 走同一个带重试的下载：这一步失败会让整轮更新提前结束，值得重试。
+    VERSION_DATA_TMP="$(mktemp)"
+    if fetch_to_file "$VERSION_DATA_URL" "$VERSION_DATA_TMP" 30 direct; then
+        VERSION=$(sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' "$VERSION_DATA_TMP" | head -n 1)
+    fi
+    rm -f "$VERSION_DATA_TMP" "$VERSION_DATA_TMP.linuxwave-part"
 fi
 
 if [[ -z "$VERSION" ]]; then
     echo -e "${RED_BOLD}🌊 Error: Cannot determine the target version.${RESET}"
+    echo -e "${RED_BOLD}🌊 ${VERSION_DATA_URL}${RESET}"
+    echo -e "${RED_BOLD}🌊 Check your network or proxy, then run 'wave selfupdate' again.${RESET}"
     exit 1
 fi
 
@@ -254,25 +332,13 @@ FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
 FILES_INFO_TMP="$(mktemp)"
 
 cleanup_files_info() {
-    rm -f "$FILES_INFO_TMP"
+    rm -f "$FILES_INFO_TMP" "$FILES_INFO_TMP.linuxwave-part"
 }
 trap cleanup_files_info EXIT
 
 echo "🌊 Fetching the file list..."
 
-FILES_INFO_ATTEMPTS=3
-FILES_INFO_OK=false
-for attempt in $(seq 1 "$FILES_INFO_ATTEMPTS"); do
-    if curl -fsSL --max-time 60 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
-        FILES_INFO_OK=true
-        break
-    fi
-    if [[ "$attempt" -lt "$FILES_INFO_ATTEMPTS" ]]; then
-        echo -e "${YELLOW}🌊 Retrying the file list ($((attempt + 1))/$FILES_INFO_ATTEMPTS)...${RESET}"
-    fi
-done
-
-if [[ "$FILES_INFO_OK" != "true" ]]; then
+if ! fetch_to_file "$FILES_INFO_URL" "$FILES_INFO_TMP" 60 direct; then
     echo -e "${RED_BOLD}🌊 Error: Cannot fetch versiondata/files_info from the configdata branch.${RESET}"
     echo -e "${RED_BOLD}🌊 Nothing was updated. Check your network or proxy, then try again.${RESET}"
     exit 1
@@ -344,8 +410,12 @@ while IFS=$'\t' read -r repo_path local_path executable; do
     fi
 
     echo "🌊 Updating $repo_path..."
-    run_cmd mkdir -p "$(dirname "$BASE_DIR/$local_path")"
-    run_cmd curl -fsSL -o "$BASE_DIR/$local_path" "$BASE_URL/$repo_path"
+    if ! fetch_to_file "$BASE_URL/$repo_path" "$BASE_DIR/$local_path" "$FILE_TIMEOUT" run_cmd; then
+        echo -e "${RED_BOLD}🌊 Error: Cannot download $repo_path after $FETCH_ATTEMPTS attempts.${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 Nothing was updated past this file; VERSION.json is unchanged.${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 Run 'wave selfupdate' again when the network recovers.${RESET}" >&2
+        exit 1
+    fi
 
     if [[ "$executable" == "1" ]]; then
         run_cmd chmod +x "$BASE_DIR/$local_path"
