@@ -200,7 +200,7 @@ updatedata/{版本号}/transfer_commands      Y/y 时执行这个脚本（bash -
 | `configdata` 的 `updatedata/<版本>/dir_structure_change` | 新增，单字节 `N`；**真改了目录结构**才写 `Y` 并在同目录附 `transfer_commands` |
 | `configdata` 的 `pythondata/latest_python` | 只在更换自带解释器版本时改（版本号 + 两架构地址 + sha256） |
 | 发布分支 `x.y` | 先建分支，再推 `configdata`——指针里的 `branch` 指向它，分支不存在时每次自更新都 404 |
-| 工作区根目录的 `release-notes-vX.Y.Z.md` | 用于写 Release 正文（**目前不在任何 git 仓库里**，注意别丢） |
+| `docs/release-notes/vX.Y.Z.md` | Release 正文。先写进仓库再粘到 Release；索引见 `docs/release-notes/README.md`（含发布日期与一句话摘要） |
 | `release-<版本>/` 资产集 | `flat/` 放全部 `lib/` `pkg/` `surfboard/` `scripts/` 文件，`archive/` 放 `PROJECT_CONTEXT.md` + `lib/selfupdate.sh`，再打 `.tar` / `.tar.gz` |
 
 改完用远端内容复核，不要只看本地：`main` 与发布分支（`3.1`）是镜像，两边都要对；官网还要等 Pages 构建后再抓一次首页确认。复核走 **API** 而不是 `raw.githubusercontent.com`——那条通道会被重置，也可能在推送后短暂滞后（实测出现过推送 1 分钟内 404、重跑即恢复）。
