@@ -27,7 +27,7 @@ from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_di
 # 版本数据的位置由 domains 决定（LINUXWAVE_SELFUPDATE_DOMAIN 可整体换掉）。
 # 目前仍在 configdata 里，搬到独立的 Selfupdate 仓库后只需改 domains 的默认值。
 VERSION_DATA_URL = f"{domains.selfupdate_domain()}/versiondata/latest_version"
-FETCH_TIMEOUT = 30
+FETCH_TIMEOUT = domains.DEFAULT_TIMEOUT
 UPDATE_TIMEOUT = 1800
 
 
@@ -103,7 +103,43 @@ def installed_version():
 
 # -------------------- 主流程 --------------------
 
+def _apply_max_time(input_string):
+    """把命令行上的 --max-time 换成秒，并写进环境变量给 selfupdate.sh。
+
+    `wave.py` 不为 selfupdate 解析旗标（自更新要能把参数原样交给脚本），
+    所以这里自己扫一遍：`--max-time 2min` 与 `--max-time=2min` 都认。
+    """
+    global FETCH_TIMEOUT
+    words = input_string.split()
+    raw = None
+    for index, word in enumerate(words):
+        if word == "--max-time":
+            raw = words[index + 1] if index + 1 < len(words) else ""
+        elif word.startswith("--max-time="):
+            raw = word.split("=", 1)[1]
+
+    if raw is None:
+        return
+
+    if raw == "":
+        print(f"{RED_BOLD}🌊 Error: Missing time after --max-time "
+              f"(e.g. --max-time=2min, --max-time=40).{RESET}")
+        sys.exit(1)
+
+    try:
+        seconds = domains.parse_duration(raw)
+    except ValueError:
+        print(f"{RED_BOLD}🌊 Error: Cannot parse --max-time '{raw}'.{RESET}")
+        print(f"{RED_BOLD}🌊 Use seconds or a unit: 40, 40s, 1min, 1min20s, 2h.{RESET}")
+        sys.exit(1)
+
+    FETCH_TIMEOUT = seconds
+    os.environ[domains.MAX_TIME_ENV] = str(seconds)
+
+
 def handle_selfupdate(input_string=""):
+    _apply_max_time(input_string)
+
     if find_config_dir() is None:
         print(f"{RED_BOLD}🌊 Error: LinuxWave is not installed. Run lib/install.sh first.{RESET}")
         sys.exit(1)

@@ -24,6 +24,7 @@
 
 import json
 import os
+import re
 import sys
 from urllib.parse import quote
 
@@ -447,6 +448,68 @@ def redact_url(url):
     user, colon, _password = userinfo.partition(":")
     masked = f"{user}:***" if colon else "***"
     return f"{scheme}://{masked}@{host}{slash}{path}"
+
+
+# -------------------- 请求超时 --------------------
+#
+# `--max-time` 的值写成 curl 的写法更符合直觉（`40s` / `1min20s` / `2h`），
+# 而 requests / urllib / curl 三边吃的都是「秒」。所以统一在这里解析一次，
+# 内部只流转秒数；`LINUXWAVE_MAX_TIME` 也是秒，好让子脚本直接拿去用。
+
+DEFAULT_TIMEOUT = 30
+
+MAX_TIME_ENV = "LINUXWAVE_MAX_TIME"
+
+_UNIT_SECONDS = {
+    "": 1, "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1,
+    "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60,
+    "h": 3600, "hr": 3600, "hrs": 3600, "hour": 3600, "hours": 3600,
+    "d": 86400, "day": 86400, "days": 86400,
+}
+
+# 整串必须由「数字 + 可选单位」组成，避免 "1min 20" 或 "abc" 被部分采信
+_DURATION_RE = re.compile(
+    r"(?:\d+(?:\.\d+)?\s*(?:%s)?)+" % "|".join(sorted((k for k in _UNIT_SECONDS if k), key=len, reverse=True)),
+    re.IGNORECASE)
+
+_DURATION_PART_RE = re.compile(r"(\d+(?:\.\d+)?)\s*([a-zA-Z]*)", re.IGNORECASE)
+
+
+def parse_duration(text):
+    """把 `40` / `40s` / `1min` / `1min20s` / `2h` 解析成秒数。
+
+    纯数字按秒。解析不出来或结果不为正数时抛 ValueError——调用方负责给出用法提示，
+    不要静默按默认值处理：用户写了 `--max-time=10minn` 却静默按 30 秒跑，
+    比直接报错更难查。
+    """
+    raw = (text or "").strip()
+    if not raw:
+        raise ValueError("empty duration")
+    if not _DURATION_RE.fullmatch(raw):
+        raise ValueError(f"cannot parse duration: {text!r}")
+
+    total = 0.0
+    for number, unit in _DURATION_PART_RE.findall(raw):
+        key = unit.lower()
+        if key not in _UNIT_SECONDS:
+            raise ValueError(f"unknown unit in duration: {text!r}")
+        total += float(number) * _UNIT_SECONDS[key]
+
+    if total <= 0:
+        raise ValueError(f"duration must be positive: {text!r}")
+    return int(total) if total == int(total) else total
+
+
+def timeout_from_env(default=DEFAULT_TIMEOUT):
+    """取当前命令的超时（秒）。命令行解析器会把 --max-time 写进环境变量，
+    这样被调起的子模块与 shell 脚本读同一个值，不必层层传参。"""
+    raw = (os.environ.get(MAX_TIME_ENV) or "").strip()
+    if not raw:
+        return default
+    try:
+        return parse_duration(raw)
+    except ValueError:
+        return default
 
 
 def fetch_text(url, timeout=30):

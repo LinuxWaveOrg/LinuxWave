@@ -114,7 +114,7 @@ def fetch_text(url, attempts=3):
 
     for _ in range(attempts):
         try:
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=domains.timeout_from_env())
         except Exception:
             last_status = 0
             continue

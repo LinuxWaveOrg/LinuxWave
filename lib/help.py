@@ -160,6 +160,7 @@ COMMAND_HELP = {
             ("--proxy <string>", "HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)"),
             ("--skip-ssl", "Skip SSL certificate verification (insecure)"),
             ("--limit-rate <string>", "Limit download speed (e.g. 200K, 1M, 5M)"),
+            ("--max-time <string>", "Timeout for each request (40s, 1min, 1min20s, 2h; bare numbers are seconds)"),
             ("--unlink", "Do not create or re-point the unversioned link"),
             ("-v, --verbose", "Enable verbose output"),
         ],
@@ -193,10 +194,12 @@ COMMAND_HELP = {
         "examples": ["wave info jq"],
     },
     "selfupdate": {
-        "usage": "wave selfupdate",
+        "usage": "wave selfupdate [flags]",
         "desc": "Update LinuxWave itself to the version published in the configdata repository.",
-        "flags": [],
-        "examples": ["wave selfupdate"],
+        "flags": [
+            ("--max-time <string>", "Timeout for each request (40s, 1min, 1min20s, 2h; bare numbers are seconds)"),
+        ],
+        "examples": ["wave selfupdate", "wave selfupdate --max-time=2min"],
     },
     "link": {
         "usage": "wave link <package>[@<version>] | wave link --all",

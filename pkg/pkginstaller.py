@@ -125,7 +125,7 @@ def _check_disk_space(path: Path, required_bytes: int = 10 * 1024 * 1024) -> boo
 ALLOWED_FLAGS = {
     "-v", "-C",
     "--verbose", "--skip-ssl", "--continue",
-    "--limit-rate", "--proxy", "--unlink", "--ver"
+    "--limit-rate", "--proxy", "--unlink", "--ver", "--max-time"
 }
 
 def parse_flags(input_string):
@@ -182,7 +182,7 @@ def first_package_token(input_string):
         if skip_next:
             skip_next = False
             continue
-        if word in ("--limit-rate", "--proxy", "--ver"):
+        if word in ("--limit-rate", "--proxy", "--ver", "--max-time"):
             skip_next = True
             continue
         if word.startswith("-"):
@@ -204,6 +204,7 @@ def handle_download_args(input_string):
         "resume": False,
         "limit_rate": None,
         "proxy": None,
+        "max_time": domains.timeout_from_env(),
     }
 
     # 1. --skip-ssl 安全询问
@@ -232,7 +233,23 @@ def handle_download_args(input_string):
         if rate_str:
             config["limit_rate"] = _parse_rate_limit(rate_str)
 
-    # 5. 代理
+    # 5. 单次请求超时
+    if "--max-time" in flags:
+        raw_timeout = flag_value(input_string, "--max-time")
+        if raw_timeout is None or raw_timeout == "":
+            print(f"{RED_BOLD}🌊 Error: Missing time after --max-time "
+                  f"(e.g. --max-time=2min, --max-time=40).{RESET}")
+            sys.exit(1)
+        try:
+            config["max_time"] = domains.parse_duration(raw_timeout)
+        except ValueError:
+            print(f"{RED_BOLD}🌊 Error: Cannot parse --max-time '{raw_timeout}'.{RESET}")
+            print(f"{RED_BOLD}🌊 Use seconds or a unit: 40, 40s, 1min, 1min20s, 2h.{RESET}")
+            sys.exit(1)
+        # 写进环境变量：依赖安装与子脚本读同一个值，不必层层传参
+        os.environ[domains.MAX_TIME_ENV] = str(config["max_time"])
+
+    # 6. 代理
     if "--proxy" in flags:
         proxy_value = flag_value(input_string, "--proxy")
         if proxy_value is not None:
@@ -278,7 +295,7 @@ def download_file(url, temp_path, config, input_string, display_name):
     while not download_success:
         try:
             # 30 秒无响应即超时，交给下面的重试询问处理，避免永久挂起
-            response = requests.get(url, timeout=30, **request_kwargs)
+            response = requests.get(url, timeout=config["max_time"], **request_kwargs)
 
             if response.status_code == 416:
                 download_success = True
@@ -403,7 +420,8 @@ def fetch_max_version(package_name, arch):
     # 否则默认分支（main）下没有 pkginfo_{arch} 目录，会直接 404
     api_url = domains.index_list_url(arch, package_name)
     try:
-        response = requests.get(api_url, timeout=30, headers=github_api_headers(api_url))
+        response = requests.get(api_url, timeout=domains.timeout_from_env(),
+                                headers=github_api_headers(api_url))
         if response.status_code != 200:
             print(f"{RED_BOLD}🌊 Error: Cannot fetch package list.{RESET}")
             print(f"{RED_BOLD}🌊 URL: {api_url}{RESET}")
@@ -559,7 +577,7 @@ def handle_install(input_string):
     # 4. 获取 bin_name（从 @common 文件）
     common_url = f"{domains.api_domain()}/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@common"
     try:
-        common_resp = requests.get(common_url, timeout=30)
+        common_resp = requests.get(common_url, timeout=domains.timeout_from_env())
         if common_resp.status_code != 200:
             print(f"{RED_BOLD}🌊 Error: Cannot fetch @common file.{RESET}")
             sys.exit(1)
@@ -579,7 +597,7 @@ def handle_install(input_string):
     # 5. 获取 URL 和 SHA256（deps 也写在该版本文件里）
     pkg_version_url = f"{domains.api_domain()}/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@{ParsePkgVersion}"
     try:
-        resp = requests.get(pkg_version_url, timeout=30)
+        resp = requests.get(pkg_version_url, timeout=domains.timeout_from_env())
         if resp.status_code != 200:
             if config["verbose"]:
                 print(resp.text)

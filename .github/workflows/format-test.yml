@@ -115,6 +115,11 @@ jobs:
         run: |
           bash scripts/help_test.sh
 
+      # --max-time 的时长解析与传导（畸形值必须报错，不能静默用默认值）
+      - name: Run timeout test
+        run: |
+          bash scripts/timeout_test.sh
+
       # 负向回归：没有合法 sha256 就必须拒绝安装（缺值 / 畸形 / 值不符）
       - name: Run checksum test
         run: |

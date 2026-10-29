@@ -235,6 +235,15 @@ RETRY_DELAY=2
 # 180 秒足够，又不会让一个真挂住的连接把整轮更新拖死。
 FILE_TIMEOUT=180
 
+# `--max-time` 由 selfupdate.py 以**秒**传下来（命令行上写 `1min20s` 也在这里变成 80）。
+# 给了就统一覆盖：取元数据与下单个文件用同一个上限；没给则保留上面按场景调好的默认。
+if [[ -n "${LINUXWAVE_MAX_TIME:-}" ]]; then
+    META_TIMEOUT="$LINUXWAVE_MAX_TIME"
+    FILE_TIMEOUT="$LINUXWAVE_MAX_TIME"
+else
+    META_TIMEOUT=30
+fi
+
 fetch_to_file() {
     # fetch_to_file <url> <目标文件> <超时秒> [runner] [尝试次数]
     # runner 为 run_cmd 时按安装目录的权限决定要不要 sudo。
@@ -364,12 +373,12 @@ fi
 
 UPDATEDATA_URL="$CONFIGDATA_URL/updatedata/$VERSION"
 
-DIR_STRUCTURE_CHANGE="$(curl -fsSL --max-time 30 "$UPDATEDATA_URL/dir_structure_change" 2>/dev/null | tr -d '[:space:]')" || DIR_STRUCTURE_CHANGE=""
+DIR_STRUCTURE_CHANGE="$(curl -fsSL --max-time "$META_TIMEOUT" "$UPDATEDATA_URL/dir_structure_change" 2>/dev/null | tr -d '[:space:]')" || DIR_STRUCTURE_CHANGE=""
 
 if [[ "$DIR_STRUCTURE_CHANGE" == "Y" || "$DIR_STRUCTURE_CHANGE" == "y" ]]; then
     echo -e "${YELLOW}🌊 Directory structure changed in $VERSION, running migration...${RESET}"
 
-    TRANSFER_COMMANDS="$(curl -fsSL --max-time 60 "$UPDATEDATA_URL/transfer_commands" 2>/dev/null)" || TRANSFER_COMMANDS=""
+    TRANSFER_COMMANDS="$(curl -fsSL --max-time "$META_TIMEOUT" "$UPDATEDATA_URL/transfer_commands" 2>/dev/null)" || TRANSFER_COMMANDS=""
     if [[ -z "$TRANSFER_COMMANDS" ]]; then
         echo -e "${RED_BOLD}🌊 Error: Cannot fetch the migration script for $VERSION.${RESET}"
         echo -e "${RED_BOLD}🌊 Nothing was updated. Check your network, then try again.${RESET}"
