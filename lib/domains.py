@@ -306,6 +306,20 @@ def payload_url(kind, name, filename):
     return f"{require_domain(kind)}/{name}/{quote(filename)}"
 
 
+def use_mirror_for(kind, from_source=False):
+    """这一次是否该从我们自己的存储取（4.0 的 payload 命名）而不是索引里的 url。
+
+    这是**调用方**的决定，不是 resolve_payload 的：后者遇到「域名为空」直接报数据缺陷，
+    而 3.1.x 的既有行为是继续按 url 取。所以：
+      - 用户显式 --install-from-source  → 一律走上游（即使配了镜像）；
+      - 该域名没配（bottle/deps 默认为空）→ 回落到 url，未配镜像的用户不受影响；
+      - 配了镜像 → 走镜像。
+    """
+    if from_source:
+        return False
+    return bool(domain(kind))
+
+
 def resolve_payload(kind, name, version, arch, upstream_filename, upstream_url, from_source):
     # 唯一决定「从哪儿取、文件叫什么」的地方，软件包与依赖共用。
     #

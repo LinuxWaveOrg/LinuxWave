@@ -388,6 +388,7 @@ def ensure_dependency(dep_ref, arch, config, input_string, depender, visited=Non
 
     version_fields = parse_common_fields(version_text)
     dep_url = get_field(version_fields, "url")
+    dep_file = get_field(version_fields, "file")
     dep_sha256 = get_field(version_fields, "sha256")
     dep_refs = get_deps(version_fields)
 
@@ -406,6 +407,12 @@ def ensure_dependency(dep_ref, arch, config, input_string, depender, visited=Non
         print(f"{RED_BOLD}🌊 Error: Malformed SHA256 checksum for dependency {dep_name}@{dep_version}.{RESET}")
         print(f"{RED_BOLD}🌊 Expected 64 lowercase hexadecimal characters; refusing to install.{RESET}")
         sys.exit(1)
+
+    # 配了 DEPS 镜像就走我们自己的存储；否则与以前一样按索引的 url 取
+    if domains.use_mirror_for("deps", config.get("from_source", False)):
+        payload = domains.resolve_payload("deps", dep_name, dep_version, arch,
+                                          dep_file, dep_url, False)
+        dep_url = payload["url"]
 
     check_dep_url(dep_url)
 

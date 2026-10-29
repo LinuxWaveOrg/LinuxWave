@@ -161,6 +161,8 @@ COMMAND_HELP = {
             ("--skip-ssl", "Skip SSL certificate verification (insecure)"),
             ("--limit-rate <string>", "Limit download speed (e.g. 200K, 1M, 5M)"),
             ("--max-time <string>", "Timeout for each request (40s, 1min, 1min20s, 2h; bare numbers are seconds)"),
+            ("--install-from-source", "Download from the upstream URL in the index instead of "
+                                      "LinuxWave's own store (dependencies follow the same rule)"),
             ("--unlink", "Do not create or re-point the unversioned link"),
             ("-v, --verbose", "Enable verbose output"),
         ],

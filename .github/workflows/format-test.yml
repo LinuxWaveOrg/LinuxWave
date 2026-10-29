@@ -120,6 +120,11 @@ jobs:
         run: |
           bash scripts/timeout_test.sh
 
+      # B 档接线：什么时候走镜像 / 什么时候回落到索引 url / 走镜像时 file 字段是硬要求
+      - name: Run payload resolution test
+        run: |
+          bash scripts/payload_test.sh
+
       # 负向回归：没有合法 sha256 就必须拒绝安装（缺值 / 畸形 / 值不符）
       - name: Run checksum test
         run: |

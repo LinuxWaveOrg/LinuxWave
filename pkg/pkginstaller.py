@@ -125,7 +125,8 @@ def _check_disk_space(path: Path, required_bytes: int = 10 * 1024 * 1024) -> boo
 ALLOWED_FLAGS = {
     "-v", "-C",
     "--verbose", "--skip-ssl", "--continue",
-    "--limit-rate", "--proxy", "--unlink", "--ver", "--max-time"
+    "--limit-rate", "--proxy", "--unlink", "--ver", "--max-time",
+    "--install-from-source"
 }
 
 def parse_flags(input_string):
@@ -205,6 +206,7 @@ def handle_download_args(input_string):
         "limit_rate": None,
         "proxy": None,
         "max_time": domains.timeout_from_env(),
+        "from_source": False,
     }
 
     # 1. --skip-ssl 安全询问
@@ -249,7 +251,11 @@ def handle_download_args(input_string):
         # 写进环境变量：依赖安装与子脚本读同一个值，不必层层传参
         os.environ[domains.MAX_TIME_ENV] = str(config["max_time"])
 
-    # 6. 代理
+    # 6. 直接回上游取（绕过镜像）
+    if "--install-from-source" in flags:
+        config["from_source"] = True
+
+    # 7. 代理
     if "--proxy" in flags:
         proxy_value = flag_value(input_string, "--proxy")
         if proxy_value is not None:
@@ -295,7 +301,9 @@ def download_file(url, temp_path, config, input_string, display_name):
     while not download_success:
         try:
             # 30 秒无响应即超时，交给下面的重试询问处理，避免永久挂起
-            response = requests.get(url, timeout=config["max_time"], **request_kwargs)
+            # config 可能来自更早的调用方（或测试里的最小字典），缺键时退回当前生效值
+            response = requests.get(
+                url, timeout=config.get("max_time") or domains.timeout_from_env(), **request_kwargs)
 
             if response.status_code == 416:
                 download_success = True
@@ -615,6 +623,8 @@ def handle_install(input_string):
 
     url_match = re.search(r'url:\s*"([^"]+)"', resp.text)
     sha_match = re.search(r'sha256:\s*"([^"]+)"', resp.text)
+    # 4.0 的 payload 字段：上游文件名。缺它时若走镜像会由 resolve_payload 报数据缺陷。
+    file_match = re.search(r'file:\s*"([^"]+)"', resp.text)
 
     if url_match:
         ParsePkgURL = url_match.group(1)
@@ -631,11 +641,19 @@ def handle_install(input_string):
         sys.exit(1)
 
     ParsePkgSHA256 = sha_match.group(1)
+    ParsePkgFile = file_match.group(1) if file_match else ""
 
     if not re.fullmatch(r"[0-9a-f]{64}", ParsePkgSHA256):
         print(f"{RED_BOLD}🌊 Error: Malformed SHA256 checksum for {ParsePkgName}@{ParsePkgVersion}.{RESET}")
         print(f"{RED_BOLD}🌊 Expected 64 lowercase hexadecimal characters; refusing to install.{RESET}")
         sys.exit(1)
+
+    # 4.1 决定从哪儿取字节：配了镜像就走我们自己的存储（4.0 的 payload 命名），
+    # 没配或用户要求 --install-from-source 时仍按索引的 url 取（3.1.x 的既有行为）。
+    if domains.use_mirror_for("bottle", config["from_source"]):
+        payload = domains.resolve_payload("bottle", ParsePkgName, ParsePkgVersion, ARCH,
+                                          ParsePkgFile, ParsePkgURL, False)
+        ParsePkgURL = payload["url"]
 
     # 5.1 解析 deps 字段（写在版本文件里，可能多行），缺失视为无依赖
     dep_refs = get_deps(parse_common_fields(resp.text))
