@@ -208,6 +208,25 @@ updatedata/{版本号}/transfer_commands      Y/y 时执行这个脚本（bash -
 
 `.templates/` 下的 `version`（`9.9.9` / `1.2.0` / `3.0.0`）是样例占位值，不参与发版，**不要跟着改**。`2.5` / `2.6` 等历史分支保留各自的版本号，也不要动。
 
+### 分支与合并：成块的工作走独立分支，合并时保留历史
+
+一次性改动直接落 `main` 没问题；**成块的工作（新命令、新布局、跨多个文件的移植）必须开独立分支**，
+完成后用 **merge commit** 并回 `main`：
+
+```bash
+git switch -c feature/upgrade        # 从 main 切出
+# …若干次提交…
+git switch main
+git merge --no-ff feature/upgrade -m "Merge feature/upgrade: …"
+```
+
+**为什么不能用 squash 或 rebase 压平**：压平会丢掉分支上的分步提交，等到要回看「这个功能是怎么一步步做出来的」
+就只剩一个巨提交，只能靠事后补历史——那比一开始就合并贵得多。`--no-ff` 还留下一个明确的合并点，
+`git log --first-parent main` 能看清每次合入的是什么。
+
+发布分支（`3.x`）从 `main` 快进而来（`git push origin main:refs/heads/3.x`），
+所以 `main` 上看到的历史就是发布分支的历史；**不要把发布分支的内容反向提交回 main**。
+
 ### `pythondata/latest_python`：自带解释器的地址与校验值
 
 3.1.0 起 `install.sh` / `selfupdate.sh` 都读它来决定下载哪个便携解释器：
