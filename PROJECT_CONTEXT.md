@@ -224,8 +224,15 @@ git merge --no-ff feature/upgrade -m "Merge feature/upgrade: …"
 就只剩一个巨提交，只能靠事后补历史——那比一开始就合并贵得多。`--no-ff` 还留下一个明确的合并点，
 `git log --first-parent main` 能看清每次合入的是什么。
 
-发布分支（`3.x`）从 `main` 快进而来（`git push origin main:refs/heads/3.x`），
-所以 `main` 上看到的历史就是发布分支的历史；**不要把发布分支的内容反向提交回 main**。
+发布分支（`3.x`）从 `main` 快进而来，所以 `main` 上看到的历史就是发布分支的历史；
+**不要把发布分支的内容反向提交回 main**。两点要说清：
+
+- **冻结的是 tag，不是分支**。`v3.x.y` 指向发布当时那个提交，永远不动；`3.x` 分支会被
+  `.github/workflows/sync-release-branch.yml` 在下次推 `main` 时**快进跟随**（它从
+  `configdata` 的 `versiondata/latest_version` 读当前该跟哪个分支）。所以「装了 3.x 的用户
+  自更新时拿到什么」= 分支当时的 HEAD，而不是 tag。
+- 正因为如此，**发版后往 `main` 补的文档/修复会立刻被 3.x 用户拿到，但版本号不变**——
+  已装同版本的人不会重新自更新。要让改动真正到达用户，必须发下一个版本号。
 
 ### `pythondata/latest_python`：自带解释器的地址与校验值
 
