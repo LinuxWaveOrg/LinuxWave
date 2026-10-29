@@ -43,6 +43,79 @@ fi
 FAILED=0
 
 # ==========================================
+# 0. 离线镜像：本测试全程不碰 GitHub
+# ==========================================
+# selfupdate 的所有对外地址都可由环境变量覆盖（见 lib/selfupdate.sh 的域名块），
+# 所以这里把 Core 与 Selfupdate 两个域指到本地 file:// 镜像 —— 与 sandbox_test.sh
+# 同一套手法。镜像里装的是**当前工作树**，所以测的是这份代码，不是某个远端提交。
+
+MIRROR_DIR="$(mktemp -d)"
+cleanup_mirror() {
+    rm -rf "$MIRROR_DIR"
+}
+trap cleanup_mirror EXIT
+
+MIRROR_BRANCH="main"
+MIRROR_VERSION="3.1.0"
+mkdir -p "$MIRROR_DIR/core/$MIRROR_BRANCH" "$MIRROR_DIR/selfupdate/versiondata"
+
+tar -C "$REPO_DIR" -cf - \
+    --exclude=.git --exclude=.github --exclude=.templates \
+    --exclude=.vscode --exclude=.codex --exclude=__pycache__ . \
+    | tar -C "$MIRROR_DIR/core/$MIRROR_BRANCH" -xf -
+
+# 文件清单优先用真实的那份（它才是「漏写一个文件」要抓的东西）。
+CONFIGDATA_SRC="${LINUXWAVE_CONFIGDATA:-}"
+if [[ -z "$CONFIGDATA_SRC" ]]; then
+    for candidate in "$REPO_DIR/../configdata-data" "$REPO_DIR/../configdata"; do
+        if [[ -f "$candidate/versiondata/files_info" ]]; then
+            CONFIGDATA_SRC="$candidate"
+            break
+        fi
+    done
+fi
+
+if [[ -n "$CONFIGDATA_SRC" && -f "$CONFIGDATA_SRC/versiondata/files_info" ]]; then
+    cp "$CONFIGDATA_SRC/versiondata/files_info" "$MIRROR_DIR/selfupdate/versiondata/files_info"
+    echo "🌊 Using the real files_info from $CONFIGDATA_SRC"
+else
+    {
+        echo "/"
+        for d in lib pkg surfboard; do
+            echo "    $d/"
+            for f in "$REPO_DIR/$d"/*; do
+                [[ -f "$f" ]] || continue
+                base="$(basename "$f")"
+                # 安装器与卸载器不装自己——真实的 files_info 也是这样
+                [[ "$base" == "install.sh" || "$base" == "uninstall.sh" ]] && continue
+                echo "        $base"
+            done
+        done
+    } > "$MIRROR_DIR/selfupdate/versiondata/files_info"
+    echo -e "${YELLOW}🌊 No configdata checkout found; generated files_info from the repo tree.${RESET}"
+fi
+
+# 版本数据由测试自己写：更新目标必须与已装版本同大版本，分支也要对得上镜像目录。
+# update_command 保持生产形状（bash -c "$(curl ...)"），只是把地址换成 file://。
+{
+    echo "version: \"$MIRROR_VERSION\""
+    echo 'release_date: "2026-01-01"'
+    echo 'build_number: "001A0001"'
+    echo "branch: \"$MIRROR_BRANCH\""
+    printf 'update_command: <<< /bin/bash -c "$(curl -fsSL %s)" >>>\n' \
+        "file://$MIRROR_DIR/core/$MIRROR_BRANCH/lib/selfupdate.sh"
+} > "$MIRROR_DIR/selfupdate/versiondata/latest_version"
+
+export LINUXWAVE_CORE_DOMAIN="file://$MIRROR_DIR/core"
+export LINUXWAVE_SELFUPDATE_DOMAIN="file://$MIRROR_DIR/selfupdate"
+export LINUXWAVE_PYTHON_DOMAIN="file://$MIRROR_DIR/selfupdate"
+# 离线环境不下载 36MB 的自带解释器；真实产物由 CI 的 portable-python 作业覆盖
+export LINUXWAVE_SKIP_PORTABLE_PYTHON=1
+
+echo "🌊 Offline mirror: $MIRROR_DIR"
+echo ""
+
+# ==========================================
 # 1. 版本数据解析与版本比较（离线，不碰网络）
 # ==========================================
 
@@ -171,7 +244,7 @@ fi
 # 线上版本形如 x.0 时，「同大版本且更旧」的版本并不存在（x.0 已是该大版本的最低版本），
 # 所以这里直接给 selfupdate.sh 指定一个同大版本、更高的目标版本号，走完真实的更新流程
 # （读文件清单 → 下载文件 → 写 VERSION.json）。
-LATEST_DATA="$(curl -fsSL --max-time 60 "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main/versiondata/latest_version")"
+LATEST_DATA="$(cat "$MIRROR_DIR/selfupdate/versiondata/latest_version")"
 PUBLISHED="$(printf '%s\n' "$LATEST_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
 RELEASE_BRANCH="$(printf '%s\n' "$LATEST_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
 
@@ -221,11 +294,11 @@ echo "========== every listed file landed =========="
 
 BASE_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['base_dir'])")
 
-FILES_INFO_URL="https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main/versiondata/files_info"
+FILES_INFO_URL="$MIRROR_DIR/selfupdate/versiondata/files_info"
 FILES_INFO_TMP="$(mktemp)"
 PARSER_TMP="$(mktemp)"
 
-if ! curl -fsSL --max-time 60 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
+if ! cp "$FILES_INFO_URL" "$FILES_INFO_TMP"; then
     echo -e "${RED_BOLD}🌊 FAIL: cannot fetch versiondata/files_info${RESET}"
     FAILED=$((FAILED + 1))
 else
@@ -271,8 +344,17 @@ import re
 import sys
 
 base_dir = sys.argv[1]
-with open(os.path.join(base_dir, 'lib', 'wave'), encoding='utf-8') as handle:
+# 3.1.0 起 lib/wave 不再是 wave.py 的副本，而是 write_launcher 生成的 sh 启动器
+# （自带解释器 + 私有 venv）。命令表要从 lib/wave.py 读。
+with open(os.path.join(base_dir, 'lib', 'wave.py'), encoding='utf-8') as handle:
     source = handle.read()
+
+launcher = os.path.join(base_dir, 'lib', 'wave')
+if os.path.exists(launcher):
+    with open(launcher, encoding='utf-8') as handle:
+        if not handle.read(2).startswith('#!'):
+            print('🌊 Error: lib/wave is not a launcher (no #! line)')
+            sys.exit(1)
 
 block = source.split('COMMANDS = {', 1)[1].split('}', 1)[0]
 commands = re.findall(r'"(\w+)"\s*:\s*"(\w+)"', block)
