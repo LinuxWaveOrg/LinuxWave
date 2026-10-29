@@ -25,6 +25,7 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
+import domains
 from configpaths import (
     VERSION_FILE,
     assert_inside,
@@ -400,7 +401,7 @@ def download_file(url, temp_path, config, input_string, display_name):
 def fetch_max_version(package_name, arch):
     # 数据在 infosource 分支，API 必须显式带 ref，
     # 否则默认分支（main）下没有 pkginfo_{arch} 目录，会直接 404
-    api_url = f"https://api.github.com/repos/LinuxWaveOrg/infosource/contents/pkg/pkginfo_{arch}/{package_name}?ref=main"
+    api_url = domains.index_list_url(arch, package_name)
     try:
         response = requests.get(api_url, timeout=30, headers=github_api_headers(api_url))
         if response.status_code != 200:
@@ -408,10 +409,11 @@ def fetch_max_version(package_name, arch):
             print(f"{RED_BOLD}🌊 URL: {api_url}{RESET}")
             sys.exit(1)
 
-        file_list = response.json()
+        # 两种来源并存：GitHub API 返回 JSON 数组，镜像返回一行一条的纯文本。
+        # listing_names 统一成名字列表，下面的解析不必关心是哪一种。
+        names = domains.listing_names(response.text)
         versions = []
-        for item in file_list:
-            fname = item["name"]
+        for fname in names:
             if fname.endswith("@common"):
                 continue
             if "@" in fname:
@@ -555,7 +557,7 @@ def handle_install(input_string):
     ParsePkgVersion = require_safe_token(ParsePkgVersion, "package version")
 
     # 4. 获取 bin_name（从 @common 文件）
-    common_url = f"https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@common"
+    common_url = f"{domains.api_domain()}/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@common"
     try:
         common_resp = requests.get(common_url, timeout=30)
         if common_resp.status_code != 200:
@@ -575,7 +577,7 @@ def handle_install(input_string):
     bin_name = require_safe_token(bin_name, "bin_name")
 
     # 5. 获取 URL 和 SHA256（deps 也写在该版本文件里）
-    pkg_version_url = f"https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@{ParsePkgVersion}"
+    pkg_version_url = f"{domains.api_domain()}/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@{ParsePkgVersion}"
     try:
         resp = requests.get(pkg_version_url, timeout=30)
         if resp.status_code != 200:

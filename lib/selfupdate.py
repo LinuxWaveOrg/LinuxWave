@@ -21,9 +21,12 @@ RESET = '\033[0m'
 
 # -------------------- 常量 --------------------
 
+import domains
 from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir
 
-VERSION_DATA_URL = "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main/versiondata/latest_version"
+# 版本数据的位置由 domains 决定（LINUXWAVE_SELFUPDATE_DOMAIN 可整体换掉）。
+# 目前仍在 configdata 里，搬到独立的 Selfupdate 仓库后只需改 domains 的默认值。
+VERSION_DATA_URL = f"{domains.selfupdate_domain()}/versiondata/latest_version"
 FETCH_TIMEOUT = 30
 UPDATE_TIMEOUT = 1800
 

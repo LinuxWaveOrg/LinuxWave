@@ -17,6 +17,7 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
+import domains
 from configpaths import load_base_dir, require_safe_token
 
 
@@ -78,15 +79,14 @@ def fetch_remote_versions(pkg_name, arch):
     # 数据在 LinuxWaveOrg/infosource 仓库的 main 分支。
     
     pkg_name = require_safe_token(pkg_name, "package name")
-    api_url = f"https://api.github.com/repos/LinuxWaveOrg/infosource/contents/pkg/pkginfo_{arch}/{pkg_name}?ref=main"
+    api_url = domains.index_list_url(arch, pkg_name)
     try:
         resp = requests.get(api_url, timeout=30, headers=github_api_headers(api_url))
         if resp.status_code != 200:
             return []
-        file_list = resp.json()
+        # GitHub API 是 JSON 数组，镜像是一行一条的纯文本；listing_names 统一两者。
         versions = []
-        for item in file_list:
-            fname = item["name"]
+        for fname in domains.listing_names(resp.text):
             if fname.endswith("@common"):
                 continue
             if "@" in fname:
@@ -101,7 +101,7 @@ def fetch_remote_info(pkg_name, arch):
     # 从 infosource 拉取 @common 文件，返回描述信息。
     
     pkg_name = require_safe_token(pkg_name, "package name")
-    common_url = f"https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main/pkg/pkginfo_{arch}/{pkg_name}/_{pkg_name}@common"
+    common_url = f"{domains.api_domain()}/pkg/pkginfo_{arch}/{pkg_name}/_{pkg_name}@common"
     try:
         resp = requests.get(common_url, timeout=30)
         if resp.status_code != 200:
@@ -146,7 +146,7 @@ def handle_search(query):
     arch = get_arch()
 
     # 数据在 LinuxWaveOrg/infosource 仓库的 main 分支
-    api_url = f"https://api.github.com/repos/LinuxWaveOrg/infosource/contents/pkg/pkginfo_{arch}?ref=main"
+    api_url = domains.index_list_url(arch)
 
     try:
         resp = requests.get(api_url, timeout=30, headers=github_api_headers(api_url))
@@ -158,10 +158,9 @@ def handle_search(query):
         print(f"{RED_BOLD}🌊 Error: {e}{RESET}")
         sys.exit(1)
 
-    all_packages = []
-    for item in resp.json():
-        if item["type"] == "dir":
-            all_packages.append(item["name"])
+    # GitHub API 是 JSON 数组（要挑 type == "dir"），镜像是一行一个包名。
+    # dirs_only=True 只对 JSON 有意义，纯文本那一侧本来就是目录清单。
+    all_packages = [name for name in domains.listing_names(resp.text, dirs_only=True) if name]
 
     query_lower = query.lower()
     matches = [p for p in all_packages if query_lower in p.lower()]

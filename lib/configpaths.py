@@ -15,6 +15,7 @@
 import json
 import os
 import re
+import unicodedata
 import sys
 from pathlib import Path
 
@@ -115,32 +116,113 @@ def load_base_dir():
     sys.exit(1)
 
 
+# -------------------- 代理（--proxy 全局生效） --------------------
+#
+# `--proxy` 必须对这条命令的**所有**请求生效，不只是下载包体那一步。
+# 以前它只影响 requests 的下载参数：取索引、取 @common、取依赖信息全都绕过它，
+# 内网用户在下载任何字节之前就撞上「Cannot fetch @common file」，看着像参数没生效。
+#
+# 与其逐个改造调用点（requests.get 有十来处，还有 bash 子脚本里的 curl），
+# 不如把值写进进程环境：requests（trust_env 默认开）、urllib、curl 都读环境变量，
+# 于是这条命令的所有请求都自动走代理，子进程也一并继承。
+# 这是刻意的「全局」语义：命令行上写了 --proxy，这条命令就不该有任何请求绕过它。
+
+PROXY_ENV_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY",
+                  "https_proxy", "http_proxy", "all_proxy")
+
+PROXY_SCHEMES = ("http://", "https://", "socks5://")
+
+
+def proxy_value_from(argv):
+    # 从命令行里取 --proxy 的值；支持 `--proxy X` 与 `--proxy=X`，没有则返回 ""。
+    tokens = list(argv)
+    for index, token in enumerate(tokens):
+        if token == "--proxy":
+            return tokens[index + 1] if index + 1 < len(tokens) else ""
+        if token.startswith("--proxy="):
+            return token[len("--proxy="):]
+    return ""
+
+
+def apply_proxy_from_command_line(argv):
+    # 校验协议后写进环境变量。不合法的值交给原来的解析路径去报错（这里只跳过），
+    # 免得同一条命令在两处报出不同的错。
+    value = proxy_value_from(argv).strip()
+    if not value:
+        return ""
+
+    if not value.startswith(PROXY_SCHEMES):
+        return ""
+
+    for name in PROXY_ENV_VARS:
+        os.environ[name] = value
+    return value
+
+
 # -------------------- 名字与版本号的安全校验 --------------------
 #
 # 包名、版本号、可执行文件名既来自命令行，也来自远端数据（@common / deps 字段），
 # 之后会被拼进 URL 和文件路径，还会以换行分隔的长字符串形式交给 shell。
 # 所以这里做统一的白名单校验，外加"最终路径必须在 BASE_DIR 之内"的兜底。
 
-# 允许的字符：字母、数字、点、下划线、加号、减号，且必须以字母或数字开头。
+# 允许的字符按 Unicode 类别判定，而不是 ASCII 白名单：这样中文包名（Lo）、
+# é 这类带重音的名字（L + Mn）也合法，而不必逐个把字符加进白名单。
 # 刻意不含 / \ % @ : 空白 与换行——它们要么能改变目录层级（路径穿越），
 # 要么能做 URL 注入（%2f 之类），要么能往 shell 里注入额外字段。
-SAFE_TOKEN_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._+-]*\Z')
+NAME_CATEGORIES = frozenset({
+    'Lu', 'Ll', 'Lt', 'Lm', 'Lo',   # 字母
+    'Mn', 'Mc', 'Me',               # 组合符号，如 e + U+0301
+    'Nd', 'Nl', 'No',               # 数字
+})
+
+# 首字符必须是字母或数字：挡住开头的 -（选项注入）、. 与组合符号（同形异义伪装）。
+START_CATEGORIES = frozenset({'Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nd', 'Nl', 'No'})
+
+ALLOWED_PUNCT = frozenset('._+-')
+
+# 落盘名是「包名@版本.架构.扩展名」时多放行一个 @（B 档启用后才会用到）。
+# @ 在 shell 里无特殊含义（全程引号引用），进 URL 时由 domains.payload_url 编码成 %40。
+ALLOWED_PUNCT_FILENAME = ALLOWED_PUNCT | {'@'}
+
+MAX_NAME_CHARS = 128
+# 非 ASCII 一个字最多占 4 字节，而 Linux 的 NAME_MAX 是 255 **字节**，
+# 所以除了字符数还要卡字节数，否则长中文包名会在落盘时才炸「File name too long」。
+MAX_NAME_BYTES = 200
+
+
+def _category(ch):
+    return unicodedata.category(ch)
+
+
+def _matches_name(value, punct):
+    value = str(value)
+    if not value or len(value) > MAX_NAME_CHARS:
+        return False
+    if '..' in value:
+        return False
+    if len(value.encode('utf-8')) > MAX_NAME_BYTES:
+        return False
+    if _category(value[0]) not in START_CATEGORIES:
+        return False
+    return all(ch in punct or _category(ch) in NAME_CATEGORIES for ch in value)
 
 
 def is_safe_token(value):
-    value = str(value)
-    if not value or len(value) > 128:
-        return False
-    if '..' in value or value in ('-', '.'):
-        return False
-    return bool(SAFE_TOKEN_RE.match(value))
+    return _matches_name(value, ALLOWED_PUNCT)
+
+
+def is_safe_filename(value):
+    return _matches_name(value, ALLOWED_PUNCT_FILENAME)
 
 
 def require_safe_token(value, what):
     # 不合法直接退出：这类输入没有任何"宽松解释"的余地
     if not is_safe_token(value):
         print(f"{RED_BOLD}🌊 Error: Unsafe {what}: {value!r}{RESET}")
-        print(f"{RED_BOLD}🌊 Allowed: letters, digits, and . _ + - (must start with a letter or digit).{RESET}")
+        print(f"{RED_BOLD}🌊 Allowed: letters (any script), digits, and . _ + - "
+              f"(must start with a letter or digit).{RESET}")
+        print(f"{RED_BOLD}🌊 Path separators, whitespace, control characters and shell "
+              f"metacharacters are never allowed.{RESET}")
         sys.exit(1)
     return str(value)
 

@@ -10,6 +10,79 @@
 set -e
 
 # ==========================================
+# 域名（4.0 起所有对外地址都可由环境变量覆盖）
+# ==========================================
+#
+# 与 lib/domains.py 是同一张表：一份给 Python、一份给 shell。install.sh 是
+# `curl | bash` 直接执行的，没有本地文件可以 source，只能在这里重复一遍。
+#
+# 这一段必须与 lib/selfupdate.sh 逐字一致 —— scripts/domains_test.sh 有断言。
+
+mw_domain() {
+    # mw_domain <变量名> <值>：校验协议、去掉末尾斜杠，然后打印规范化后的值。
+    # 规则必须与 lib/domains.py 的 _validate 完全一致 —— scripts/domains_test.sh
+    # 会拿同一批输入分别喂给两边逐条比对。
+    local name="$1"
+    local value="$2"
+    local scheme rest authority host
+
+    while [[ "$value" == */ ]]; do
+        value="${value%/}"
+    done
+
+    # 这些字符会被拼进 URL、错误信息，也可能被 shell 当参数用，一律先拒
+    case "$value" in
+        *' '*|*$'\t'*|*$'\n'*|*'"'*|*"'"*|*'`'*|*'$'*|*'\'*)
+            echo -e "${RED_BOLD}🌊 Error: $name contains a forbidden character (space, quote, backtick, \$ or \\\\): $value${RESET}" >&2
+            exit 1 ;;
+    esac
+
+    scheme="${value%%://*}"
+    rest="${value#*://}"
+    if [[ "$scheme" == "$value" || -z "$rest" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: $name must include a scheme (https:// or file://): $value${RESET}" >&2
+        exit 1
+    fi
+
+    scheme="$(printf '%s' "$scheme" | tr '[:upper:]' '[:lower:]')"
+    case "$scheme" in
+        https|file) printf '%s\n' "$value"; return 0 ;;
+    esac
+
+    if [[ "$scheme" == "http" ]]; then
+        # 明文 http 只给本机镜像（离线测试、本机代理）
+        authority="${rest%%/*}"
+        authority="${authority##*@}"
+        case "$authority" in
+            \[*\]*) host="${authority#[}"; host="${host%%]*}" ;;
+            *)     host="${authority%%:*}" ;;
+        esac
+        host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
+        case "$host" in
+            127.0.0.1|localhost|::1) printf '%s\n' "$value"; return 0 ;;
+        esac
+        echo -e "${RED_BOLD}🌊 Error: $name: plain HTTP is only allowed for loopback mirrors: $value${RESET}" >&2
+        exit 1
+    fi
+
+    echo -e "${RED_BOLD}🌊 Error: $name has an unsupported scheme '$scheme': $value${RESET}" >&2
+    exit 1
+}
+
+# ==========================================
+# 各地址（默认值必须与 lib/domains.py 的 DEFAULTS 逐字一致）
+# ==========================================
+#
+# scripts/check_domain_defaults.py 会逐条比对 shell 与 Python，改一处就要改另一处。
+
+API_DOMAIN="$(mw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
+CORE_URL="$(mw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
+SELFUPDATE_URL="$(mw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+PYTHON_DATA_URL="$(mw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+# pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
+PIP_INDEX_URL="$(mw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
+
+# ==========================================
 # 颜色定义
 # ==========================================
 
@@ -22,10 +95,9 @@ RESET='\033[0m'
 # 目标仓库、分支与版本
 # ==========================================
 
-REPO="LinuxWaveOrg/LinuxWave"
 BRANCH="${LINUXWAVE_UPDATE_BRANCH:-${1:-HEAD}}"
-BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH"
-CONFIGDATA_URL="https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main"
+BASE_URL="$CORE_URL/$BRANCH"
+CONFIGDATA_URL="$SELFUPDATE_URL"   # 版本数据与自更新数据同源，见下方域名块
 VERSION_DATA_URL="$CONFIGDATA_URL/versiondata/latest_version"
 
 # -------------------- 测试根（隔离） --------------------
@@ -39,8 +111,17 @@ if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
         _lw_root="${HOME}${_lw_root#\~}"
     fi
     mkdir -p "$_lw_root"
-    SYS_ROOT="$(cd "$_lw_root" && pwd)"
-    export HOME="$SYS_ROOT${HOME}"
+    # 物理路径：与下面比较用的 HOME（configpaths 已 resolve 过）要用同一种形式，
+    # 否则符号链接一掺和，前缀判断就会失效。
+    SYS_ROOT="$(cd "$_lw_root" && pwd -P)"
+    # 幂等：lib/configpaths.py 也会把 HOME 搬进测试根。从 wave.py 一路调用下来时
+    # HOME 已经被改过一次，这里再套一层就会变成 "<根><根>/home/<你>"，配置目录于是
+    # 永远找不到。两边都取物理路径再比较，才不会被符号链接骗过去。
+    _lw_home_real="$(cd "$HOME" 2>/dev/null && pwd -P)" || _lw_home_real="$HOME"
+    case "$_lw_home_real" in
+        "$SYS_ROOT"|"$SYS_ROOT"/*) ;;
+        *) export HOME="$SYS_ROOT${HOME}" ;;
+    esac
     export LINUXWAVE_TEST_ROOT="$SYS_ROOT"
     mkdir -p "$HOME"
     echo "🌊 Test root: $SYS_ROOT"
@@ -267,7 +348,7 @@ TARGET_MAJOR="$(major_of "$VERSION")"
 if [[ -n "$CURRENT_MAJOR" && -n "$TARGET_MAJOR" && "$CURRENT_MAJOR" != "$TARGET_MAJOR" ]]; then
     echo -e "${RED_BOLD}🌊 Error: selfupdate cannot cross major versions ($CURRENT_VERSION -> $VERSION).${RESET}" >&2
     echo -e "${RED_BOLD}🌊 A new major version must be installed with install.sh:${RESET}" >&2
-    echo -e "${YELLOW}   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)\"${RESET}" >&2
+    echo -e "${YELLOW}   /bin/bash -c \"\$(curl -fsSL $CORE_URL/HEAD/lib/install.sh)\"${RESET}" >&2
     exit 1
 fi
 
@@ -325,7 +406,7 @@ fi
 #
 # 缩进每层 4 个空格，Tab 与 4 个空格等价，两种可以混用。
 # 每个文件都从 "$BASE_URL/<仓库路径>" 下载，落到 "$BASE_DIR" 下的同名位置。
-# 唯一的特例：lib/wave.py 装成可执行的 lib/wave（它是 PATH 里的入口名）。
+# PATH 上的入口 lib/wave 不在这份清单里：它由 write_launcher 生成（内容随解释器位置变）。
 # 以后新增文件只要改 configdata 的这份清单，不用再动本脚本。
 
 FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
@@ -485,11 +566,25 @@ ensure_portable_python() {
 
     [[ -n "$arch" ]] || return 1
 
-    # 隔离测试根里不下载 30MB+ 的解释器（离线环境）；真实产物由 CI 校验。
-    if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
+    # 隔离测试根 / 沙箱测试里都不下载 30MB+ 的解释器（离线）；真实产物由 CI 校验。
+    if [[ -n "${LINUXWAVE_TEST:-}" || -n "${LINUXWAVE_SKIP_PORTABLE_PYTHON:-}" ]]; then
         return 1
     fi
 
+    # 先看本机是否已经有一份能用的解释器：有就直接用，一个网络请求都不发。
+    # 自更新每次都会走到这里，而为了确认一份早就装好的解释器去联网 ——
+    # 网络不好时就是「卡在某一行不动」的来源。
+    for candidate in "$base_dir/python/current" "$base_dir"/python/*/; do
+        [[ -d "$candidate" ]] || continue
+        if py="$(portable_python_binary "$candidate" 2>/dev/null)" \
+           && "$py" -c 'import sys; sys.exit(0)' >/dev/null 2>&1; then
+            echo "$py"
+            return 0
+        fi
+    done
+
+    # 本机没有，才去版本数据里找该下哪个。进度写 stderr：stdout 是返回值通道。
+    echo "🌊 Fetching the bundled Python definition..." >&2
     target=""
     data_file="$(mktemp)"
     if ! fetch_to_file "$data_url" "$data_file" 30 run_cmd; then
@@ -511,6 +606,7 @@ ensure_portable_python() {
     if py="$(portable_python_binary "$target" 2>/dev/null)"; then
         :
     else
+        echo "🌊 Downloading the bundled Python $version (about 30 MB)..." >&2
         archive="$base_dir/downloads/tmp/portable-python-$version.tar.gz"
         run_cmd mkdir -p "$base_dir/downloads/tmp" 2>/dev/null || true
         if ! fetch_to_file "$url" "$archive" 600 run_cmd; then

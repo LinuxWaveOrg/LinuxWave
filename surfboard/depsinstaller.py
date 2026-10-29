@@ -22,13 +22,14 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
+import domains
 from configpaths import assert_inside, load_base_dir
 
 
 BASE_DIR = load_base_dir()
 DOWNLOAD_TMP = BASE_DIR / "downloads" / "tmp"
 
-DEPSINFO_BASE = "https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main/deps"
+DEPSINFO_BASE = f"{domains.api_domain()}/deps"
 TAGGER_SCRIPT = Path(__file__).resolve().parent / "tagger.sh"
 TRANSFER_SCRIPT = Path(__file__).resolve().parent / "transfer.sh"
 
