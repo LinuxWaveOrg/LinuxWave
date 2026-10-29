@@ -96,6 +96,7 @@ def print_custom_help():
     print("A package manager for Linux software developers.")
     _print_section("Commands", [
         (_command("install"), "Install a package (latest version)"),
+        (_command("upgrade"), "Install a package at the latest version"),
         (_command("uninstall"), "Uninstall a package"),
         (_command("list"), "List installed packages"),
         (_command("search"), "Search for a package in the index"),
@@ -127,6 +128,8 @@ def print_custom_help():
     _print_section("Special Flags", [
         (_command("wave install", (" <pkgname>@<version>", YELLOW)),
          "Download certain version(s) of a package"),
+        # 只列规范写法；单数的 --remove-old-version 与 --rov 仍然接受，但不再宣传
+        (_flag("-X, --remove-old-versions"), "Remove older versions after upgrading"),
         (_flag("--unlink"), "Leave the unversioned link alone (install / uninstall)"),
         (_flag("--all, -a"), "Apply to every installed package (link / unlink / linkquery)"),
     ])
@@ -167,6 +170,23 @@ COMMAND_HELP = {
             ("-v, --verbose", "Enable verbose output"),
         ],
         "examples": ["wave install jq", "wave install ffmpeg@6.1", "wave install jq --limit-rate 1M"],
+    },
+    "upgrade": {
+        "usage": "wave upgrade <package> [flags]",
+        "desc": "Install the latest version of a package. Versions coexist, so the old ones "
+                "stay until -X removes them.",
+        "flags": [
+            ("-X, --remove-old-versions", "Also remove the versions older than the one just installed"),
+            ("-C, --continue", "Resume an interrupted download (like curl -C -)"),
+            ("--proxy <string>", "HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)"),
+            ("--skip-ssl", "Skip SSL certificate verification (insecure)"),
+            ("--limit-rate <string>", "Limit download speed (e.g. 200K, 1M, 5M)"),
+            ("--max-time <string>", "Timeout for each request (40s, 1min, 1min20s, 2h; bare numbers are seconds)"),
+            ("--install-from-source", "Download from the upstream URL instead of LinuxWave's own store"),
+            ("-v, --verbose", "Enable verbose output"),
+        ],
+        "examples": ["wave upgrade jq", "wave upgrade jq -X",
+                     "wave upgrade jq --remove-old-versions --max-time=2min"],
     },
     "uninstall": {
         "usage": "wave uninstall <package>[@<version>] [flags]",

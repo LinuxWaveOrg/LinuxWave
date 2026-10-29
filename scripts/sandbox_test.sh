@@ -146,7 +146,7 @@ scenario_install_dirs() {
         install_run --silent "$opt_arg"
         check "--dir-option=$opt 安装成功" "$?" "0"
         check "--dir-option=$opt 落到 $display" "$([[ -d "$dir" ]] && echo yes || echo no)" "yes"
-        check "--dir-option=$opt 源码文件数 24" "$(source_file_count "$dir")" "24"
+        check "--dir-option=$opt 源码文件数 25" "$(source_file_count "$dir")" "25"
         check "--dir-option=$opt 配置在 $cfg" "$(tree_base_dir "$cfg/config.json")" "$dir"
         check "--dir-option=$opt 入口可执行" "$([[ -x "$dir/lib/wave" ]] && echo yes || echo no)" "yes"
         # 3.1.0：入口从「wave.py 的副本」变成 sh 启动器，且自带私有环境
@@ -272,7 +272,7 @@ scenario_mid_failure() {
     reset_state
     install_run --silent --dir-option=1
     check "修好后重跑可自愈" "$?" "0"
-    check "自愈后源码文件数 24" "$(source_file_count /root/.local/linuxwave)" "24"
+    check "自愈后源码文件数 25" "$(source_file_count /root/.local/linuxwave)" "25"
     check "正常安装不误报失败指引" "$(count_in "$OUT" "did not finish")" "0"
 }
 
@@ -488,7 +488,7 @@ scenario_download_retry() {
     wait
     check "短暂失败后重试成功" "$rc" "0"
     contains "打印了重试提示" "$OUT" "Retrying lib/help.py"
-    check "自愈后 24 个源码文件齐备" "$(source_file_count /root/.local/linuxwave)" "24"
+    check "自愈后 25 个源码文件齐备" "$(source_file_count /root/.local/linuxwave)" "25"
     # 自愈那次失败发生在 if 条件里，ERR 陷阱不该开火——
     # 否则一次已经自己恢复的抖动会留下「未完成」的误导说明
     check "自愈后不谎报未完成" "$(count_in "$OUT" "did not finish")" "0"

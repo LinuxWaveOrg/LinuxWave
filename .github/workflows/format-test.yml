@@ -125,6 +125,11 @@ jobs:
         run: |
           bash scripts/payload_test.sh
 
+      # wave upgrade：四种等价写法、拒绝名单、帮助只宣传一种
+      - name: Run upgrade test
+        run: |
+          bash scripts/upgrade_test.sh
+
       # 负向回归：没有合法 sha256 就必须拒绝安装（缺值 / 畸形 / 值不符）
       - name: Run checksum test
         run: |
