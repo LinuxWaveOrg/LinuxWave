@@ -31,10 +31,13 @@ PROJECT_CONTEXT.md 本文件：项目结构与关键机制
 
 | 文件 | 作用 |
 | --- | --- |
-| `wave.py` | 主入口（**由 `lib/wave` 启动器调用**，见 install.sh 行）。读配置目录（`config.json`）的 `base_dir`，把 `lib/`、`pkg/`、`surfboard/` 注入 `sys.path`；用 `COMMANDS` 字典把 `install / uninstall / list / search / info / version / selfupdate / link / unlink / linkquery` 分发到对应模块，`ARGUMENTS` 处理 `-h/--help/-V/--version`。**2.6.1 起** `__main__` 捕获 `KeyboardInterrupt`（下载卡住时用户多半会按 Ctrl-C）打印一行 `Interrupted. Nothing was installed.` 并 `exit(130)`，以及 `BrokenPipeError`（如 `wave list \| head`）静默 `exit(0)` |
+| `wave.py` | 主入口（**由 `lib/wave` 启动器调用**，见 install.sh 行）。读配置目录（`config.json`）的 `base_dir`，把 `lib/`、`pkg/`、`surfboard/` 注入 `sys.path`；用 `COMMANDS` 字典把 `install / uninstall / list / search / info / version / selfupdate / link / unlink / linkquery / mirror` 分发到对应模块，`ARGUMENTS` 处理 `-h/--help/-V/--version`。**2.6.1 起** `__main__` 捕获 `KeyboardInterrupt`（下载卡住时用户多半会按 Ctrl-C）打印一行 `Interrupted. Nothing was installed.` 并 `exit(130)`，以及 `BrokenPipeError`（如 `wave list \| head`）静默 `exit(0)` |
 | `configpaths.py` | **配置目录解析**（`find_config_dir` / `load_base_dir` / `CONFIG_FILE` / `VERSION_FILE`）：系统级 `/etc/linuxwave_config` 优先，其次用户级 `~/.config/linuxwave_config`；系统级配置损坏或缺 `base_dir` 时也回落用户级。其余模块都从这里取配置，不再各自写死路径 |
 | `configerror.py` | 启动前的环境自检：`check_environment()` 检查装没装；`check_dependencies()` 检查 `requests`/`packaging`/`rich` 是否可用（缺了就打印当前解释器路径、缺失清单与修复命令）——正常路径走不到它，因为启动器已经挑过解释器了，它只兜住「绕过启动器直接 `python3 lib/wave.py`」这种情况。原文：只要两处配置目录里有一处装了 LinuxWave 就放行；都没装且在 git 仓库里时，报错并提示用 `lib/install.sh` 正式安装 |
 | `help.py` | 帮助与版本文本：`print_custom_help`（`-h` / `--help` 的用法，命令与旗标列表与 README 的 Command Reference 对齐）、`print_version`、`print_error_help`（未知命令时先报错再打帮助） |
+| `domains.py` | **对外地址的单一真相源（4.0 起）**。七种用途各一个域（`api` / `bottle` / `deps` / `core` / `python` / `selfupdate` / `sourcecode`），覆盖变量形如 `LINUXWAVE_API_DOMAIN`。`_validate` 必须与两份 shell 脚本里的 `mw_domain` 给出同样结论（`scripts/domains_test.sh` 拿同一批输入逐条比对）；`https` / `file` 之外只有回环地址允许明文 `http`；末尾斜杠去掉、主机名转小写；空格、引号、反引号、`$`、反斜杠一律拒绝。另含 payload 命名（`payload_suffix` / `payload_filename` / `payload_url`）、`listing_names`（同时认 GitHub 的 JSON 数组与镜像的纯文本清单）与凭据脱敏。**注意**：`resolve_payload` 目前**没有调用点**，安装仍按记录里的 `url` 取包——payload 层（B 档）尚未接线 |
+| `steplog.py` | `-v` 分步日志（`step` / `detail` / `fail` / `done`），纯标准库，只 `import sys`。`domains.py` 依赖它 |
+| `mirrorinfo.py` | **`wave mirror`**：按当前生效值列出七种地址（未覆盖的显示内置默认值），支持 table / `--json` / `--yaml` / `--toml` / `--raw`（可直接粘进 shell 配置）与 `--only-set`（`--raw` 下只导出你覆盖过的那几项）；密码固定显示六颗星，`--show-password` 才展开，`--hide-user` 连用户名一起遮 |
 | `install.sh` | 官方安装脚本：支持 `--silent`（`-S`，全程无交互，同时`--dir-option` 与协议都自动应答；需要免密 sudo 或 root）与 `--dir-option=N` / `--dir-option=N=DIR`（非交互选择菜单项，自定义项直接把路径写在 `=` 后）以便批量/脚本安装，`--help` 列出全部；选安装目录（含共享安装选项 `/home/linuxwave/.linuxwave`，等价 Linuxbrew 的 `/home/linuxbrew`；选中后自动建 `linuxwave` 账号、把安装树交给它、配置固定写 `/etc/linuxwave_config`、放宽家目录与安装树权限、并把 PATH 同时写入 `linuxwave` 与调用者的 rc）、`sudo` 提权、建运行时目录（`bin` / `links` / `deps` / `pkg` / `surfboard` / `lib` / `downloads/tmp`）、写 `config.json` / `VERSION.json`（**系统目录→`/etc/linuxwave_config`，用户目录→`~/.config/linuxwave_config`**）、**用户级安装时把 2.5 之前的旧系统级配置 `/etc/linuxwave_config` 迁走**（否则它会因系统级优先而盖住新配置）、**按 configdata 的 `versiondata/files_info` 清单拉取全部程序文件**（与 `selfupdate.sh` 共用同一份清单，解析逻辑也相同）、安装 Python 依赖（requests / packaging / rich）、把 `bin/` + `links/` + `lib/` 写入 PATH（升级时替换旧版只含 `bin`/`lib` 的行）、清理旧版平铺 `bin/` 文件、检查 `patchelf`（依赖库重定位所需）、许可协议确认（直接回车视为同意）。注意 `LINUXWAVE_VERSION` 仍**按分支写死**在脚本里，不能从 configdata 取 —— 否则用旧分支安装会写成新版本号。**推荐调用方式是 `/bin/bash -c "$(curl …)"`**：绝对路径的 `/bin/bash` 不受被篡改的 `PATH` 影响，且 `curl` 会先完整结束、`bash` 才开始执行，下载中途失败不会被边下边跑。这种方式下传参必须写 `--`（`/bin/bash -c "$(curl …)" -- --silent`），因为 `bash -c` 会把第一个参数当作脚本名（`$0`）；`$0` 里出现选项即说明参数**已被静默丢弃**，脚本会就此警告并打印正确写法。**许可协议在「安装完成」之前询问**（否则先报成功、随后又因不同意而全删），拒绝时会把安装树、配置目录与 rc 里的 PATH 一起回滚干净——回滚用 `run_cmd` 而非写死的 `sudo`，因为用户级安装全程无需提权。共享用户的 `~/.bashrc` 不存在时会**建出来**（账号预存或 `/etc/skel` 缺文件时，否则该账号反而跑不了 `wave`）。脚本以 `set -eE` 运行：`-E` 让 ERR 陷阱能看见 `run_cmd` 等**函数内部**的失败，中途失败会打印「未完成 + 实际路径 + 重跑即可」的指引，且**刻意不自动删除**已下载内容（升级时删树会毁掉用户原有的可用安装）。**2.6.1 起**：每个程序文件失败会**自动重试 5 次**（退避等待，单次 `--connect-timeout 20 --max-time 180`；重试提示在 `--silent` 下也照打，只有逐文件进度被压掉）；**目录菜单输入无效时不再静默回落到别的目录**，而是明确报错、最多 3 次后 `exit 1`；**`--silent` 不带 `--dir-option` 时显式选默认项并说明用了哪个**（不再去读可能不存在的终端、也不再泄漏 `/dev/tty` 报错）；**2.6.3 起共享安装改成组共享（Linuxbrew 式）**：自动建 `linuxwave` 组、把调用者 `usermod -aG` 加进去、`chgrp -R` 把安装树交给该组、`chmod -R g+w` 打开组写位，并给所有目录加 `setgid`（不加的话组员新建的文件会落回他自己的主组，下一个组员就改不动）——于是装包既不用 `sudo` 也不用全路径，直接 `wave install <package>`。判「是否已在组内」按 **gid** 比而不是组名（`id -nG` 的组名是按 gid 反查出来的，gid 与用户主组撞号时会漏判成「未入组」而白跑一遍 `usermod`）；而且 `id` 的两种形式语义不同（实测确认）：`id -G <用户名>` 查的是 `/etc` **数据库**，用来决定要不要 `usermod`；`id -G` 不带参数读的是**当前会话**的进程组，用来决定「要不要重新登录」—— 两者混用会把「已写进 `/etc/group`、但当前 shell 还没这个组」的用户谎报成已生效；`usermod` 失败（账号由 LDAP/SSSD 管、`/etc/group` 有重复条目…）**不让整个安装失败**，只如实报告并给出手工命令；两处提示都写明「组身份只在新的登录会话生效，先重登或 `newgrp linuxwave`」，并给出 `sudo usermod -aG linuxwave <user>` 供开通更多用户 | **Python 运行环境（3.1.0 起）**：下载上游便携 CPython（地址与校验值来自 `configdata/pythondata/latest_python`，Linux 两架构，`install_only_stripped`），校验 sha256 后解到 `$BASE_DIR/python/<版本>/` 并建 `current` 链接；在安装根建私有 `venv/` 装好 `requests`/`packaging`/`rich`；再生成 **`lib/wave` sh 启动器**（`lib/wave.py` 按原名落盘）。启动器按「venv → 自带解释器 → 安装时的解释器 → PATH」逐层试，每层都实测能否 import。下载失败回退系统 python3；拿不到 PyPI 时退回 `--system-site-packages` 的 venv；两者都不可用就如实失败。`LINUXWAVE_TEST` 下跳过 30MB+ 下载（离线测试根）。
 | `uninstall.sh` | 卸载 LinuxWave 本体：读两处配置定位 `BASE_DIR`（都读不到则遍历候选路径）、二次确认后删除安装目录与两处配置目录、清掉 rc 文件里的 PATH 行（共享安装连 `linuxwave` 的 rc 一并清）、最后自删。支持 `--force`（跳过全部确认，**保留** `linuxwave` 账号）与 `--remove-user`（连账号一并删除，不再询问）以便脚本化卸载。共享安装还会**询问**是否删除 `linuxwave` 账号，并明确警告 `userdel -r` 会连带删除家目录；拒绝时打印手工命令。删账号前会先 `loginctl disable-linger` 并停掉 `user@<uid>.service`——否则该用户一旦有过会话，systemd 的 user manager 会让 `userdel` 以「用户当前被进程使用」失败；`userdel` 的退出码会被检查，失败时如实报错并给出手工命令、退出码为 1（此前无论成败都打印「已删除」）。另外会清理共享用户家目录里的 `~/.config/linuxwave_config`（安装时 `HOME` 指向过它，配置可能落在那儿）。传参同样用 `--`（`/bin/bash -c "$(curl …)" -- --force`），否则选项被静默丢弃、脚本会警告。**自删只在 `$0` 是含本脚本标记的普通文件时执行**：用 `/bin/bash -c "$(curl …)"` 调用时 `$0` 是解释器自身（无参数）或 `--`（带参数），写死的 `rm -f "$0"` 会把 `/bin/bash` 删掉——这是官方文档推荐的调用方式，等于用 sudo 按文档卸载就会毁掉 `/bin/bash`。**不带 `--force` 时第一次确认从 `/dev/tty` 读，读不到就中止（exit 1）**：stdin 是 EOF（`< /dev/null`、CI）时绝不能默认当成同意；无人值守必须显式 `--force` |
 | `selfupdate.py` | `wave selfupdate`：拉 `configdata` 分支的 `versiondata/latest_version`，取其 `version` 与当前生效的 `VERSION.json` 比较（只比数字段，`2.3` == `2.3.0`）；已是最新则直接返回，否则把 `update_command` 中 `<<<` / `>>>` 之间的内容交给 `/bin/bash -c` 执行（用环境变量 `LINUXWAVE_UPDATE_VERSION` / `LINUXWAVE_UPDATE_BRANCH` 把目标版本与分支传下去）。因为 `bash -c "$(curl …)"` 在 curl 失败时仍返回 0，执行完会**回读 `VERSION.json` 复核**，没变就报错 |
@@ -72,10 +75,14 @@ PROJECT_CONTEXT.md 本文件：项目结构与关键机制
 | `scripts/format_test.sh` | 10 种打包格式（无扩展名 / zip / tar.gz / tar.bz2 / tar.xz / tar / gz / bz2 / xz / **conda**）逐个跑 install → 运行 → uninstall；跑完再断言装完自动建了不带版本号的链接，以及 `install --unlink` 不建链接 |
 | `scripts/audit_deps.py` | **依赖审计**。`data` 模式：查 infosource 数据的 `deps` 引用格式（必须一行一个引用）、`url` / `sha256` / `bin_name` 完整性（**真实软件包缺 `sha256` 现在判为 problem**，因为安装器会拒绝安装它；只有 `test_*` 夹具留空是合法的，`test_no_sha256` 正是用来验证拒绝分支的），以及被引用的 `@common` 与版本文件是否存在（本地有数据就读本地，否则从 GitHub 拉取）；`edges` 模式：把已安装依赖的实测 ELF `DT_NEEDED` 引用与数据声明对比，找出漏声明的依赖边——**只有系统给不了的引用才算漏声明**（`ldconfig -p` 登记过的一律豁免）：引用系统本来就有、恰好某个已装依赖也提供同名库时（`zstd` 的 `liblzma.so.5` 与 `xz`），报成漏声明是误报，实测只装 `zstd`、不装 `xz` 时 `zstd --version` 照样能跑；而 `libidn2` 的 `libiconv.so.2` 在 `ldconfig` 里查不到（glibc 的 iconv 在 libc 里，发行版不带 GNU libiconv），只按声明装就会以 `libiconv.so.2: cannot open shared object file` 起不来，才是真缺口。注意「已声明但实测没引用」的提醒仍按**全部**引用判定，不受该豁免影响。`--ignore 正则` 可跳过已知历史问题；加 `--check-urls` 会额外联网逐个确认 url 可达（默认关闭，因为依赖网络；数据里的 `test_*` 测试包故意用假 url，开它时要配 `--ignore 'test_'`）；发现真问题时退出码 1 |
 | `scripts/deps_test.sh` | **依赖链端到端回归（全量）**：自动从数据里**发现所有带依赖的包**（每个包取最高版本，排除 `test_*`），逐个跑完整循环——安装 → 运行 `--version` 验证 relink → 检查安装日志没有未解析引用 → 跑 `audit_deps.py edges` 做**依赖边审计**（实测 `DT_NEEDED` 与数据声明对比）→ 检查 `.depped_*` 标记 → 卸载并确认依赖目录与软链接被级联清理，最后打总表。也可只跑指定包（`bash scripts/deps_test.sh htop@3.5.3`）、用 `--data-dir` 指定数据副本；数据目录默认先找 `$REPO_DIR/infosource-data`，再找 `$REPO_DIR/../infosource-data`（CI 把数据检出到仓库根，本地开发克隆在上层）。当前发现：`htop@3.5.3`、`ncdu@2.9.2`、`tmux@3.6`、`wget@1.25.0` |
-| `scripts/selfupdate_test.sh` | **自更新回归**（必须放最后，它会真的改安装目录）：① 离线单测 `selfupdate.py` 的 `parse_version_data`（含 `<<<`/`>>>` 多行命令）与 `version_key`；② 把 `VERSION.json` 写成 `9999.0`，断言 `wave selfupdate` 短路为「已是最新」且退出码 0；③ 写成 `0.1`，跑真实自更新，最后断言 `VERSION.json` 等于 `configdata/versiondata/latest_version` 声明的版本 |
+| `scripts/selfupdate_test.sh` | **自更新回归**（必须放最后，它会真的改安装目录）。**全程离线**：顶部用当前工作树 + 真实的 `versiondata/files_info` 搭一份 `file://` 镜像，把 `LINUXWAVE_CORE_DOMAIN` / `LINUXWAVE_SELFUPDATE_DOMAIN` 指过去（`update_command` 保持生产形状 `bash -c "$(curl …)"`，只换地址）。① 单测 `parse_version_data`（含 `<<<`/`>>>` 多行命令）与 `version_key`；② 把 `VERSION.json` 写成 `9999.0`，断言 `wave selfupdate` 短路为「已是最新」；③ 写成 `0.1`，断言跨大版本被拒绝且配置未被动过；④ 同大版本走完整更新（读清单 → 下载 → 写 `VERSION.json` → 重写 `lib/wave` 启动器），断言版本号到位、清单里每个文件都落了地、`lib/wave` 是启动器（以 `#!` 开头）且命令表里每个模块都存在 |
 | `scripts/link_test.sh` | **不带版本号软链接回归**：装完自动建链接 → 不带版本号能跑 → `link` / `unlink` / `linkquery` → `-a` 批量 → 卸掉最高版自动降级（先复制一份目录造出 2.0，不依赖 infosource 真有该版本）→ `uninstall --unlink` 不降级 → `install --unlink` 不建链接 → 卸掉最后一个版本时删掉链接 |
+| `scripts/domains_test.sh` | **域名层回归（离线）**：默认值与 `domains.py` 一致、两份 shell 脚本的域名块**逐字相同**、16 个输入在 shell 与 Python 两侧给出同样结论（`http://localhost/x` 无端口、含空格、含反引号、IPv6 回环等历史分歧都在里面），以及**默认值以外不许出现写死的 GitHub 地址**——自更新里曾有一条 `BASE_URL` 绕过了域名块，配了镜像照样只走 GitHub |
+| `scripts/mirror_test.sh` | **`wave mirror` 回归（离线）**：五种输出、`--only-set` 只导出已覆盖项、密码永远六颗星、`--show-password` / `--hide-user` 的行为，以及地址里带凭据（`https://user:pass@host`）时的解析与脱敏 |
+| `scripts/help_test.sh` | **帮助排版回归（离线）**：`COMMANDS` 与 `COMMAND_HELP` 双向一致（缺一条 `wave X --help` 就会静默回落到总帮助）、每个命令的帮助都完整、已知命令不回落、不同长度的标签仍从同一列开始、总帮助里没有未解析的占位符 |
+| `scripts/check_domain_defaults.py` | 被 `domains_test.sh` 调用：从两份 shell 脚本里抽出域名默认值，与 `lib/domains.py` 的 `DEFAULTS` 逐项比对 |
 | `scripts/configpath_test.sh` | **配置目录解析回归**（离线）：把 `configpaths` 的两个候选目录换成临时目录，验证「系统级优先 / 用户级回落 / 系统级损坏或缺字段也回落 / 都没有则退 1」 |
-| `scripts/sandbox_test.sh` | **安装器 / 卸载器的端到端回归，跑在隔离命名空间里**。用 `unshare -rm` 把 `/etc`、`/home`、`/opt`、`/usr/local`、`/root`、`/var`、`/srv` 换成临时影子副本，宿主这几个目录一个字节都不会被写；取数改成 `file://` 本地镜像，因此**不需要网络**。断言覆盖：四个安装目录选项 → 配置落位（用户级 `~/.config` / 系统级 `/etc`）→ PATH 写入 → 参数校验（缺路径、越界、路径穿越、未知旗标）→ **协议询问在「安装完成」之前**、拒绝后安装树与配置与 rc 里的 PATH 全部回滚 → 中途失败时的指引且不误删 → 卸载确认语义（无终端必须拒绝、答 n 取消、答 y 删除、`--force` 无人值守）→ 卸载器自删且以 `/bin/bash -c` 运行时不误删解释器 → 共享安装（双端 rc、家目录权限、只剩安装树时的识别、`--remove-user` 的调用序列与失败不谎报）→ 复用 `link_test.sh` → 目录菜单无效输入不静默换目录、`--silent` 单独使用走默认项 → **单文件下载重试**（「短暂失败后自愈」与「持续失败后如实报错」两种，并断言自愈那次不会留下误导性的「未完成」）→ **共用安装树不可写**（用只读挂载真实复现，断言在联网取版本之前就失败、给出 `sudo` 全路径命令、且 `root:root` 的树不劝人去加入 `root` 组）→ **组共享写**（断言调用者被加进 `linuxwave` 组、树目录打开组写位、目录带 `setgid`、提示写明「要重新登录」、重复安装不再谎称刚入组、`usermod` 失败时安装仍成功并如实报告、组名反查判定正确）→ **`Ctrl-C`**（传输中，以及停在重试提示上两处，断言退出码 130、只给一行提示、且不谎报成下载失败）。当前共 **133 条断言**（`PASS` / `FAIL` / `SKIP` 三类，SKIP 用于「本机确实无法复现」的情形，例如缺 `script` 就没有 pty、`mount` 失败就无法造只读树）。要求非 root 运行；`sudo`/`loginctl`/`systemctl` 用替身（命名空间内本就是 uid 0，真调 loginctl 会去改宿主的 systemd 状态）。**已知限制**：发行版一般没装 `newuidmap`，命名空间里只映射调用者自己的 uid，所以选项 4 改成复用已存在的 `linuxwave` 账号，`useradd` 那一行无法在这里复现；同理**映射不了别的 gid**，`linuxwave` 组的 gid 只能是 0（换成别的 gid，`chown`/`chgrp` 会因「未映射」报 `EINVAL`），所以「调用者尚未入组」这个前提改用 passwd 里 root 的主组字段表达，组名反查那一步（`group_name_for_gid`）直接单测、不硬凑一棵非 0 属组的树。另外，命名空间里 root 的会话本来就带 gid 0，而 `linuxwave` 组的 gid 也只能是 0，所以「会话里还没有该组、需要重新登录」这一分支在沙箱里**永远走不到**——那一支靠隔离实验单独验证 `id` 的两种语义（具名查库、不带参数看会话） |
+| `scripts/sandbox_test.sh` | **安装器 / 卸载器的端到端回归，跑在隔离命名空间里**。用 `unshare -rm` 把 `/etc`、`/home`、`/opt`、`/usr/local`、`/root`、`/var`、`/srv` 换成临时影子副本，宿主这几个目录一个字节都不会被写；取数改成 `file://` 本地镜像，因此**不需要网络**。断言覆盖：四个安装目录选项 → 配置落位（用户级 `~/.config` / 系统级 `/etc`）→ PATH 写入 → 参数校验（缺路径、越界、路径穿越、未知旗标）→ **协议询问在「安装完成」之前**、拒绝后安装树与配置与 rc 里的 PATH 全部回滚 → 中途失败时的指引且不误删 → 卸载确认语义（无终端必须拒绝、答 n 取消、答 y 删除、`--force` 无人值守）→ 卸载器自删且以 `/bin/bash -c` 运行时不误删解释器 → 共享安装（双端 rc、家目录权限、只剩安装树时的识别、`--remove-user` 的调用序列与失败不谎报）→ 复用 `link_test.sh` → 目录菜单无效输入不静默换目录、`--silent` 单独使用走默认项 → **单文件下载重试**（「短暂失败后自愈」与「持续失败后如实报错」两种，并断言自愈那次不会留下误导性的「未完成」）→ **共用安装树不可写**（用只读挂载真实复现，断言在联网取版本之前就失败、给出 `sudo` 全路径命令、且 `root:root` 的树不劝人去加入 `root` 组）→ **组共享写**（断言调用者被加进 `linuxwave` 组、树目录打开组写位、目录带 `setgid`、提示写明「要重新登录」、重复安装不再谎称刚入组、`usermod` 失败时安装仍成功并如实报告、组名反查判定正确）→ **`Ctrl-C`**（传输中，以及停在重试提示上两处，断言退出码 130、只给一行提示、且不谎报成下载失败）。当前共 **163 条断言**（`PASS` / `FAIL` / `SKIP` 三类，SKIP 用于「本机确实无法复现」的情形，例如缺 `script` 就没有 pty、`mount` 失败就无法造只读树）。要求非 root 运行；`sudo`/`loginctl`/`systemctl` 用替身（命名空间内本就是 uid 0，真调 loginctl 会去改宿主的 systemd 状态）。**已知限制**：发行版一般没装 `newuidmap`，命名空间里只映射调用者自己的 uid，所以选项 4 改成复用已存在的 `linuxwave` 账号，`useradd` 那一行无法在这里复现；同理**映射不了别的 gid**，`linuxwave` 组的 gid 只能是 0（换成别的 gid，`chown`/`chgrp` 会因「未映射」报 `EINVAL`），所以「调用者尚未入组」这个前提改用 passwd 里 root 的主组字段表达，组名反查那一步（`group_name_for_gid`）直接单测、不硬凑一棵非 0 属组的树。另外，命名空间里 root 的会话本来就带 gid 0，而 `linuxwave` 组的 gid 也只能是 0，所以「会话里还没有该组、需要重新登录」这一分支在沙箱里**永远走不到**——那一支靠隔离实验单独验证 `id` 的两种语义（具名查库、不带参数看会话） |
 | `.github/workflows/format-test.yml` | 在 `ubuntu-latest` 上把 `lib/`、`pkg/`、`surfboard/` 部署到 `/tmp/linuxwave-test`，依次跑配置目录回归、依赖审计、格式回归、**校验值回归**（`checksum_test.sh`）、依赖链回归、链接回归、**selfupdate 回归**。`python-version` 走 `['3.14', '3.15']` 矩阵（`fail-fast: false`，一条挂了不取消另一条）：3.14 是环境下限（`.conda` 需要 `compression.zstd`），3.15 是上游最新正式版。`actions/python-versions` 里还没有 3.15.0 正式版（`setup-python` 报 `The version '3.15' ... was not found`），所以 3.15 那条线用 `astral-sh/setup-uv` 拉 python-build-standalone，再 `uv venv --seed` 建一个带 pip 的 venv 插到 `GITHUB_PATH` 最前（`setup-uv` 只把解释器登记给自己用，`PATH` 上的 `python3` 仍是 runner 自带那个）；每条线都断言 `sys.version_info[:2]` 与矩阵一致，免得 3.15 悄悄跑在 3.14 上还报绿。另外给工作流带上 `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`（`audit_deps.py` 走 `api.github.com` 的 tree API，未认证只有 60 次/小时）与 `PYTHONUNBUFFERED: "1"` |
 | `.github/workflows/portable-python.yml` | **便携解释器产物的月度体检**：拉 `configdata/pythondata/latest_python`，校验数据格式（https、64 位小写十六进制），下载**两个架构**并重新计算 sha256 比对，确认压缩包里真有 `python3`（四种候选布局之一）；对 native 架构再跑一遍完整能力验证：`-VV`、`compression.zstd`、pip、建 venv、装 `requests`/`packaging`/`rich`、用这个 venv 跑通仓库里的 `wave.py -V` 与全部模块导入。`schedule` 每月 + `workflow_dispatch` |
 
@@ -96,6 +103,9 @@ BASE_DIR/links/{名字}@{版本}                   软链接，此目录已加�
 BASE_DIR/pkg/installed.json                   已安装软件包记录
 BASE_DIR/downloads/tmp/                       下载临时目录（*.partial 表示未下载完）
 BASE_DIR/{lib,pkg,surfboard}/                 程序文件自身
+BASE_DIR/python/{版本}/                       自带解释器（3.1.0 起；current 符号链接指向在用版本）
+BASE_DIR/venv/                                私有 Python 环境（requests / packaging / rich）
+BASE_DIR/lib/wave                             sh 启动器（由 write_launcher 生成，**不是** wave.py 的副本；不在 files_info 清单里）
 /etc/linuxwave_config/{config.json,VERSION.json}          系统级安装的配置（优先）
 ~/.config/linuxwave_config/{config.json,VERSION.json}     用户级安装的配置
 ```
@@ -129,6 +139,20 @@ deps: "gettext@0.21.0"
 - 简易 DSL 解析规则：行内第一个引号**前**有 `字段:` 声明，该行属于该字段；否则向上回溯到最近的字段声明；同一字段多行合并为列表。`deps` 字段缺失即视为无依赖
 - 依赖引用格式强制 `依赖名@版本号`，不合规直接报错退出
 - 依赖名/版本在 `depsinfo_{arch}/` 里找不到时报错退出
+
+### ⚠️ 与上游 MacWave 的 `infosource` 是**语义分叉**，不能整仓同步
+
+目录名一模一样，含义不同：`pkginfo_amd64` 在 MacWave 那边指 **macOS Intel**，在我们这里指 **Linux x86_64**。实测同一条记录：
+
+| | `_ldid@2.1.5-procursus7`（amd64） |
+| --- | --- |
+| MacWave | `url = …/ldid_macosx_x86_64`，`sha256 9d46e0fe…` |
+| LinuxWave | `url = …/ldid_linux_x86_64`，`sha256 4b8862b2…` |
+
+所以**不要**把上游数据当镜像一键同步：`ldid`、`jq`、`yq`、`palera1n` 这些包会立刻变成「下载 macOS 二进制 + 校验不过」。上游「Refresh the sha256 for ldid …」那类提交修的是 macOS 产物，与我们无关。
+
+- `file` 字段（4.0 的 payload 文件名）我们已在数据里补齐，但**客户端尚未消费**（见 §六.8）
+- 名字校验已改为 Unicode 类别判定，不再限 ASCII；长度上限 128 字符 / 200 字节（`configpaths.is_safe_filename`）
 
 ## 五、数据源（`configdata` 分支的 `updatedata/`）
 
@@ -168,13 +192,18 @@ updatedata/{版本号}/transfer_commands      Y/y 时执行这个脚本（bash -
 
 | 位置 | 要改什么 |
 | --- | --- |
-| `main/README.md` 第 19 行附近 | `3.0.x, Release on YYYY-MM-DD` |
-| `main/README.zh-Hans.md` 第 19 行附近 | `3.0.x，发布于 YYYY-MM-DD` |
+| `main/README.md` 第 19 行附近 | `3.x.y, Release on YYYY-MM-DD` |
+| `main/README.zh-Hans.md` 第 19 行附近 | `3.x.y，发布于 YYYY-MM-DD` |
 | `pages-site/index.html` 的 `version-block`（英文与中文两处） | **版本号 + 发布日期的两行都要改** |
 | `configdata` 的 `versiondata/latest_version` | `version` / `release_date` / `build_number` / `branch` |
-| `configdata` 的 `updatedata/3.0.x/dir_structure_change` | 新增，单字节 `N` |
+| `configdata` 的 `versiondata/files_info` | 新增或删除 `lib/`、`pkg/`、`surfboard/` 下的文件时**必须同步**：漏一行，装出来的 `wave` 就以 `ModuleNotFoundError` 起不来（3.1.0 加的 `domains.py` / `steplog.py` / `mirrorinfo.py` 就是三行） |
+| `configdata` 的 `updatedata/<版本>/dir_structure_change` | 新增，单字节 `N`；**真改了目录结构**才写 `Y` 并在同目录附 `transfer_commands` |
+| `configdata` 的 `pythondata/latest_python` | 只在更换自带解释器版本时改（版本号 + 两架构地址 + sha256） |
+| 发布分支 `x.y` | 先建分支，再推 `configdata`——指针里的 `branch` 指向它，分支不存在时每次自更新都 404 |
+| 工作区根目录的 `release-notes-vX.Y.Z.md` | 用于写 Release 正文（**目前不在任何 git 仓库里**，注意别丢） |
+| `release-<版本>/` 资产集 | `flat/` 放全部 `lib/` `pkg/` `surfboard/` `scripts/` 文件，`archive/` 放 `PROJECT_CONTEXT.md` + `lib/selfupdate.sh`，再打 `.tar` / `.tar.gz` |
 
-改完用远端内容复核，不要只看本地：`main` 与发布分支（`3.0`）是镜像，两边都要对；官网还要等 Pages 构建后再抓一次首页确认。
+改完用远端内容复核，不要只看本地：`main` 与发布分支（`3.1`）是镜像，两边都要对；官网还要等 Pages 构建后再抓一次首页确认。复核走 **API** 而不是 `raw.githubusercontent.com`——那条通道会被重置，也可能在推送后短暂滞后（实测出现过推送 1 分钟内 404、重跑即恢复）。
 
 `.templates/` 下的 `version`（`9.9.9` / `1.2.0` / `3.0.0`）是样例占位值，不参与发版，**不要跟着改**。`2.5` / `2.6` 等历史分支保留各自的版本号，也不要动。
 
@@ -213,6 +242,12 @@ amd64_url / amd64_sha256
 5. **递归**：依赖自身的 `deps` 会被继续安装（先装下层、再装自己）
 6. **动态库路径替换**：依赖包里的库不会自动被 `ld.so` 找到（预编译产物的 `DT_NEEDED` 只记库名、`RUNPATH` 又只指向构建机的路径，而安装目录可选，跨目录必然失败）。安装完成后由 `surfboard/transfer.sh` 用 `patchelf` 把 `RPATH`/`RUNPATH` 改写成指向依赖 `lib/` 的 `$ORIGIN` 相对路径。替换统一放在**全部产物就位之后**做（先逐个处理 `deps/*/*`，再处理软件包目录），因为依赖声明顺序与实际库依赖顺序未必一致——例如 `wget` 的 `deps` 里 `libidn2` 排在 `libunistring` 前面，而 `libidn2` 恰好引用 `libunistring`，提前替换会解析不到
 7. **网络**：所有请求 30 秒超时；下载超时或连接失败时询问是否重试
+8. **对外地址（4.0 起）**：七种用途各一个域，全部可由环境变量覆盖（`LINUXWAVE_API_DOMAIN`、`LINUXWAVE_BOTTLE_DOMAIN`、`LINUXWAVE_DEPS_DOMAIN`、`LINUXWAVE_CORE_DOMAIN`、`LINUXWAVE_PYTHON_DOMAIN`、`LINUXWAVE_SELFUPDATE_DOMAIN`、`LINUXWAVE_PKG_SOURCECODE_DOMAIN`）。Python 侧在 `lib/domains.py`，shell 侧两份脚本各抄一份 `mw_domain`——**三处必须给出同样结论**，`scripts/domains_test.sh` 用同一批输入做交叉验证。`wave mirror` 可随时查看当前生效值与来源；`--raw` 输出可直接粘进 shell 配置。
+   **规则**：除域名表里的默认值外，代码里不允许再出现写死的 `github.com`（有断言守着）。自更新里曾漏改一条 `BASE_URL`，结果配了镜像也只走 GitHub、离线必挂。
+   **尚未接线的两层**：`resolve_payload`（4.0 的 payload 命名与 `file` 字段）零调用点；`selfupdate_latest_url` / `selfupdate_commands_url`（`linuxwavedata/latest.toml` + `<版本>/update_commands.sh`）已定义未使用，自更新仍走 `versiondata/latest_version` + `update_command`
+9. **`--proxy` 是全局的**：命令行上写了它，这条命令就**不该有任何请求绕过它**。实现是把值写进进程环境（`HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` 及其小写形式），requests（`trust_env` 默认开）、urllib、curl 与子进程一并继承。此前它只影响 requests 的下载参数，取索引、取 `@common`、取依赖信息全都绕过——内网用户在下载任何字节之前就撞上「Cannot fetch @common」，看着像参数没生效
+10. **测试隔离**：`LINUXWAVE_TEST=<目录>` 把整个文件系统视图挂到该目录下（`HOME` 与系统路径都落在里面），用于离线假根；`LINUXWAVE_SKIP_PORTABLE_PYTHON` 单独关掉 30MB+ 解释器下载——`sandbox_test.sh` 走 `unshare` 真装到真路径、不设 `LINUXWAVE_TEST`，光靠前者拦不住
+11. **预期内的失败不该是致命错误**：`install.sh` 以 `set -eE` 运行，`mw_try` 把「允许失败」的调用包起来并把结果记进 `MW_OPTIONAL_RESULT`，`install_failed()` 见到 `MW_FAILURE_HANDLED` 就提前返回——否则「拿不到自带解释器、回退系统 python3」这种正常降级会被 ERR 陷阱当成安装失败
 
 ## 七、代码约定
 
