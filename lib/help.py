@@ -5,6 +5,7 @@ LinuxWave Help Module
 """
 
 import json
+import re
 
 from configpaths import VERSION_FILE
 
@@ -17,6 +18,61 @@ RESET = '\033[0m'
 BOLD = '\033[1m'
 PURPLE = '\033[35m'
 ORANGE = '\033[38;5;197m'
+
+
+# -------------------- 排版 --------------------
+#
+# 原先靠手数空格对齐，标签长度一改就错位（实测各块描述起始列从 34 到 52 都有）。
+# 改成每块先量出最宽的标签再统一补空格，加多少条都不用重新数。
+#
+# 颜色也统一成一条规则，避免同是旗标却一处 GREEN 一处 CYAN：
+#   命令名 / 程序名   → GREEN
+#   旗标             → CYAN
+#   <值> 占位符       → YELLOW
+
+_VALUE_RE = re.compile(r'^(?P<name>.*?)\s*(?P<value><[^>]+>)$')
+
+
+def _label(*segments):
+    """segments 是 (文本, 颜色或 None)，返回 (纯文本, 上色文本)。"""
+    plain = "".join(text for text, _ in segments)
+    colored = "".join(f"{color}{text}{RESET}" if color else text for text, color in segments)
+    return plain, colored
+
+
+def _command(name, *rest):
+    return [(name, GREEN)] + list(rest)
+
+
+def _flag(name, value=None):
+    segments = [(name, CYAN)]
+    if value:
+        segments.append((f" {value}", YELLOW))
+    return segments
+
+
+def _flag_spec(spec):
+    # "(-C, --continue)" 这类写法直接用；"--proxy <string>" 把值和旗标分开上色。
+    match = _VALUE_RE.match(spec)
+    if match:
+        return _flag(match.group("name"), match.group("value"))
+    return _flag(spec)
+
+
+def _print_section(title, rows, indent=2, gap=2):
+    """rows 是 [(segments, 描述)]，描述列按本块最宽标签对齐。"""
+    if not rows:
+        return
+    labels = [_label(*segments) for segments, _ in rows]
+    width = max(len(plain) for plain, _ in labels)
+    print()
+    print(f"{PURPLE}{title}:{RESET}")
+    for (plain, colored), (_, desc) in zip(labels, rows):
+        print(" " * indent + colored + " " * (width - len(plain) + gap) + desc)
+
+
+def _print_note(text, indent=2):
+    print(" " * indent + text)
 
 
 def get_project_version():
@@ -38,40 +94,53 @@ def print_custom_help():
     print()
     print(f"LinuxWave {version} 🌊")
     print("A package manager for Linux software developers.")
-    print()
-    print(f"{PURPLE}Commands:{RESET}")
-    print(f"  {GREEN}install{RESET}               Install a package (latest version)")
-    print(f"  {GREEN}uninstall{RESET}             Uninstall a package")
-    print(f"  {GREEN}list{RESET}                  List installed packages")
-    print(f"  {GREEN}search{RESET}                Search for a package in the index")
-    print(f"  {GREEN}info{RESET}                  Display detailed information about a package")
-    print(f"  {GREEN}selfupdate{RESET}            Update LinuxWave itself to the latest version")
-    print(f"  {GREEN}link{RESET}                  Link installed packages without a version number")
-    print(f"  {GREEN}unlink{RESET}                Remove those unversioned links")
-    print(f"  {GREEN}linkquery{RESET}             Show which version an unversioned link points to")
-    print()
-    print(f"{PURPLE}Flags:{RESET}")
-    print(f"  {GREEN}-h, --help{RESET}            Show help for any command")
-    print(f"  {GREEN}-V, --version{RESET}         Print version information")
-    print(f"  {GREEN}-v, --verbose{RESET}         Enable verbose output (show detailed logs)")
-    print()
-    print(f"{PURPLE}Global Flags (can be used with any command):{RESET}")
-    print(f"  {GREEN}-C, --continue{RESET}        Resume interrupted downloads (like curl -C -)")
-    print(f"  {CYAN}--proxy{RESET} {YELLOW}string{RESET}        Specify an HTTP/HTTPS proxy (e.g., http://127.0.0.1:8080)")
-    print(f"  {CYAN}--skip-ssl{RESET}            Skip SSL certificate verification (insecure)")
-    print(f"  {CYAN}--limit-rate{RESET} {YELLOW}string{RESET}   Limit download speed (e.g., 200K, 1M, 5M)")
-    print(f"  {CYAN}--ver{RESET} {YELLOW}string{RESET}          Install a specific version (install only; --ver=1.0 works too)")
-    print()
-    print(f"{PURPLE}Special Flags:{RESET}")
-    print(f"  {GREEN}wave install <pkgname>@<version>{RESET}   Download certain version(s) of a package")
-    print(f"  {CYAN}--unlink{RESET}                         Leave the unversioned link alone (install / uninstall)")
-    print(f"  {CYAN}--all, -a{RESET}                        Apply to every installed package (link / unlink / linkquery)")
-    print()
-    print(f"{PURPLE}Unversioned Links:{RESET}")
-    print(f"  {GREEN}wave link <name>{RESET}                 Link a package to its highest installed version")
-    print(f"  {GREEN}wave linkquery <name>{RESET}            Show what <name> is linked to (e.g. 🌊 ffmpeg@9.0)")
-    print(f"  {GREEN}wave unlink <name>{RESET}               Remove that link")
-    print("  Links are created on install and re-pointed on uninstall; --unlink never leaves one broken.")
+    _print_section("Commands", [
+        (_command("install"), "Install a package (latest version)"),
+        (_command("uninstall"), "Uninstall a package"),
+        (_command("list"), "List installed packages"),
+        (_command("search"), "Search for a package in the index"),
+        (_command("info"), "Display detailed information about a package"),
+        (_command("selfupdate"), "Update LinuxWave itself to the latest version"),
+        (_command("link"), "Link installed packages without a version number"),
+        (_command("unlink"), "Remove those unversioned links"),
+        (_command("linkquery"), "Show which version an unversioned link points to"),
+        (_command("mirror"), "Show which address each kind of data is fetched from"),
+    ])
+
+    _print_section("Flags", [
+        (_flag("-h, --help"), "Show help for any command"),
+        (_flag("-V, --version"), "Print version information"),
+        (_flag("-v, --verbose"), "Enable verbose output (show detailed logs)"),
+    ])
+
+    _print_section("Global Flags (can be used with any command)", [
+        (_flag("-C, --continue"), "Resume interrupted downloads (like curl -C -)"),
+        (_flag("--proxy", "<string>"), "Send every request of this command through a proxy"),
+        (_flag("--skip-ssl"), "Skip SSL certificate verification (insecure)"),
+        (_flag("--limit-rate", "<string>"), "Limit download speed (e.g., 200K, 1M, 5M)"),
+        (_flag("--ver", "<string>"), "Install a specific version (install only; --ver=1.0 works too)"),
+        (_flag("LINUXWAVE_PIP_INDEX"), "Env var. pip index for the Python deps; default pypi.org/simple"),
+    ])
+    _print_note("--proxy also applies to the child processes (curl, pip), "
+                "e.g. http://127.0.0.1:8080.")
+
+    _print_section("Special Flags", [
+        (_command("wave install", (" <pkgname>@<version>", YELLOW)),
+         "Download certain version(s) of a package"),
+        (_flag("--unlink"), "Leave the unversioned link alone (install / uninstall)"),
+        (_flag("--all, -a"), "Apply to every installed package (link / unlink / linkquery)"),
+    ])
+
+    _print_section("Unversioned Links", [
+        (_command("wave link", (" <name>", YELLOW)),
+         "Link a package to its highest installed version"),
+        (_command("wave linkquery", (" <name>", YELLOW)),
+         "Show what <name> is linked to (e.g. 🌊 ffmpeg@9.0)"),
+        (_command("wave unlink", (" <name>", YELLOW)), "Remove that link"),
+    ])
+    _print_note("Links are created on install and re-pointed on uninstall; "
+                "--unlink never leaves one broken.")
+
     print()
     print("For more details, visit: https://linuxwave.org")
 
@@ -154,6 +223,23 @@ COMMAND_HELP = {
         ],
         "examples": ["wave linkquery jq"],
     },
+    "mirror": {
+        "usage": "wave mirror [flags]",
+        "desc": "Show the address each kind of data is fetched from, including the "
+                "built-in defaults for anything not overridden by an environment variable.",
+        "flags": [
+            ("--json", "Print the configuration as JSON"),
+            ("--yaml", "Print the configuration as YAML"),
+            ("--toml", "Print the configuration as TOML"),
+            ("--raw", "Print ready-to-paste export lines"),
+            ("--only-set", "With --raw: export only the sources you overrode, leaving "
+                           "the rest to follow the built-in defaults"),
+            ("--show-password", "Print passwords in full instead of six asterisks"),
+            ("--hide-user", "Also mask the user name"),
+        ],
+        "examples": ["wave mirror", "wave mirror --raw",
+                     "wave mirror --json", "wave mirror --show-password"],
+    },
     "version": {
         "usage": "wave version",
         "desc": "Print the installed LinuxWave version.",
@@ -175,15 +261,12 @@ def print_command_help(command):
     print(entry["desc"])
 
     if entry["flags"]:
-        print()
-        print(f"{PURPLE}Flags:{RESET}")
-        for name, text in entry["flags"]:
-            print(f"  {GREEN}{name}{RESET}" + " " * max(1, 22 - len(name)) + text)
+        _print_section("Flags", [(_flag_spec(name), text) for name, text in entry["flags"]])
 
     print()
     print(f"{PURPLE}Examples:{RESET}")
     for example in entry["examples"]:
-        print(f"  {example}")
+        _print_note(example)
 
     print()
     print(f"All commands: {GREEN}wave --help{RESET}")

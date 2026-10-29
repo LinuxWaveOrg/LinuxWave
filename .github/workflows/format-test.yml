@@ -110,6 +110,11 @@ jobs:
         run: |
           bash scripts/format_test.sh
 
+      # 帮助表与 COMMANDS 必须一一对应，且排版引擎的对齐不能被改坏
+      - name: Run help layout test
+        run: |
+          bash scripts/help_test.sh
+
       # 负向回归：没有合法 sha256 就必须拒绝安装（缺值 / 畸形 / 值不符）
       - name: Run checksum test
         run: |
