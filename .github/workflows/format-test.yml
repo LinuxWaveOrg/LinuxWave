@@ -140,6 +140,11 @@ jobs:
         run: |
           bash scripts/python_source_test.sh
 
+      # 镜像端到端：真的从一个要求认证的镜像取字节，并确认凭据不会进日志
+      - name: Run mirror end-to-end test
+        run: |
+          bash scripts/mirror_e2e_test.sh
+
       # 负向回归：没有合法 sha256 就必须拒绝安装（缺值 / 畸形 / 值不符）
       - name: Run checksum test
         run: |
