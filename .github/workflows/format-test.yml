@@ -130,6 +130,11 @@ jobs:
         run: |
           bash scripts/upgrade_test.sh
 
+      # 4.0 自更新布局：latest.toml 解析、按版本脚本的生成、两种布局的回落
+      - name: Run self-update layout test
+        run: |
+          bash scripts/selfupdate_layout_test.sh
+
       # 负向回归：没有合法 sha256 就必须拒绝安装（缺值 / 畸形 / 值不符）
       - name: Run checksum test
         run: |
