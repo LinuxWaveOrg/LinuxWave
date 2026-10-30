@@ -310,11 +310,13 @@ def download_file(url, temp_path, config, input_string, display_name):
                 break
             elif response.status_code == 404:
                 print(f"{RED_BOLD}🌊 Error: ErrorCode 404 - The URL or file does not exist.{RESET}")
-                print(f"{RED_BOLD}🌊 URL: {url}{RESET}")
+                # 镜像地址可以带凭据（user:token@host），这条会进终端与工单
+                print(f"{RED_BOLD}🌊 URL: {domains.redact_url(url)}{RESET}")
                 sys.exit(404)
             elif response.status_code not in (200, 206):
                 print(f"{RED_BOLD}🌊 Error: ErrorCode {response.status_code}{RESET}")
-                print(f"{RED_BOLD}🌊 URL: {url}{RESET}")
+                # 镜像地址可以带凭据（user:token@host），这条会进终端与工单
+                print(f"{RED_BOLD}🌊 URL: {domains.redact_url(url)}{RESET}")
                 sys.exit(response.status_code)
 
             # 如果服务器不支持续传
