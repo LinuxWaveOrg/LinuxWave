@@ -96,6 +96,37 @@ mw_domain() {
     exit 1
 }
 
+mw_redact() {
+    # mw_redact <url>：把 URL 里的口令换成 ***，日志与报错里不能出现明文。
+    # 只在 host 段找 @ —— path 里的 @ 是合法文件名（jq@1.7.1.arm64）。
+    local url="$1"
+    local scheme rest authority path userinfo host user
+
+    case "$url" in
+        *://*) ;;
+        *) printf '%s\n' "$url"; return 0 ;;
+    esac
+
+    scheme="${url%%://*}"
+    rest="${url#*://}"
+    authority="${rest%%/*}"
+    if [[ "$rest" == */* ]]; then path="/${rest#*/}"; else path=""; fi
+
+    case "$authority" in
+        *@*) ;;
+        *) printf '%s\n' "$url"; return 0 ;;
+    esac
+
+    userinfo="${authority%@*}"
+    host="${authority##*@}"
+    user="${userinfo%%:*}"
+    if [[ "$userinfo" == *:* ]]; then
+        printf '%s://%s:***@%s%s\n' "$scheme" "$user" "$host" "$path"
+    else
+        printf '%s://***@%s%s\n' "$scheme" "$host" "$path"
+    fi
+}
+
 # ==========================================
 # 各地址（默认值必须与 lib/domains.py 的 DEFAULTS 逐字一致）
 # ==========================================
@@ -104,6 +135,10 @@ mw_domain() {
 
 API_DOMAIN="$(mw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
 CORE_URL="$(mw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
+# 内置默认值，只用来判断「用户是不是在用镜像」（install.sh 的欢迎语据此提示一句）。
+# 必须与上一行的默认值、以及 lib/domains.py 的 DEFAULTS["core"] 一致 ——
+# scripts/check_domain_defaults.py 会比对这三处。
+CORE_DEFAULT_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave"
 SELFUPDATE_URL="$(mw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 PYTHON_DATA_URL="$(mw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 # pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
@@ -352,6 +387,13 @@ fi
 # ==========================================
 
 echo "🌊 Welcome to LinuxWave $LINUXWAVE_VERSION!"
+
+# 用了镜像就明说一句。装完遇到问题，第一件事是确认自己连的到底是谁 —— 而镜像地址里
+# 可能带凭据，所以过一遍 mw_redact。
+if [[ "$CORE_URL" != "$CORE_DEFAULT_URL" ]]; then
+    echo "🌊 Core files come from a mirror: $(mw_redact "$CORE_URL")"
+fi
+
 echo ""
 
 # ==========================================

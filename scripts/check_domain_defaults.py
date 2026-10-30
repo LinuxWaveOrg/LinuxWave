@@ -41,6 +41,17 @@ def shell_default(repo, script, env_name):
     return match.group(1) if match else None
 
 
+def shell_core_default_constant(repo, script):
+    """域名块里那条 CORE_DEFAULT_URL="..." 的副本。
+
+    install.sh 用它判断「用户是不是在用镜像」（欢迎语据此提示一句）。它是默认值的
+    第二份抄写，所以也得盯着，否则哪天默认地址改了，提示就会永远不出现（或永远出现）。
+    """
+    text = (repo / script).read_text()
+    match = re.search(r'^CORE_DEFAULT_URL="([^"]*)"', text, re.MULTILINE)
+    return match.group(1) if match else None
+
+
 def main():
     repo = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
     defaults = python_defaults(repo)
@@ -53,6 +64,11 @@ def main():
             if actual != expected:
                 print(f"  {script}: {env_name} = {actual!r}, lib/domains.py = {expected!r}")
                 problems += 1
+
+        constant = shell_core_default_constant(repo, script)
+        if constant != defaults.get("core"):
+            print(f"  {script}: CORE_DEFAULT_URL = {constant!r}, lib/domains.py core = {defaults.get('core')!r}")
+            problems += 1
 
     if problems:
         print(f"  {problems} mismatch(es): shell and Python disagree on where files come from")
