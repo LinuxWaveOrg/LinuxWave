@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 
@@ -22,16 +23,76 @@ RESET = '\033[0m'
 # -------------------- 常量 --------------------
 
 import domains
-from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir
+from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir, load_base_dir
 
 # 版本数据的位置由 domains 决定（LINUXWAVE_SELFUPDATE_DOMAIN 可整体换掉）。
 # 目前仍在 configdata 里，搬到独立的 Selfupdate 仓库后只需改 domains 的默认值。
 VERSION_DATA_URL = f"{domains.selfupdate_domain()}/versiondata/latest_version"
+
+# 4.0 起的两级结构：latest.toml 说「装哪个版本」，该版本的 update_commands.sh 说「怎么装」。
+# 前者每次发版都变，后者按版本冻结 —— 装了旧版本的人继续用他们那份说明，而旧版本仍在运行。
+LATEST_TOML_URL = domains.selfupdate_latest_url()
 FETCH_TIMEOUT = domains.DEFAULT_TIMEOUT
 UPDATE_TIMEOUT = 1800
 
 
 # -------------------- 版本数据 --------------------
+
+def fetch_url_text(url):
+    """取一段文本：优先标准库，本地 Python 缺根证书时改走 curl。取不到返回 None。"""
+    try:
+        with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT) as response:
+            return response.read().decode()
+    except (urllib.error.URLError, UnicodeDecodeError, OSError):
+        pass
+
+    result = subprocess.run(['curl', '-fsSL', '--max-time', str(FETCH_TIMEOUT), url],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def parse_toml(text):
+    """只认本项目的用法：`key = "value"`，`#` 开头是注释，其余忽略。
+
+    4.0 的 latest.toml 就长这样（上游用真正的 TOML，但字段只有四个字符串），
+    为此引一个 TOML 解析器不值得 —— 但解析必须严格：值不带引号就当不存在，
+    免得半行残缺被当成版本号。
+    """
+    fields = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if not separator or not key:
+            continue
+        if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+            fields[key] = value[1:-1]
+    return fields
+
+
+def resolve_release():
+    """返回 (版本数据, 布局)，两个布局都没有时返回 (None, None)。
+
+    优先 4.0 的 linuxwavedata/latest.toml；取不到或字段不全才回落到 3.x 的
+    versiondata/latest_version（镜像上两份可以并存，迁移期谁也不会被打断）。
+    """
+    text = fetch_url_text(LATEST_TOML_URL)
+    if text:
+        data = parse_toml(text)
+        if data.get("version"):
+            return data, "linuxwavedata"
+
+    text = fetch_url_text(VERSION_DATA_URL)
+    if text:
+        return parse_version_data(text), "legacy"
+
+    return None, None
+
 
 def fetch_version_data():
     # 优先用标准库；本地 Python 缺根证书时改走 curl
@@ -146,13 +207,12 @@ def handle_selfupdate(input_string=""):
 
     print("🌊 Fetching the latest version...")
 
-    text = fetch_version_data()
-    if text is None:
+    data, layout = resolve_release()
+    if data is None:
         print(f"{RED_BOLD}🌊 Error: Cannot reach the LinuxWave version data.{RESET}")
+        print(f"{RED_BOLD}🌊 {LATEST_TOML_URL}{RESET}")
         print(f"{RED_BOLD}🌊 {VERSION_DATA_URL}{RESET}")
         sys.exit(1)
-
-    data = parse_version_data(text)
     latest = data.get("version", "")
     if not latest:
         print(f"{RED_BOLD}🌊 Error: The version data has no 'version' field.{RESET}")
@@ -167,24 +227,59 @@ def handle_selfupdate(input_string=""):
 
     print("🌊 Fetching the new version information")
 
-    command = data.get("update_command", "")
-    if not command:
-        print(f"{RED_BOLD}🌊 Error: The version data has no 'update_command' field.{RESET}")
-        sys.exit(1)
+    environment = dict(os.environ)
+    environment["LINUXWAVE_UPDATE_VERSION"] = latest
+    if data.get("branch"):
+        environment["LINUXWAVE_UPDATE_BRANCH"] = data["branch"]
+
+    if layout == "linuxwavedata":
+        # 4.0 布局：该版本冻结的更新脚本自己完成下载与落盘。
+        # 客户端只负责把它取下来、按合同传环境变量、跑它。
+        script_url = domains.selfupdate_commands_url(latest)
+        script_text = fetch_url_text(script_url)
+        if not script_text:
+            print(f"{RED_BOLD}🌊 Error: Cannot fetch the update commands for {latest}.{RESET}")
+            print(f"{RED_BOLD}🌊 {script_url}{RESET}")
+            sys.exit(1)
+
+        # 合同里的变量（与 scripts/build_update_commands.py 的注释逐条对应）
+        environment["LINUXWAVE_INSTALL_DIR"] = str(load_base_dir())
+        environment["LINUXWAVE_CONFIG_DIR"] = str(find_config_dir() or "")
+        environment["LINUXWAVE_CORE_URL"] = domains.core_domain()
+        environment["LINUXWAVE_BRANCH"] = data.get("branch", "")
+        environment["LINUXWAVE_TARGET_VERSION"] = latest
+        environment["LINUXWAVE_CURRENT_VERSION"] = current or ""
+        environment["LINUXWAVE_FILE_TIMEOUT"] = str(FETCH_TIMEOUT)
+        environment["LINUXWAVE_NEED_SUDO"] = "0" if os.access(load_base_dir(), os.W_OK) else "1"
+        command = None
+    else:
+        command = data.get("update_command", "")
+        if not command:
+            print(f"{RED_BOLD}🌊 Error: The version data has no 'update_command' field.{RESET}")
+            sys.exit(1)
 
     if current:
         print(f"🌊 Updating LinuxWave from {current} to {latest}...")
     else:
         print(f"{YELLOW}🌊 No installed version found, updating to {latest}...{RESET}")
 
-    # 分支与目标版本通过环境变量传给 selfupdate.sh，避免脚本自己去猜
-    environment = dict(os.environ)
-    environment["LINUXWAVE_UPDATE_VERSION"] = latest
-    if data.get("branch"):
-        environment["LINUXWAVE_UPDATE_BRANCH"] = data["branch"]
-
     try:
-        result = subprocess.run(['/bin/bash', '-c', command], env=environment, timeout=UPDATE_TIMEOUT)
+        if command is None:
+            # 落到临时文件再跑：脚本内容来自网络，不能直接塞进 -c 的字符串里
+            with tempfile.NamedTemporaryFile('w', suffix='.sh', delete=False) as handle:
+                handle.write(script_text)
+                script_path = handle.name
+            try:
+                result = subprocess.run(['/bin/bash', script_path], env=environment,
+                                        timeout=UPDATE_TIMEOUT)
+            finally:
+                try:
+                    os.unlink(script_path)
+                except OSError:
+                    pass
+        else:
+            result = subprocess.run(['/bin/bash', '-c', command], env=environment,
+                                    timeout=UPDATE_TIMEOUT)
     except subprocess.TimeoutExpired:
         print(f"{RED_BOLD}🌊 Error: The update command timed out.{RESET}")
         sys.exit(1)
