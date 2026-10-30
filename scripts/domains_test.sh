@@ -475,6 +475,69 @@ else
 fi
 
 echo
+echo "========== 9. 提权下载不能把代理丢掉 =========="
+
+# sudo 默认 env_reset：`sudo curl ...` 会拿到一个干净环境，HTTPS_PROXY 没了。
+# 于是「配了代理」的机器上，系统级安装（/opt、/usr/local）的下载全部绕过代理直连，
+# 内网里表现为超时。mw_sudo 用 `sudo env K=V ...` 显式带过去。
+extract_sudo() {
+    awk '/^mw_sudo\(\) \{/,/^\}/' "$1"
+}
+
+if diff -q <(extract_sudo "$REPO_DIR/lib/install.sh") \
+           <(extract_sudo "$REPO_DIR/lib/selfupdate.sh") > /dev/null; then
+    pass "install.sh 与 selfupdate.sh 的 mw_sudo 一致"
+else
+    fail "两份脚本的 mw_sudo 已经漂移"
+    diff <(extract_sudo "$REPO_DIR/lib/install.sh") \
+         <(extract_sudo "$REPO_DIR/lib/selfupdate.sh") | head -20
+fi
+
+# runner 必须走 mw_sudo：除了 mw_sudo 内部的兜底那一行，文件里不该再有裸的 sudo "$@"
+for script in "$REPO_DIR/lib/install.sh" "$REPO_DIR/lib/selfupdate.sh"; do
+    total="$(grep -cE '^[[:space:]]*sudo "\$@"$' "$script" 2>/dev/null || true)"
+    inside="$(extract_sudo "$script" | grep -cE '^[[:space:]]*sudo "\$@"$' 2>/dev/null || true)"
+    total="${total:-0}"; inside="${inside:-0}"
+    if [[ "$total" -eq "$inside" ]]; then
+        pass "$(basename "$script")：$total 处 sudo 调用全在 mw_sudo 里，runner 都走它"
+    else
+        fail "$(basename "$script")：有 $((total - inside)) 处裸 sudo 会丢代理"
+        grep -nE '^[[:space:]]*sudo "\$@"$' "$script" | sed 's/^/    /'
+    fi
+done
+
+# 行为：把 sudo 换成桩，看它到底怎么被调用
+run_sudo_case() {
+    local script="$1"; shift
+    local fn
+    fn="$(mktemp)"
+    extract_sudo "$script" > "$fn"
+    bash -c 'source "$1"; shift; sudo() { printf "sudo|%s\n" "$*"; }; mw_sudo "$@"' _ "$fn" "$@"
+    rm -f "$fn"
+}
+
+out="$(run_sudo_case "$REPO_DIR/lib/install.sh" curl -fsSL http://x)"
+if [[ "$out" == 'sudo|curl -fsSL http://x' ]]; then
+    pass "没有代理变量时与普通 sudo 完全一致"
+else
+    fail "没有代理变量时的调用形状变了（$out）"
+fi
+
+out="$(HTTPS_PROXY=http://127.0.0.1:7890 run_sudo_case "$REPO_DIR/lib/install.sh" curl -fsSL http://x)"
+if [[ "$out" == 'sudo|env HTTPS_PROXY=http://127.0.0.1:7890 curl -fsSL http://x' ]]; then
+    pass "有代理变量时用 sudo env 显式传过去"
+else
+    fail "有代理变量时没有传过去（$out）"
+fi
+
+out="$(https_proxy=http://p:2 run_sudo_case "$REPO_DIR/lib/selfupdate.sh" curl http://x)"
+if [[ "$out" == *'https_proxy=http://p:2'* ]]; then
+    pass "小写写法（curl 也认）同样传过去"
+else
+    fail "小写代理变量被丢掉了（$out）"
+fi
+
+echo
 echo "=========================================="
 if [[ "$FAILED" -gt 0 ]]; then
     echo -e "${RED_BOLD}🌊 Domain tests failed: $FAILED${RESET}"

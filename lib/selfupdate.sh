@@ -100,6 +100,27 @@ mw_redact() {
     fi
 }
 
+mw_sudo() {
+    # sudo 默认 env_reset，会把 HTTPS_PROXY 这类变量清空。于是「配了代理」的机器上
+    # 一旦需要提权（/opt、/usr/local 这类系统级安装），下载就绕过代理直连 ——
+    # 内网里表现为超时，而不是任何看得懂的报错。
+    #
+    # 用 `sudo env K=V ...` 显式带过去：不依赖 sudoers 的 setenv 权限（`sudo -E` 会），
+    # 也不需要用户去改 /etc/sudoers。没有代理变量时行为与 `sudo` 完全一致。
+    local name value
+    local -a keep=()
+    for name in HTTPS_PROXY HTTP_PROXY ALL_PROXY NO_PROXY \
+                https_proxy http_proxy all_proxy no_proxy; do
+        value="${!name-}"
+        [[ -n "$value" ]] && keep+=("$name=$value")
+    done
+    if [[ ${#keep[@]} -eq 0 ]]; then
+        sudo "$@"
+    else
+        sudo env "${keep[@]}" "$@"
+    fi
+}
+
 # ==========================================
 # 各地址（默认值必须与 lib/domains.py 的 DEFAULTS 逐字一致）
 # ==========================================
@@ -231,7 +252,7 @@ fi
 
 run_cmd() {
     if [[ "$NEED_SUDO" == "true" ]]; then
-        sudo "$@"
+        mw_sudo "$@"
     else
         "$@"
     fi
@@ -241,7 +262,7 @@ run_cmd() {
 # 所以配置目录单独判断权限。
 config_cmd() {
     if [[ "$CONFIG_NEED_SUDO" == "true" ]]; then
-        sudo "$@"
+        mw_sudo "$@"
     else
         "$@"
     fi
