@@ -236,7 +236,13 @@ git merge --no-ff feature/upgrade -m "Merge feature/upgrade: …"
 
 ### `pythondata/latest_python`：自带解释器的地址与校验值
 
-3.1.0 起 `install.sh` / `selfupdate.sh` 都读它来决定下载哪个便携解释器：
+3.1.0 起 `install.sh` / `selfupdate.sh` 都读它来决定下载哪个便携解释器。
+**从哪儿取字节**：默认先试我们自己托管的 `{python 域}/pythondata/<版本>/<文件名>`（文件名取上游
+地址末段，字节与上游同一份，所以校验值复用），取不到才回落到数据里写的上游地址——**自家存储只试
+一次**，不通就立刻回上游，不在那里重试；`--install-python-from-source` 连试都不试，直接走上游。
+这个路径形状的单一真相源是 `lib/domains.py` 的 `python_archive_url()`，两份 shell 脚本各手写一份，
+`scripts/python_source_test.sh` 会比对两边是否还一致，并真的跑一遍三条分支（有托管副本 / 没有 /
+加旗标）。数据文件形状：
 
 ```
 version: "3.14.9"
@@ -254,6 +260,9 @@ amd64_url / amd64_sha256
   `compression.zstd` 可用（`.conda` 包必需）。**上游删 tag 是这套方案唯一的静默失效点**，
   所以那个工作流每月跑一次。
 - 两个 URL 留空时安装器只警告并回退系统 `python3`，安装不会中断。
+- **托管副本还没放**：默认 `LINUXWAVE_PYTHON_DOMAIN` 指向 configdata 仓库根，真把 30MB/36MB 的
+  两个包放进去会让仓库变成二进制仓库。要启用这条快路，得把副本放到镜像上
+  （`{域}/pythondata/<版本>/`）并把该域指过去；在此之前这条路径只会 404 然后回落，功能不受影响。
 
 ## 六、关键机制
 

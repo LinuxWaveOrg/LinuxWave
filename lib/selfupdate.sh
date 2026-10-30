@@ -618,9 +618,21 @@ ensure_portable_python() {
         echo "🌊 Downloading the bundled Python $version (about 30 MB)..." >&2
         archive="$base_dir/downloads/tmp/portable-python-$version.tar.gz"
         run_cmd mkdir -p "$base_dir/downloads/tmp" 2>/dev/null || true
+        # 默认先试我们自己托管的 `pythondata/<版本>/<文件名>`；没有或取不到就回落到上游地址。
+        # 路径形状由 lib/domains.py 的 python_archive_url 定义，scripts/python_source_test.sh 会比对。
+        if [[ -z "${LINUXWAVE_PYTHON_FROM_SOURCE:-}" ]]; then
+            if ! run_cmd curl -fsSL --connect-timeout 20 --max-time 600 -o "$archive" \
+                     "$PYTHON_DATA_URL/pythondata/$version/$(basename "$url")" 2>/dev/null; then
+                run_cmd rm -f "$archive" 2>/dev/null || true
+                echo -e "${YELLOW}🌊 No hosted copy of the bundled Python; using the upstream URL.${RESET}" >&2
+            fi
+        fi
+
+        if [[ ! -f "$archive" ]]; then
         if ! fetch_to_file "$url" "$archive" 600 run_cmd; then
             run_cmd rm -f "$archive" 2>/dev/null || true
             return 1
+        fi
         fi
         actual="$(sha256sum "$archive" 2>/dev/null | awk '{print $1}')"
         if [[ -z "$actual" && -n "$(command -v shasum)" ]]; then
