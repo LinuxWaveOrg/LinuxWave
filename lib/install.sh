@@ -255,6 +255,9 @@ Usage:
   install.sh [options]
 
 Options:
+  --install-python-from-source
+                         Fetch the bundled Python from its upstream URL instead of
+                         our own store (same meaning as on `wave selfupdate`)
   -S, --silent            No interaction at all: the directory menu and the
                           agreement are answered automatically. Without
                           --dir-option the default (option 1) is used.
@@ -285,6 +288,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -S|--silent)
             CLI_SILENT=true
+            ;;
+        --install-python-from-source)
+            # 自带的解释器一律从数据里的上游地址取，不试我们自己托管的副本
+            export LINUXWAVE_PYTHON_FROM_SOURCE=1
             ;;
         --dir-option=*)
             _value="${1#--dir-option=}"
@@ -995,6 +1002,21 @@ ensure_portable_python() {
         echo "🌊 Downloading the bundled Python $version (about 30 MB)..." >&2
         archive="$base_dir/downloads/tmp/portable-python-$version.tar.gz"
         run_cmd mkdir -p "$base_dir/downloads/tmp" 2>/dev/null || true
+        # 默认先试我们自己托管的 `pythondata/<版本>/<文件名>`（镜像直连，省一次境外下载）；
+        # 没有就回落到数据里写的上游地址。--install-python-from-source 直接从上游取。
+        # 路径形状由 lib/domains.py 的 python_archive_url 定义，scripts/python_source_test.sh 会比对。
+        # 自家存储只试一次：它不通就该立刻回上游，而不是在这里重试三次。
+        if [[ -z "${LINUXWAVE_PYTHON_FROM_SOURCE:-}" ]]; then
+            if run_cmd curl -fsSL --connect-timeout 20 --max-time 600 -o "$archive" \
+                   "$PYTHON_DATA_URL/pythondata/$version/$(basename "$url")" 2>/dev/null; then
+                :
+            else
+                run_cmd rm -f "$archive" 2>/dev/null || true
+                echo -e "${YELLOW}🌊 No hosted copy of the bundled Python; using the upstream URL.${RESET}" >&2
+            fi
+        fi
+
+        if [[ ! -f "$archive" ]]; then
         # 30~36MB 的下载在烂链路上很容易断，重试几次比让用户重装划算。
         for attempt in 1 2 3; do
             # 每次重试前清掉上次的半截文件：否则「文件存在」会被当成下载成功，
@@ -1009,6 +1031,7 @@ ensure_portable_python() {
                 sleep 3
             fi
         done
+        fi
         if [[ ! -f "$archive" ]]; then
             return 1
         fi

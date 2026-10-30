@@ -198,8 +198,19 @@ def _apply_max_time(input_string):
     os.environ[domains.MAX_TIME_ENV] = str(seconds)
 
 
+def _apply_python_source(input_string):
+    """`--install-python-from-source`：自带解释器直接从上游取，不试我们托管的副本。
+
+    客户端自己不下解释器（那一步在 selfupdate.sh / install.sh 里），所以这里只把
+    旗标翻译成环境变量，由脚本去读。
+    """
+    if "--install-python-from-source" in input_string.split():
+        os.environ["LINUXWAVE_PYTHON_FROM_SOURCE"] = "1"
+
+
 def handle_selfupdate(input_string=""):
     _apply_max_time(input_string)
+    _apply_python_source(input_string)
 
     if find_config_dir() is None:
         print(f"{RED_BOLD}🌊 Error: LinuxWave is not installed. Run lib/install.sh first.{RESET}")

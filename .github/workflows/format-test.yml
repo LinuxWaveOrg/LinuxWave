@@ -135,6 +135,11 @@ jobs:
         run: |
           bash scripts/selfupdate_layout_test.sh
 
+      # 自带解释器从哪儿取：托管优先、回落上游、--install-python-from-source
+      - name: Run bundled-Python source test
+        run: |
+          bash scripts/python_source_test.sh
+
       # 负向回归：没有合法 sha256 就必须拒绝安装（缺值 / 畸形 / 值不符）
       - name: Run checksum test
         run: |

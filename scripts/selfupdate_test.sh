@@ -3,6 +3,22 @@
 # selfupdate_test.sh
 # selfupdate 回归：版本数据解析 → 已是最新时的短路 → 跨大版本被拒绝 → 同大版本的端到端自更新
 # 最后一步会真的把安装目录更新一遍，所以放在 CI 的最后执行。
+#
+# 它需要一个**真实的**配置目录（CI 里由前面几步装好）。本机想跑又不想动系统配置时，
+# 把系统级与用户级配置目录都遮掉、只放一份装在 $HOME 下的配置，这样 NEED_SUDO 为 false、
+# 不需要 sudo（用户命名空间里 sudo 本来就不可用）：
+#
+#   unshare -rm bash -c '
+#     mount -t tmpfs tmpfs /etc/linuxwave_config
+#     mount -t tmpfs tmpfs "$HOME/.config/linuxwave_config"
+#     BASE="$HOME/.linuxwave-su-test"; mkdir -p "$BASE"/{lib,pkg,surfboard,downloads/tmp,python}
+#     echo "{\"base_dir\": \"$BASE\"}" > "$HOME/.config/linuxwave_config/config.json"
+#     echo "{\"version\": \"2.1.0\"}" > "$HOME/.config/linuxwave_config/VERSION.json"
+#     cp lib/* pkg/* surfboard/* ...（见 CI 的 Deploy scripts 步骤）
+#     bash scripts/selfupdate_test.sh'
+#
+# 注意：如果本机留着旧版（4.0 之前）的安装，`lib/wave.py` 会优先加载已安装的 lib，
+# 那时测的就不是这份工作树了——所以必须先遮掉旧配置。
 
 set -e
 
