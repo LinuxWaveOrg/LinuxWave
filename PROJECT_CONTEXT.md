@@ -294,6 +294,7 @@ amd64_url / amd64_sha256
    逐字比对），把 `user:token@` 掩成 `user:***@` 或 `***@` —— 凭据会进 `~/.zshrc`，也可能被贴进 issue。
    `CORE_DEFAULT_URL` 是默认值的第二份抄写，`scripts/check_domain_defaults.py` 连它一起比对
 9. **`--proxy` 是全局的**：命令行上写了它，这条命令就**不该有任何请求绕过它**。实现是把值写进进程环境（`HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` 及其小写形式），requests（`trust_env` 默认开）、urllib、curl 与子进程一并继承。此前它只影响 requests 的下载参数，取索引、取 `@common`、取依赖信息全都绕过——内网用户在下载任何字节之前就撞上「Cannot fetch @common」，看着像参数没生效
+   **提权后环境会丢**：`sudo` 默认 `env_reset`，所以 `sudo curl …` 拿到的是干净环境，代理变量没了 —— 系统级安装（`/opt`、`/usr/local`）的下载于是绕过代理直连，内网里表现为超时而不是报错。两份 shell 脚本因此都有 `mw_sudo`：有代理变量时用 `sudo env K=V …` 显式带过去（不依赖 sudoers 的 `setenv`，也不需要 `sudo -E`），没有代理变量时与普通 `sudo` 完全一样。`scripts/domains_test.sh` 第 9 节连这一条一起盯着
 10. **测试隔离**：`LINUXWAVE_TEST=<目录>` 把整个文件系统视图挂到该目录下（`HOME` 与系统路径都落在里面），用于离线假根；`LINUXWAVE_SKIP_PORTABLE_PYTHON` 单独关掉 30MB+ 解释器下载——`sandbox_test.sh` 走 `unshare` 真装到真路径、不设 `LINUXWAVE_TEST`，光靠前者拦不住
 11. **预期内的失败不该是致命错误**：`install.sh` 以 `set -eE` 运行，`mw_try` 把「允许失败」的调用包起来并把结果记进 `MW_OPTIONAL_RESULT`，`install_failed()` 见到 `MW_FAILURE_HANDLED` 就提前返回——否则「拿不到自带解释器、回退系统 python3」这种正常降级会被 ERR 陷阱当成安装失败
 
