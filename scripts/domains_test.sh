@@ -388,6 +388,93 @@ else
 fi
 
 echo
+echo "========== 8. mw_redact：日志与欢迎语里不能出现明文口令 =========="
+
+# 镜像地址可以带凭据（https://user:token@host/repo）。这些值会被写进 ~/.zshrc，
+# 也会被打印出来贴进 issue —— 所以打印前必须过一遍 mw_redact。两份脚本各抄一份，
+# 同样逐字比对。
+extract_redact() {
+    awk '/^mw_redact\(\) \{/,/^\}/' "$1"
+}
+
+if diff -q <(extract_redact "$REPO_DIR/lib/install.sh") \
+           <(extract_redact "$REPO_DIR/lib/selfupdate.sh") > /dev/null; then
+    pass "install.sh 与 selfupdate.sh 的 mw_redact 一致"
+else
+    fail "两份脚本的 mw_redact 已经漂移"
+    diff <(extract_redact "$REPO_DIR/lib/install.sh") \
+         <(extract_redact "$REPO_DIR/lib/selfupdate.sh") | head -20
+fi
+
+# 行为逐条验：掩码必须出现、明文必须消失；path 里的 @ 不是凭据，不能动
+check_redact() {
+    local script="$1" input="$2" must_have="$3" must_not_have="$4" label="$5"
+    local fn out
+    fn="$(mktemp)"
+    extract_redact "$script" > "$fn"
+    out="$(bash -c 'source "$1"; mw_redact "$2"' _ "$fn" "$input" 2>/dev/null)"
+    rm -f "$fn"
+
+    if [[ "$out" == *"$must_have"* && "$out" != *"$must_not_have"* ]]; then
+        pass "$(basename "$script")：$label"
+    else
+        fail "$(basename "$script")：$label（得到 '$out'）"
+    fi
+}
+
+for script in "$REPO_DIR/lib/install.sh" "$REPO_DIR/lib/selfupdate.sh"; do
+    check_redact "$script" \
+        "https://alice:hunter2@mirror.example.com/bottle/x.tgz" \
+        "alice:***@mirror.example.com/bottle/x.tgz" "hunter2" "口令换成 ***，用户名与路径保留"
+    check_redact "$script" \
+        "https://token123@mirror.example.com/x" \
+        "https://***@mirror.example.com/x" "token123" "只有 token 时整段换成 ***"
+    check_redact "$script" \
+        "https://mirror.example.com/jq@1.7.1.arm64" \
+        "https://mirror.example.com/jq@1.7.1.arm64" "***" "path 里的 @ 不是凭据，原样保留"
+    check_redact "$script" \
+        "file:///tmp/mirror/lib" \
+        "file:///tmp/mirror/lib" "***" "没有凭据的地址原样返回"
+done
+
+# 用了镜像的欢迎语：这条提示是用户第一次接触「我连的不是官方」的地方，不能悄悄消失
+if grep -q 'Core files come from a mirror' "$REPO_DIR/lib/install.sh" \
+   && grep -q 'mw_redact "\$CORE_URL"' "$REPO_DIR/lib/install.sh"; then
+    pass "install.sh 在用了镜像时提示，并且过了一遍 mw_redact"
+else
+    fail "install.sh 缺了「正在用镜像」的提示（或没有脱敏）"
+fi
+
+# 真的把那几行跑一遍：把 mw_redact 与提示块摘出来，设好 CORE_URL / CORE_DEFAULT_URL 再 source
+run_banner() {
+    local core_url="$1" default_url="$2"
+    local fn
+    fn="$(mktemp)"
+    {
+        extract_redact "$REPO_DIR/lib/install.sh"
+        sed -n '/^# 用了镜像就明说一句/,/^fi$/p' "$REPO_DIR/lib/install.sh"
+    } > "$fn"
+    bash -c 'CORE_URL="$2"; CORE_DEFAULT_URL="$3"; source "$1"' _ "$fn" "$core_url" "$default_url" 2>&1
+    rm -f "$fn"
+}
+
+banner="$(run_banner "https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave" \
+                     "https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave")"
+if [[ -z "$banner" ]]; then
+    pass "官方地址时不打印镜像提示"
+else
+    fail "官方地址时不该提示（得到 '$banner'）"
+fi
+
+banner="$(run_banner "https://alice:hunter2@mirror.example.com/LinuxWave" \
+                     "https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave")"
+if [[ "$banner" == *"alice:***@mirror.example.com/LinuxWave"* && "$banner" != *"hunter2"* ]]; then
+    pass "镜像地址时提示，且口令已掩码"
+else
+    fail "镜像地址时的提示不对（得到 '$banner'）"
+fi
+
+echo
 echo "=========================================="
 if [[ "$FAILED" -gt 0 ]]; then
     echo -e "${RED_BOLD}🌊 Domain tests failed: $FAILED${RESET}"

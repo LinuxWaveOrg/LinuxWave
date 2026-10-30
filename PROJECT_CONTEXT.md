@@ -288,7 +288,11 @@ amd64_url / amd64_sha256
    `linuxwavedata/<版本>/update_commands.sh` 说「那个版本怎么装」——前者每次发版都变，后者按版本冻结。
    客户端优先读新布局，取不到才回落到 3.x 的 `versiondata/latest_version` + `update_command`，
    所以迁移期老镜像不会被打断。按版本的脚本由 `scripts/build_update_commands.py` **生成**（勿手工编辑），
-   当前这一层是「委托给该分支的 `selfupdate.sh`」，逐文件清单仍由它处理
+   当前这一层是「委托给该分支的 `selfupdate.sh`」，逐文件清单仍由它处理。
+   **「我现在连的是谁」要说清楚**：`CORE_URL` 不等于内置默认值时，`install.sh` 的欢迎语会多打一行
+   `Core files come from a mirror: <地址>`。地址过一遍 `mw_redact`（两份 shell 脚本各一份、`domains_test.sh`
+   逐字比对），把 `user:token@` 掩成 `user:***@` 或 `***@` —— 凭据会进 `~/.zshrc`，也可能被贴进 issue。
+   `CORE_DEFAULT_URL` 是默认值的第二份抄写，`scripts/check_domain_defaults.py` 连它一起比对
 9. **`--proxy` 是全局的**：命令行上写了它，这条命令就**不该有任何请求绕过它**。实现是把值写进进程环境（`HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` 及其小写形式），requests（`trust_env` 默认开）、urllib、curl 与子进程一并继承。此前它只影响 requests 的下载参数，取索引、取 `@common`、取依赖信息全都绕过——内网用户在下载任何字节之前就撞上「Cannot fetch @common」，看着像参数没生效
 10. **测试隔离**：`LINUXWAVE_TEST=<目录>` 把整个文件系统视图挂到该目录下（`HOME` 与系统路径都落在里面），用于离线假根；`LINUXWAVE_SKIP_PORTABLE_PYTHON` 单独关掉 30MB+ 解释器下载——`sandbox_test.sh` 走 `unshare` 真装到真路径、不设 `LINUXWAVE_TEST`，光靠前者拦不住
 11. **预期内的失败不该是致命错误**：`install.sh` 以 `set -eE` 运行，`mw_try` 把「允许失败」的调用包起来并把结果记进 `MW_OPTIONAL_RESULT`，`install_failed()` 见到 `MW_FAILURE_HANDLED` 就提前返回——否则「拿不到自带解释器、回退系统 python3」这种正常降级会被 ERR 陷阱当成安装失败
