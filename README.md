@@ -16,7 +16,7 @@ macOS? View [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
-3.2.0, Release on 2026-10-29
+3.2.1, Release on 2026-11-08
 
 ## 🌊 What is LinuxWave?
 
@@ -124,6 +124,19 @@ on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
 > needs `sudo`: it rewrites `/etc/linuxwave_config`, which is root-owned. A user
 > who is not in the group gets a working `sudo` command in the error message —
 > `sudo wave install …` cannot work, because `sudo` searches its own `PATH`.
+
+> **A non-shared system install is owned by `root:root`, mode 755.** That covers
+> options 2 and 3 (`/opt/linuxwave`, `/usr/local/linuxwave`) and any custom
+> directory outside your home. Everyone can still run what is installed, but
+> installing, upgrading or removing packages needs `sudo` — and `sudo` searches
+> its own `PATH`, so give the full path:
+> ```
+> sudo /opt/linuxwave/lib/wave install <package>
+> ```
+> The tree must not be writable by a normal user: its binaries sit on the system
+> `PATH`, so anyone who can replace `links/<name>` may get it executed by another
+> account, or by root. If you want plain `wave install` without `sudo`, use the
+> shared install (option 4).
 ## Uninstall LinuxWave
 
 To completely remove LinuxWave from your system, run the following command in your terminal:

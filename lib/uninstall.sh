@@ -139,16 +139,48 @@ else
 fi
 
 # 逐个尝试删除所有可能的路径
+#
+# 只删「看起来确实是 LinuxWave 安装」的目录：base_dir 来自 config.json，而用户级
+# 配置对任何以该用户身份运行的进程都可写。不校验就拿去 `sudo rm -rf`，一条被改过
+# 的 base_dir 就能把 /usr/local 或家目录整片删掉 —— 与 MacWave 4.3.1 修掉的是
+# 同一类问题。
+#
+# 判据是 lib/wave.py：只有安装树有它。判不出来就不删，并说清是哪一条挡住的。
+skip_reason() {
+    local dir="$1"
+    if [[ -z "$dir" ]]; then
+        echo "empty path"
+    elif [[ "$dir" != /* ]]; then
+        echo "not an absolute path"
+    else
+        case "$dir" in
+            /|/bin|/sbin|/usr|/usr/bin|/usr/sbin|/usr/lib|/usr/lib64|/usr/libexec|/usr/local|/usr/share|/opt|/etc|/var|/tmp|/boot|/dev|/proc|/sys|/run|/srv|/mnt|/media|/root|/home|/lib|/lib64)
+                echo "a system directory" ;;
+            "$HOME"|"$HOME"/)
+                echo "your home directory" ;;
+            *)
+                [[ -f "$dir/lib/wave.py" ]] || echo "not a LinuxWave install (no lib/wave.py)" ;;
+        esac
+    fi
+}
+
 for DIR in "${BASE_DIRS[@]}"; do
-    if [ -d "$DIR" ]; then
-        # 如果是系统级目录，需要 sudo
-        if [[ "$DIR" == "$HOME"* ]]; then
-            echo "🌊 Removing $DIR..."
-            rm -rf "$DIR"
-        else
-            echo "🌊 Removing $DIR (with sudo)..."
-            sudo rm -rf "$DIR"
-        fi
+    if [ ! -d "$DIR" ]; then
+        continue
+    fi
+    REASON="$(skip_reason "$DIR")"
+    if [[ -n "$REASON" ]]; then
+        echo -e "\033[33m🌊 Skipping $DIR: $REASON.\033[0m" >&2
+        echo "🌊 Nothing was deleted there. If you are sure, remove it yourself." >&2
+        continue
+    fi
+    # 如果是系统级目录，需要 sudo
+    if [[ "$DIR" == "$HOME"* ]]; then
+        echo "🌊 Removing $DIR..."
+        rm -rf "$DIR"
+    else
+        echo "🌊 Removing $DIR (with sudo)..."
+        sudo rm -rf "$DIR"
     fi
 done
 
