@@ -308,6 +308,44 @@ amd64_url / amd64_sha256
 - Shell 脚本 `set -e`，同样的颜色定义与 🌊 前缀
 - 脚本之间用 `\n` 分隔的长字符串传参；安装信息为 8 行：名称 / 版本号 / sha256 / 目标目录 / BASE_DIR / 可执行文件名 / 依赖者 / 原文件名
 
+### 7.6 产物里的符号链接不得跳出 base_dir
+
+**软件包里带的符号链接，解析后必须落在 `base_dir` 内；落在外面一律拒绝。**
+
+这条防两件事，缺一半都不成立：
+
+| 攻击者能做什么 | 为什么算缺陷 |
+| --- | --- |
+| 链接指向隐私文件（`~/.ssh/id_rsa`、`~/.config/…`），再附带一个读它的程序 | 读到用户从未授权的内容 |
+| 链接指向 LinuxWave 之后**要写入**的路径 —— `patchelf` 重定位改写、`.part` → `mv` 落盘、卸载时的 `rm -rf` | 以用户身份在安装树之外写文件、删文件 |
+
+这与「归档里的 `../` 条目」不是同一件事：一个成员的名字可以老老实实待在目标目录内，
+而它的**链接目标**指向任何地方。`../` 过滤看不见这个，`tar` / `unzip` 也不管。
+
+**唯一的例外：系统库位置。** 落在下面这些位置（含子目录）时不算越界：
+
+```
+/bin   /sbin   /lib   /lib64
+/usr/bin   /usr/sbin   /usr/lib   /usr/lib64   /usr/libexec
+```
+
+两条理由必须同时成立：那里只有发行版自带的二进制与库（没有用户数据），且这些路径在所有
+主流发行版上都归 root 所有（共享安装里的那个组也写不进去）。第二条靠的是文件属主，不是
+macOS 的 SIP —— 所以清单只留系统库目录，**绝不放宽到 `/opt`、`/usr/local`** 这类可能被
+用户自己接管的位置。
+
+| 环节 | 位置 |
+| --- | --- |
+| 规则与豁免清单 | [`lib/configpaths.py`](./lib/configpaths.py) 的 `SYSTEM_LINK_PREFIXES` / `escaping_links()` / `assert_links_inside()` |
+| 调用点 | [`surfboard/depsmanager.sh`](./surfboard/depsmanager.sh) 的 `mw_assert_no_escaping_links()`，`tree` 与 `binary` 两种形态都调 |
+| 回归 | [`scripts/linksafety_test.sh`](./scripts/linksafety_test.sh)：六种链接的判定、报错内容、真实漏斗拒绝且不留半成品、「合法产物不被误杀」 |
+
+`assert_links_inside()` 是唯一实现，别在别处抄第二份。拒绝时会先删掉解压临时目录再退出 ——
+正常路径上由调用方在装完之后删，而这条路径是 `exit`，轮不到那一步。
+
+相邻的两个工具函数别混用：`assert_inside()` 会跟随最后一段软链接，`assert_inside_entry()`
+不跟随 —— 判断「链接本身在不在树内」用后者，判断「顺着它写会不会跑出去」用前者。
+
 ---
 
 ## 八、安装「带依赖的软件包」时，各程序依次做什么
@@ -327,13 +365,13 @@ amd64_url / amd64_sha256
 | 5 | `pkg/pkginstaller.py` | 拉 `_wget@1.25.0`，解析出 `url` / `sha256` / **`deps`**（多行，向上回溯的 DSL 解析）；校验 `url` 必须是 https |
 | 6 | `pkg/pkginstaller.py` | `download_file()` 下载到 `downloads/tmp/`（rich 进度条、`.partial` + 断点续传、限速、代理、30 秒超时后询问重试），完成后去掉 `.partial` 后缀 |
 | 7 | `pkg/pkginstaller.py` → `pkg/pkginstaller.sh` | 传 8 行长字符串（含目标目录 `bin/wget@1.25.0`）与依赖列表，`pkginstaller.sh` 用 `binary` 模式安装 wget 本体 |
-| 8 | `surfboard/depsmanager.sh` | `mw_install_artifact`：定位原文件 → SHA256 校验 → 解压 → 取一个可执行文件（同名优先，否则取第一个并打警告）→ `chmod 755` → 建软链接 `links/wget@1.25.0` → 写 `_DEPS`（7 行依赖） |
+| 8 | `surfboard/depsmanager.sh` | `mw_install_artifact`：定位原文件 → SHA256 校验 → 解压 → **检查产物里的符号链接**（`mw_assert_no_escaping_links`，越界即拒绝，见 7.6）→ 取一个可执行文件（同名优先，否则取第一个并打警告）→ `chmod 755` → 建软链接 `links/wget@1.25.0` → 写 `_DEPS`（7 行依赖） |
 | 9 | `pkg/pkginstaller.sh` | 写 `pkg/installed.json`（带 `fcntl` 文件锁），打印安装结果 |
 | 10 | `pkg/pkginstaller.py` | 调 `depsinstaller.install_dependencies()`，逐个安装 7 个依赖 |
 | 11 | `surfboard/depsinstaller.py` | 每个依赖 `ensure_dependency()`：校验引用格式 → `querier.is_installed()` 判断是否已装 |
 | 12 | `surfboard/depsinstaller.py` | 未装时：拉 `_依赖名@common` 取 `dep_name`、拉 `_依赖名@版本号` 取 `url` / `sha256` / `deps`；找不到则报 `Dependency '…' not found in depsinfo.` 并退出 |
 | 13 | `surfboard/depsinstaller.py` | **先递归装下层依赖**（`gettext` 会先把 `libiconv` 装好）→ 再下载自己（复用第 6 步的同一个 `download_file`，进度条一致）→ 调 `surfboard/depsinstaller.sh` |
-| 14 | `surfboard/depsinstaller.sh` → `depsmanager.sh` | `tree` 模式安装：整棵解压目录落到 `deps/{依赖名}/{依赖名}@{版本号}/`，单顶层目录自动下沉一层，`bin/` 下每个文件都 `chmod 755` 并各建一条软链接进 `links/`，写 `_DEPS` |
+| 14 | `surfboard/depsinstaller.sh` → `depsmanager.sh` | `tree` 模式安装（同样先过 `mw_assert_no_escaping_links`）：整棵解压目录落到 `deps/{依赖名}/{依赖名}@{版本号}/`，单顶层目录自动下沉一层，`bin/` 下每个文件都 `chmod 755` 并各建一条软链接进 `links/`，写 `_DEPS` |
 | 15 | `surfboard/depsinstaller.sh` | 按传入的依赖者信息创建标记：被包依赖 → `.depped_pkg_wget@1.25.0`，被依赖依赖 → `.depped_dep_gettext@0.21.0` |
 | 16 | `surfboard/depsinstaller.py` | 只负责装依赖，不在此时做路径替换（见第 18 步） |
 | 17 | `surfboard/depsinstaller.py` | 已安装的依赖：跳过下载，只调 `tagger.sh` 补标记（例如 `libiconv` 同时被 `gettext` 和 `wget` 依赖，就会有两条标记） |

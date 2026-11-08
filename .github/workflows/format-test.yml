@@ -150,6 +150,18 @@ jobs:
         run: |
           bash scripts/checksum_test.sh
 
+      # 安装目录的白名单：系统目录 / $HOME / 非 LinuxWave 目录不能被当成安装根；
+      # 卸载只删含 lib/wave.py 的树（真跑一遍卸载脚本）
+      - name: Run directory guard test
+        run: |
+          bash scripts/dir_guard_test.sh
+
+      # 产物里的符号链接不得跳出 base_dir（系统库位置除外）；
+      # 走真实安装漏斗验证「拒绝且不留半成品」与「合法产物不被误杀」
+      - name: Run link safety test
+        run: |
+          bash scripts/linksafety_test.sh
+
       - name: Run dependency chain test
         run: |
           bash scripts/deps_test.sh
