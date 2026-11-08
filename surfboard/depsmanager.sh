@@ -395,6 +395,54 @@ mw_assert_inside() {
     esac
 }
 
+# -------------------- 产物里的符号链接 --------------------
+
+mw_assert_no_escaping_links() {
+    # 解压出来的树里可能带符号链接，其中可能有指向 base_dir 之外的 —— 那种链接既能
+    # 让随包附带的程序读到隐私文件，也能让后面的 patchelf 重定位改写、或者卸载时
+    # 的 rm -rf 以用户身份在树外写/删。
+    #
+    # 为什么必须在这里查、不能指望解压：归档只过滤成员**名字**里的 `../`，与链接
+    # **目标**无关。实测 Python 3.15 的 tarfile，filter='tar' 会把
+    # `x -> /etc/passwd` 原样解出来；unzip / tar 命令行同样不管目标。
+    #
+    # 规则与豁免清单的唯一实现是 lib/configpaths.py 的 assert_links_inside()，
+    # 这里只做转发 —— 换约束时改那一处，别在这里抄第二份。
+    #
+    # 第二个参数是拒绝时要清掉的临时目录：正常路径上由调用方在装完之后删，而这里
+    # 是 exit，轮不到那一步 —— 不删就会把恶意文件原样留在 downloads/tmp 里。
+    local tree="$1"
+    local cleanup="${2:-}"
+    if [[ ! -d "$tree" ]]; then
+        # 裸二进制（无扩展名）不解压，产物就是一个普通文件，不可能含符号链接。
+        # 但仍然要说一句：安装过程里最糟的是「悄悄跳过了什么」。
+        echo "🌊 Running security checks..."
+        echo "🌊 Single-file payload: nothing was unpacked, so there are no links to check."
+        return 0
+    fi
+
+    # 检查本身是静默的，只有出问题才说话；不说这一行的话，安装会在「解压成功」
+    # 之后突兀地停住或报错。
+    echo "🌊 Running security checks..."
+
+    local checker="$MW_BASE_DIR/lib/configpaths.py"
+    if [[ ! -f "$checker" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: lib/configpaths.py not found; cannot verify links in the payload.${RESET}"
+        echo "🌊 Reinstall LinuxWave with lib/install.sh."
+        exit 1
+    fi
+
+    if ! python3 "$checker" --check-links "$tree" "${MW_NAME}@${MW_VERSION}"; then
+        # assert_links_inside 已经把所有细节打在 stderr，这里只补一句「没装」，
+        # 免得用户以为半成品已经落地。
+        if [[ -n "$cleanup" && -d "$cleanup" ]]; then
+            rm -rf "$cleanup"
+        fi
+        echo -e "${RED_BOLD}🌊 Error: ${MW_NAME}@${MW_VERSION} was not installed.${RESET}"
+        exit 1
+    fi
+}
+
 # -------------------- 通用安装流程 --------------------
 
 mw_install_artifact() {
@@ -427,11 +475,16 @@ mw_install_artifact() {
     if [[ "$install_mode" == "tree" ]]; then
         local tree_dir
         tree_dir="$(mw_extract_all "$original_file" "$extract_dir" "$unzip_script")"
+        mw_assert_no_escaping_links "$tree_dir" "$extract_dir"
         mw_install_tree "$tree_dir" "$MW_TARGET_DIR" "$MW_BIN_NAME"
         mw_link_tree_binaries "$MW_BASE_DIR" "$MW_RELATIVE_DIR" "$MW_VERSION" "$MW_TARGET_DIR"
     else
         local bin_file
         bin_file="$(mw_extract_binary "$original_file" "$extract_dir" "$unzip_script" "$MW_BIN_NAME")"
+        # 这里查的是整个解压目录，不只是选中的那个文件：binary 形态最后会用
+        # mv 搬走一个文件，而搬的若是链接，链接本身就跟着走 —— 装出来的
+        # "二进制" 会指向树外。裸二进制时 extract_dir 不存在，函数会说明跳过。
+        mw_assert_no_escaping_links "$extract_dir" "$extract_dir"
         mw_install_binary "$bin_file" "$MW_TARGET_DIR" "$MW_BIN_NAME"
         MW_LINK_PATH="$(mw_create_link "$MW_BASE_DIR" "$MW_RELATIVE_DIR" "$MW_BIN_NAME" "$MW_BIN_NAME" "$MW_VERSION")"
     fi

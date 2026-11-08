@@ -257,6 +257,99 @@ def assert_inside_entry(path, root, what):
     return resolved
 
 
+# -------------------- 产物里的符号链接 --------------------
+#
+# 规则：软件包里带的符号链接，解析后必须落在 base_dir 内；落在外面一律拒绝。
+#
+# 为什么要单独做这件事：归档解压只过滤成员**名字**里的 `../`，与链接**目标**无关。
+# 实测 Python 3.15 的 tarfile：filter='tar' 会把 `x -> /etc/passwd` 原样解出来，
+# 只有 filter='data' 才拒绝（但它连 conda 包需要的合法链接一起拒）。unzip 与
+# tar 命令行同样不管目标。所以越界链接只能解压之后自己扫。
+#
+# 危害两头：链接指向隐私文件 → 随包附带的程序读到不该读的东西；链接指向
+# LinuxWave 之后要写的路径（patchelf 重定位改写、.part → mv、卸载的 rm -rf）
+# → 以用户身份在树外写或删。
+#
+# 例外只给系统库位置，两个条件必须同时成立：
+#   1. 那里只有发行版自带的二进制与库，没有用户数据 —— 「顺着链接去读」不成立；
+#   2. 这些路径在所有主流发行版上都归 root 所有，普通用户（包括共享安装里那个
+#      组）写不进去 —— 「顺着链接去写」不成立。
+# 第二条比 macOS 的 SIP 弱：它靠的是文件属主，不是强制访问控制。所以清单只留
+# 系统库目录本身，绝不放宽到 /opt、/usr/local 这类「可能被用户自己接管」的位置。
+
+SYSTEM_LINK_PREFIXES = (
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib64",
+    "/usr/bin",
+    "/usr/sbin",
+    "/usr/lib",
+    "/usr/lib64",
+    "/usr/libexec",
+)
+
+
+def _under(path, prefix):
+    return path == prefix or path.startswith(prefix + os.sep)
+
+
+def is_system_link_target(resolved):
+    """链接目标是否落在豁免的系统库位置。"""
+    text = str(resolved)
+    return any(_under(text, prefix) for prefix in SYSTEM_LINK_PREFIXES)
+
+
+def escaping_links(root):
+    """遍历 root，返回 [(链接, 解析后的目标)] —— 只在解析后落在 root 与豁免之外。
+
+    不跟随目录软链接（否则可能绕进别的树里无限走），但**每个链接本身**都会被解析，
+    包括指向目录的链接：指向树外的目录链接同样是「顺着它能读写树外」。
+    悬空链接也照常判定 —— resolve() 不要求目标存在，词法上跑出 root 就算越界。
+    """
+    resolved_root = Path(root).resolve()
+    found = []
+    for dirpath, dirnames, filenames in os.walk(resolved_root, followlinks=False):
+        for name in dirnames + filenames:
+            candidate = Path(dirpath) / name
+            if not candidate.is_symlink():
+                continue
+            try:
+                target = Path(os.readlink(candidate))
+            except OSError:
+                continue
+            if not target.is_absolute():
+                target = candidate.parent / target
+            try:
+                resolved = target.resolve()
+            except (OSError, RuntimeError):
+                # 自我引用或过长的链：没法解析，按越界处理（拒绝比放行安全）
+                found.append((candidate, target))
+                continue
+            if resolved != resolved_root and resolved_root not in resolved.parents:
+                if not is_system_link_target(resolved):
+                    found.append((candidate, resolved))
+    return found
+
+
+def assert_links_inside(root, what):
+    """把一个树里越界的符号链接当作致命错误。"""
+    offenders = escaping_links(root)
+    if not offenders:
+        return
+    print(f"{RED_BOLD}🌊 Error: {len(offenders)} symbolic link(s) in {what} point outside "
+          f"{Path(root).resolve()}{RESET}", file=sys.stderr)
+    for link, target in offenders[:10]:
+        print(f"   {link} -> {target}", file=sys.stderr)
+    if len(offenders) > 10:
+        print(f"   … and {len(offenders) - 10} more", file=sys.stderr)
+    print("🌊 A link that leaves the install root can read private files, or make a later "
+          "write (relocation, rename, uninstall) land outside the tree.", file=sys.stderr)
+    print(f"🌊 Only these locations are exempt: {', '.join(SYSTEM_LINK_PREFIXES)}", file=sys.stderr)
+    print("🌊 Refusing this payload. Report it to the index maintainer.", file=sys.stderr)
+    sys.exit(1)
+
+
 # -------------------- 当前生效的配置 --------------------
 
 CONFIG_DIR = find_config_dir() or SYSTEM_CONFIG_DIR
@@ -265,6 +358,11 @@ VERSION_FILE = CONFIG_DIR / VERSION_FILE_NAME
 
 
 if __name__ == "__main__":
+    # 唯一的命令行入口：解压之后由 depsmanager.sh 调用，检查产物里的符号链接。
+    #   python3 lib/configpaths.py --check-links <目录> <描述，仅用于报错>
+    if len(sys.argv) >= 3 and sys.argv[1] == "--check-links":
+        assert_links_inside(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else sys.argv[2])
+        sys.exit(0)
     print("🌊 This module is not meant to be run directly.")
     print("🌊 It is used internally by the other LinuxWave modules.")
     sys.exit(1)
