@@ -256,6 +256,43 @@ validate_custom_dir() {
         return 1
     fi
 
+    # 下面三条是这个函数最要紧的部分。
+    #
+    # 装到系统目录时会 `sudo chown -R root:root "$BASE_DIR"`（非共享）或交给
+    # `$SHARED_USER`（共享安装），而拒绝协议时的回滚是 `rm -rf "$BASE_DIR"`。
+    # 如果 BASE_DIR 是 /usr/local 这种「别的软件的家」，这两件事分别是**把整个
+    # 系统目录接管过来**和**删掉它** —— 与 MacWave 4.3.0 修掉的是同一类问题。
+
+    # 1) 这些目录本身绝不能被当作安装根目录。它们的子目录可以（/opt/linuxwave、
+    #    /usr/local/linuxwave），正因为如此才要按「完全相等」判，不能用前缀。
+    local _forbidden
+    for _forbidden in /bin /sbin /usr /usr/bin /usr/sbin /usr/lib /usr/lib64                      /usr/libexec /usr/local /usr/share /opt /etc /var /tmp                      /boot /dev /proc /sys /run /srv /mnt /media /root /home                      /lib /lib64; do
+        if [[ "$expanded" == "$_forbidden" ]]; then
+            echo -e "${RED_BOLD}🌊 Error: '$expanded' is a system directory, not an install directory.${RESET}" >&2
+            echo "🌊 Pick a directory of its own, for example ${_forbidden}/linuxwave" >&2
+            return 1
+        fi
+    done
+
+    # 2) 家目录本身同理。装进去会把 LinuxWave 的文件撒得到处都是，回滚时还会
+    #    rm -rf 整个家目录。
+    if [[ "$expanded" == "$HOME" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: Cannot install directly into your home directory.${RESET}" >&2
+        echo "🌊 Use a subdirectory such as ~/linuxwave" >&2
+        return 1
+    fi
+
+    # 3) 已存在且非空、又不是 LinuxWave 安装的目录：拒绝。
+    #    判据是 lib/wave.py：只有安装树有它，所以重装与升级仍然放行。
+    if [[ -d "$expanded" && ! -f "$expanded/lib/wave.py" ]]; then
+        if [[ -n "$(ls -A "$expanded" 2>/dev/null)" ]]; then
+            echo -e "${RED_BOLD}🌊 Error: '$expanded' already exists and is not empty.${RESET}" >&2
+            echo "🌊 Installing here would take ownership of files LinuxWave did not create;" >&2
+            echo "🌊 pick a new or empty directory instead." >&2
+            return 1
+        fi
+    fi
+
     echo "$expanded"
     return 0
 }
@@ -765,8 +802,12 @@ run_cmd tee "$VERSION_FILE" > /dev/null << EOF
 EOF
 
 # ==========================================
-# 把所有权交还给当前真实用户
+# 安装过程中先把写权限交回调用者
 # ==========================================
+#
+# 这一步只是为了让后面的下载与落盘不必每条命令都 sudo。**它不是最终属主**：
+# 装完之后那块「最后一步：确定安装树的属主」会把它改成 root:root（非共享）
+# 或 $SHARED_USER（共享）。两处不要合并，顺序也不能颠倒。
 
 if [[ "$NEED_SUDO" == "true" ]]; then
     if [[ "$SHARED_INSTALL" == "true" ]]; then
@@ -776,13 +817,9 @@ if [[ "$NEED_SUDO" == "true" ]]; then
     fi
 fi
 
-# 共享安装的配置保持 root:root 644：全体用户可读，但只有 root 能改
+# 系统级安装的配置一律 root:root 644：全体用户可读，但只有 root 能改
 if [[ "$NEED_SUDO" == "true" ]]; then
-    if [[ "$SHARED_INSTALL" == "true" ]]; then
-        sudo chown -R root:root "$CONFIG_DIR"
-    else
-        sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
-    fi
+    sudo chown -R root:root "$CONFIG_DIR"
 fi
 run_cmd chmod 755 "$CONFIG_DIR"
 run_cmd chmod 644 "$CONFIG_FILE"
@@ -1298,14 +1335,31 @@ fi
 write_launcher "$BASE_DIR" "$PYTHON_BIN"
 
 # ==========================================
-# 把所有权交还给用户（下载后再次确保）
+# 最后一步：确定安装树的属主
 # ==========================================
+#
+# 共享安装交给 `$SHARED_USER`（组可写，装包不需要 sudo）。
+#
+# 非共享的系统级安装交给 root:root、权限 755：树在系统 PATH 上，若归安装者
+# 所有，任何以该用户身份运行的进程都能替换 links/<名>，而它可能被别的用户、
+# 脚本甚至 root 执行 —— 本地提权。代价是装包要 `sudo wave install`，这一点
+# 在 pkg/pkginstaller.py 里有对应的前置检查与提示。
+#
+# 前面所有写操作（下载、落盘、写 launcher）都在这一步之前完成，所以这里改成
+# 只读不会卡住本次安装。
 
 if [[ "$NEED_SUDO" == "true" ]]; then
     if [[ "$SHARED_INSTALL" == "true" ]]; then
         sudo chown -R "$SHARED_USER:$SHARED_USER" "$BASE_DIR"
     else
-        sudo chown -R "$CURRENT_USER": "$BASE_DIR"
+        sudo chown -R root:root "$BASE_DIR"
+        sudo chmod -R u+rwX,go+rX,go-w "$BASE_DIR"
+        echo ""
+        echo "🌊 Ownership: $BASE_DIR -> root:root, mode 755"
+        echo "🌊 Changing packages (install / upgrade / uninstall) needs sudo,"
+        echo "🌊 and sudo has its own PATH, so give the full path:"
+        echo "🌊   sudo $BASE_DIR/lib/wave install <package>"
+        echo "🌊 Everyone else can still run the installed packages."
     fi
 fi
 
