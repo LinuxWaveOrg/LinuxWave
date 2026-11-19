@@ -479,68 +479,25 @@ lw_say_err() {
 
 # --raw 要关颜色、改输出管道，而参数是在后面才解析的。所以解析完之后再调一次，
 # 把「还没开始说话之前」就已经定了的事补上。
+#
+# 也正因为如此，这里从**原始参数**里再认一次呈现类旗标：解析可能停在第一个未知
+# 选项上（那时 --raw 还没轮到），只靠解析结果的话，`--raw --bogus` 报出来的错
+# 仍然是带颜色和 🌊 的。从 CLI_ARGV 认一遍，才不会漏。
 lw_apply_presentation() {
     [[ "$_PRESENTATION_APPLIED" == "true" ]] && return 0
+    local arg
+    for arg in ${CLI_ARGV[@]+"${CLI_ARGV[@]}"}; do
+        case "$arg" in
+            --raw|--RAW) CLI_RAW=true ;;
+            --zh|--ZH) LW_LANG="zh" ;;
+        esac
+    done
     if lw_raw; then
         RED_BOLD=""; GREEN=""; YELLOW=""; SKY_BLUE=""; RESET=""
         exec > >(lw_raw_filter) 2>&1
     fi
     _PRESENTATION_APPLIED=true
 }
-
-# ==========================================
-# 版本号与代码分支（读自更新探针，不写死在脚本里）
-# ==========================================
-#
-# 4.0 起自更新数据是两级结构：
-#
-#   linuxwavedata/latest.toml                哪个版本是最新的（每次发版都变）
-#   linuxwavedata/<版本>/update_commands.sh  那个版本「下载什么、放到哪」（按版本冻结）
-#
-# 拆开的理由：装了旧版本的用户仍在运行，他们那份更新说明不能因为发了新版就变样。
-#
-# 迁移期回落到 3.x 的 versiondata/latest_version —— 镜像上两份可以并存，
-# 谁也不会被打断。
-
-PROBE_URL="$CONFIGDATA_URL/linuxwavedata/latest.toml"
-PROBE_DATA=""
-LINUXWAVE_VERSION=""
-LATEST_BRANCH=""
-EXPECTED_UPDATE_COMMANDS_SHA256=""
-
-if [[ "$CLI_SKIP_PROBE" == "true" ]]; then
-    # --skip-probe：不碰探针。此时版本号与分支只能靠环境变量给，否则后面的下载
-    # 没有目标。
-    LINUXWAVE_VERSION="${LINUXWAVE_VERSION:-}"
-    LATEST_BRANCH="${LINUXWAVE_BRANCH:-HEAD}"
-else
-    PROBE_DATA="$(curl -fsSL --max-time 30 "$PROBE_URL" 2>/dev/null || true)"
-    if [[ -n "$PROBE_DATA" ]]; then
-        # 先验签再看字段：签名覆盖的正是下面要读的这份内容。
-        lw_verify_latest_signature "$PROBE_DATA" "$PROBE_URL"
-        LINUXWAVE_VERSION="$(read_toml_string "$PROBE_DATA" version)"
-        LATEST_BRANCH="$(read_toml_string "$PROBE_DATA" branch)"
-        EXPECTED_UPDATE_COMMANDS_SHA256="$(read_toml_string "$PROBE_DATA" update_commands_sha256)"
-    fi
-fi
-
-if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
-    # 3.x 回落：versiondata/latest_version
-    LATEST_VERSION_DATA="$(curl -fsSL --max-time 30 "$CONFIGDATA_URL/versiondata/latest_version" 2>/dev/null || true)"
-    LINUXWAVE_VERSION="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
-    LATEST_BRANCH="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
-fi
-
-if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
-    lw_say_err "${RED_BOLD}🌊 Error: Cannot read the latest version from the self-update probe.${RESET}" \
-        "${RED_BOLD}🌊 错误：读不到自更新探针里的版本号。${RESET}"
-    lw_say_err "🌊 Check your network or proxy, then run the installer again." \
-        "🌊 请检查网络或代理后重新运行安装器。"
-    exit 1
-fi
-
-BRANCH="$LATEST_BRANCH"
-BASE_URL="$CORE_URL/$BRANCH"
 
 # ==========================================
 # 辅助函数：将路径中的 $HOME 替换为 ~
@@ -807,6 +764,12 @@ USAGE_EOF
     fi
 }
 
+# 呈现（--raw / --zh）先于循环装上：循环里任何一处报错都应该是这条命令该有的
+# 样子，而不是等到解析完之后才发现「原来是 --raw」。CLI_ARGV 留一份原始参数，
+# lw_apply_presentation 从里面认旗标 —— 它不依赖解析结果，所以放在这里安全。
+CLI_ARGV=("$@")
+lw_apply_presentation
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --ci|--CI)
@@ -904,6 +867,63 @@ if [[ "$CLI_DIR_OPTION" == "5" && -z "$CLI_CUSTOM_DIR" && "$CLI_CI" == "true" ]]
     lw_say_err "${RED_BOLD}🌊 Use --dir-option=5=/some/dir${RESET}" "${RED_BOLD}🌊 请写成 --dir-option=5=/some/dir${RESET}"
     exit 1
 fi
+
+# ==========================================
+# 版本号与代码分支（读自更新探针，不写死在脚本里）
+# ==========================================
+#
+# 位置在参数解析**之后**：探针要联网，而 --help / --raw 都是本地就能答的事，
+# 不能因为连不上自更新数据就打不出帮助；探针的提示行也得按 --raw 该有的样子输出。
+#
+# 4.0 起自更新数据是两级结构：
+#
+#   linuxwavedata/latest.toml                哪个版本是最新的（每次发版都变）
+#   linuxwavedata/<版本>/update_commands.sh  那个版本「下载什么、放到哪」（按版本冻结）
+#
+# 拆开的理由：装了旧版本的用户仍在运行，他们那份更新说明不能因为发了新版就变样。
+#
+# 迁移期回落到 3.x 的 versiondata/latest_version —— 镜像上两份可以并存，
+# 谁也不会被打断。
+
+PROBE_URL="$CONFIGDATA_URL/linuxwavedata/latest.toml"
+PROBE_DATA=""
+LINUXWAVE_VERSION=""
+LATEST_BRANCH=""
+EXPECTED_UPDATE_COMMANDS_SHA256=""
+
+if [[ "$CLI_SKIP_PROBE" == "true" ]]; then
+    # --skip-probe：不碰探针。此时版本号与分支只能靠环境变量给，否则后面的下载
+    # 没有目标。
+    LINUXWAVE_VERSION="${LINUXWAVE_VERSION:-}"
+    LATEST_BRANCH="${LINUXWAVE_BRANCH:-HEAD}"
+else
+    PROBE_DATA="$(curl -fsSL --max-time 30 "$PROBE_URL" 2>/dev/null || true)"
+    if [[ -n "$PROBE_DATA" ]]; then
+        # 先验签再看字段：签名覆盖的正是下面要读的这份内容。
+        lw_verify_latest_signature "$PROBE_DATA" "$PROBE_URL"
+        LINUXWAVE_VERSION="$(read_toml_string "$PROBE_DATA" version)"
+        LATEST_BRANCH="$(read_toml_string "$PROBE_DATA" branch)"
+        EXPECTED_UPDATE_COMMANDS_SHA256="$(read_toml_string "$PROBE_DATA" update_commands_sha256)"
+    fi
+fi
+
+if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
+    # 3.x 回落：versiondata/latest_version
+    LATEST_VERSION_DATA="$(curl -fsSL --max-time 30 "$CONFIGDATA_URL/versiondata/latest_version" 2>/dev/null || true)"
+    LINUXWAVE_VERSION="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+    LATEST_BRANCH="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+fi
+
+if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
+    lw_say_err "${RED_BOLD}🌊 Error: Cannot read the latest version from the self-update probe.${RESET}" \
+        "${RED_BOLD}🌊 错误：读不到自更新探针里的版本号。${RESET}"
+    lw_say_err "🌊 Check your network or proxy, then run the installer again." \
+        "🌊 请检查网络或代理后重新运行安装器。"
+    exit 1
+fi
+
+BRANCH="$LATEST_BRANCH"
+BASE_URL="$CORE_URL/$BRANCH"
 
 # ==========================================
 # 显示欢迎信息
