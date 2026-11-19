@@ -947,7 +947,15 @@ else
         print_dir_menu
         # `2>/dev/null` 写在输入重定向之前：没有控制终端时打开 /dev/tty 会失败，
         # 重定向按从左到右处理，先屏蔽 stderr 才不会喷出原始报错。
-        read -r 2>/dev/null choice < /dev/tty || choice=""
+        if ! read -r 2>/dev/null choice < /dev/tty; then
+            # 同上：EOF 不是「输错了一个序号」，再问两次也不会有人回答。
+            lw_say_err "" ""
+            lw_say_err "${RED_BOLD}🌊 Error: no choice was given (end of input). Nothing was installed.${RESET}" \
+                "${RED_BOLD}🌊 错误：没有选择任何目录（输入已结束）。什么都没装。${RESET}"
+            lw_say_err "🌊 Re-run the installer, or pass --dir-option=N (see --help)." \
+                "🌊 请重新运行安装器，或用 --dir-option=N（见 --help）。"
+            exit 1
+        fi
         case "$choice" in
             1|2|3|4|5)
                 break
@@ -2002,7 +2010,16 @@ else
         lw_say "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}" \
             "${YELLOW}你是否已阅读并同意该协议？[Y/n]${RESET}"
         _answer=""
-        read -r _answer < /dev/tty || _answer=""
+        # 读失败 = /dev/tty 没给东西（EOF / 被关掉），**不是**「直接回车」。
+        # 直接回车表示同意（默认 Y），但 EOF 表示「没人回答」——把它当同意等于
+        # 替用户签了协议。这里明确终止，并说清什么都没装。
+        if ! read -r _answer < /dev/tty; then
+            lw_say_err "${RED_BOLD}🌊 Error: no answer was given (end of input). Nothing was installed.${RESET}" \
+                "${RED_BOLD}🌊 错误：没有收到回答（输入已结束）。什么都没装。${RESET}"
+            lw_say_err "🌊 Re-run the installer and answer the prompt." \
+                "🌊 请重新运行安装器，并在提示处作答。"
+            exit 1
+        fi
         _answer="${_answer//[[:space:]]/}"
         _answer="${_answer,,}"
         case "$_answer" in
