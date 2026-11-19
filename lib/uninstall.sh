@@ -252,7 +252,10 @@ for line in rc_file.read_text().splitlines():
     if line.strip() == "# LinuxWave":
         skip_next = True
         continue
-    if skip_next and line.startswith("export PATH="):
+    # 新版写的是 `eval "$(… wave shellenv)"`，旧版写的是 `export PATH="…"`；
+    # 两种都得认，否则升级过一版的用户卸不干净。
+    if skip_next and (line.startswith("export PATH=")
+                      or (line.startswith("eval ") and "shellenv" in line)):
         skip_next = False
         continue
     skip_next = False
@@ -260,7 +263,7 @@ for line in rc_file.read_text().splitlines():
 rc_file.write_text("\n".join(kept) + ("\n" if kept else ""))
 PYEOF
         # 兜底：注释行缺失时，仍按旧版写法删掉 linuxwave 的 PATH 行
-        sed -i '/export PATH=".*linuxwave\//d' "$RC_FILE" 2>/dev/null || true
+        sed -i -e '/export PATH=".*linuxwave\//d' -e '/^eval .*linuxwave.*shellenv.*/d' "$RC_FILE" 2>/dev/null || true
         echo "🌊 Removed LinuxWave PATH entries from $RC_FILE"
     fi
 done
@@ -278,7 +281,10 @@ for line in rc_file.read_text().splitlines():
     if line.strip() == "# LinuxWave":
         skip_next = True
         continue
-    if skip_next and line.startswith("export PATH="):
+    # 新版写的是 `eval "$(… wave shellenv)"`，旧版写的是 `export PATH="…"`；
+    # 两种都得认，否则升级过一版的用户卸不干净。
+    if skip_next and (line.startswith("export PATH=")
+                      or (line.startswith("eval ") and "shellenv" in line)):
         skip_next = False
         continue
     skip_next = False

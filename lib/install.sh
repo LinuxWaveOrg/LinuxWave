@@ -1653,6 +1653,14 @@ lib_dir="$(cd -- "$self_dir" && pwd)" || exit 1
 root_dir="$(cd -- "$lib_dir/.." && pwd)" || exit 1
 entry="$lib_dir/wave.py"
 
+# `wave shellenv` 由 shell 直接回答，不启动 Python：这一行每次开终端都要跑。
+# 输出必须与 lib/shellenv.py **逐字一致** —— scripts/shellenv_test.sh 会比对两份。
+if [ "$#" -eq 1 ] && [ "$1" = "shellenv" ]; then
+    printf 'case ":$PATH:" in\n  *":%s:"*) ;;\n  *) export PATH="%s:%s:%s${PATH:+:$PATH}" ;;\nesac\n' \
+        "$root_dir/lib" "$root_dir/bin" "$root_dir/links" "$root_dir/lib"
+    exit 0
+fi
+
 #__LINUXWAVE_PYTHON__
 
 deps_ok() {
@@ -1892,32 +1900,55 @@ else
     RC_FILE="$HOME/.profile"
 fi
 
+# 旧版本直接往 rc 里 append 一整行 PATH；新版只写一行 eval，归用户自己管：
+# 升级换目录、卸载，都不必再去猜用户文件里哪一行是自己写的。
 PATH_LINE="export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\""
+SHELLENV_LINE="eval \"\$(\"$LIB_DIR/wave\" shellenv)\""
+LEGACY_PREFIX="export PATH=\"$INSTALL_DIR"
 
-# 从 rc 文件里摘掉我们写入的 PATH 行（连同标记行）。
+# 从 rc 文件里摘掉我们写入的行（各自的写法 + 标记行）。
 # 安装回滚时要靠它，否则会留下一个指向已删除目录的 PATH。
 remove_lw_path_entries() {
     local rc="$1"
     [[ -f "$rc" ]] || return 0
-    grep -qF -e "$PATH_LINE" -e "# LinuxWave" "$rc" 2>/dev/null || return 0
-    grep -v -F -e "$PATH_LINE" -e "# LinuxWave" "$rc" > "$rc.linuxwave.tmp" || true
+    grep -qF -e "$PATH_LINE" -e "$SHELLENV_LINE" -e "# LinuxWave" "$rc" 2>/dev/null || return 0
+    grep -v -F -e "$PATH_LINE" -e "$SHELLENV_LINE" -e "# LinuxWave" "$rc" > "$rc.linuxwave.tmp" || true
     cat "$rc.linuxwave.tmp" > "$rc"
     rm -f "$rc.linuxwave.tmp"
     lw_say "🌊 Removed LinuxWave PATH entries from $rc" \
         "🌊 已从 $rc 移除 LinuxWave 的 PATH 条目"
 }
 
+# 旧版本那行 PATH 不再需要：告诉用户怎么删、以及为什么该删。
+# 刻意不替用户删 —— 那是他的文件，猜错就是删掉别人的行。
+report_legacy_path_line() {
+    local rc="$1"
+    grep -qF "$LEGACY_PREFIX" "$rc" 2>/dev/null || return 0
+    lw_say "${YELLOW}🌊 Note: an older version of LinuxWave wrote this line into $rc:${RESET}" \
+        "${YELLOW}🌊 注意：旧版 LinuxWave 往 $rc 里写过这一行：${RESET}"
+    lw_say "     $PATH_LINE" "     $PATH_LINE"
+    lw_say "${YELLOW}🌊 It is no longer needed — this install writes a single line instead.${RESET}" \
+        "${YELLOW}🌊 它已经不需要了 —— 本次安装改成只写一行。${RESET}"
+    lw_say "🌊 Two lines would set PATH from two places, and after an upgrade the old one still${RESET}" \
+        "🌊 两行会让 PATH 有两个来源；升级之后旧那行还指着上一个安装目录。${RESET}"
+    lw_say "🌊 points at the previous install directory. Removing it is safe; run:${RESET}" \
+        "🌊 删掉是安全的，运行这一条即可：${RESET}"
+    lw_say "     sed -i.linuxwave.bak '/^export PATH=\".*linuxwave/d' $rc"
+    lw_say "🌊 (The backup is $rc.linuxwave.bak, in case you want the line back.)" \
+        "🌊 （备份是 $rc.linuxwave.bak，想要回那行时用得着。）"
+}
+
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     # 共享安装：$SHARED_USER 自己的 shell 也要能直接用 wave
     SHARED_RC="$SHARED_HOME/.bashrc"
-    if sudo grep -qF "$PATH_LINE" "$SHARED_RC" 2>/dev/null; then
+    if sudo grep -qF "$SHELLENV_LINE" "$SHARED_RC" 2>/dev/null; then
         lw_say "🌊 LinuxWave is already in $SHARED_RC." "🌊 $SHARED_RC 里已经有 LinuxWave 了。"
     elif sudo test -f "$SHARED_RC"; then
         lw_say "🌊 Adding LinuxWave to PATH in $SHARED_RC..." \
             "🌊 正在把 LinuxWave 写进 $SHARED_RC 的 PATH……"
-        printf '\n# LinuxWave\n%s\n' "$PATH_LINE" | lw_privileged tee -a "$SHARED_RC" > /dev/null
+        printf '\n# LinuxWave\n%s\n' "$SHELLENV_LINE" | lw_privileged tee -a "$SHARED_RC" > /dev/null
         lw_privileged chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
-    elif printf '# LinuxWave\n%s\n' "$PATH_LINE" | lw_privileged tee "$SHARED_RC" > /dev/null; then
+    elif printf '# LinuxWave\n%s\n' "$SHELLENV_LINE" | lw_privileged tee "$SHARED_RC" > /dev/null; then
         # 账号预存、或 /etc/skel 里没有 .bashrc 时文件不存在。
         # 建出来，否则这个账号反而跑不了 wave，而安装却自称已完成。
         lw_say "🌊 Created $SHARED_RC with LinuxWave in PATH." \
@@ -1929,29 +1960,20 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
             "${YELLOW}🌊 警告：没能写入 $SHARED_RC。${RESET}"
         lw_say "🌊 '$SHARED_USER' can add it manually with:" \
             "🌊 '$SHARED_USER' 可以手工加上这一行："
-        echo "     echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc"
+        lw_say "     echo '$SHELLENV_LINE' >> ~/.bashrc"
     fi
 fi
 
-if grep -qF "$PATH_LINE" "$RC_FILE" 2>/dev/null; then
+if grep -qF "$SHELLENV_LINE" "$RC_FILE" 2>/dev/null; then
     lw_say "🌊 LinuxWave is already in your PATH." "🌊 你的 PATH 里已经有 LinuxWave 了。"
 else
-    if grep -qF "$INSTALL_DIR" "$RC_FILE" 2>/dev/null; then
-        # 旧版本（如 2.1.0）的 PATH 行只有 bin/ 与 lib/，升级后需要换成含 links/ 的新行
-        lw_say "🌊 Replacing old LinuxWave PATH entry in $RC_FILE..." \
-            "🌊 正在替换 $RC_FILE 里旧版 LinuxWave 的 PATH 条目……"
-        grep -v -F "export PATH=\"$INSTALL_DIR" "$RC_FILE" > "$RC_FILE.linuxwave.tmp" || true
-        cat "$RC_FILE.linuxwave.tmp" > "$RC_FILE"
-        rm -f "$RC_FILE.linuxwave.tmp"
-    else
-        lw_say "🌊 Adding LinuxWave to PATH in $RC_FILE..." \
-            "🌊 正在把 LinuxWave 写进 $RC_FILE 的 PATH……"
-        echo "" >> "$RC_FILE"
-        echo "# LinuxWave" >> "$RC_FILE"
-    fi
-
-    echo "$PATH_LINE" >> "$RC_FILE"
+    lw_say "🌊 Adding LinuxWave to PATH in $RC_FILE..." \
+        "🌊 正在把 LinuxWave 写进 $RC_FILE 的 PATH……"
+    echo "" >> "$RC_FILE"
+    echo "# LinuxWave" >> "$RC_FILE"
+    echo "$SHELLENV_LINE" >> "$RC_FILE"
 fi
+report_legacy_path_line "$RC_FILE"
 
 # ==========================================
 # 同意记录

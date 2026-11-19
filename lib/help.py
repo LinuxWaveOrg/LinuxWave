@@ -106,6 +106,7 @@ def print_custom_help():
         (_command("unlink"), "Remove those unversioned links"),
         (_command("linkquery"), "Show which version an unversioned link points to"),
         (_command("mirror"), "Show which address each kind of data is fetched from"),
+        (_command("shellenv"), "Print the shell code that puts wave on your PATH"),
     ])
 
     _print_section("Flags", [
@@ -271,6 +272,15 @@ COMMAND_HELP = {
         ],
         "examples": ["wave mirror", "wave mirror --raw",
                      "wave mirror --json", "wave mirror --show-password"],
+    },
+    "shellenv": {
+        "usage": "wave shellenv",
+        "desc": "Print the shell code that puts wave on your PATH. Meant to be evaluated: "
+                "eval \"$(<install dir>/lib/wave shellenv)\". It is safe to evaluate more "
+                "than once, and it prints nothing else.",
+        "flags": [],
+        "examples": ['eval "$(~/.local/linuxwave/lib/wave shellenv)"',
+                     "echo 'eval \"$(~/.local/linuxwave/lib/wave shellenv)\"' >> ~/.zshrc"],
     },
     "version": {
         "usage": "wave version",

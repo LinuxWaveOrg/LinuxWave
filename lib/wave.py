@@ -43,6 +43,7 @@ COMMANDS = {
     "link":       "linker",
     "unlink":     "linker",
     "linkquery":  "linker",
+    "shellenv":   "shellenv",
 }
 
 ARGUMENTS = {
@@ -203,6 +204,11 @@ def main():
         elif module_name == "selfupdate":
             from selfupdate import handle_selfupdate
             handle_selfupdate(full_input)
+
+        elif module_name == "shellenv":
+            # 输出会被 eval，所以只准打 shell 语句：任何提示语都会变成命令
+            from shellenv import handle_shellenv
+            sys.exit(handle_shellenv())
 
         elif module_name == "linker":
             from linker import handle_link_command, handle_linkquery_command, handle_unlink_command

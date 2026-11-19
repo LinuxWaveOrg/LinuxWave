@@ -123,6 +123,11 @@ jobs:
         run: |
           bash scripts/state_test.sh
 
+      # wave shellenv：输出形状、启动器快路径与 Python 逐字一致、重复 eval 不变长
+      - name: Run shellenv test
+        run: |
+          bash scripts/shellenv_test.sh
+
       - name: Run format tests
         run: |
           bash scripts/format_test.sh

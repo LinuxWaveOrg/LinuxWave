@@ -238,6 +238,8 @@ wave link <name>                   Link a package to its highest installed versi
 wave linkquery <name>              Show what <name> is linked to (e.g. 🌊 ffmpeg@9.0)
 wave unlink <name>                 Remove that link
 
+Shell setup:
+wave shellenv                      Print the code that puts wave on your PATH (for eval)
 ```
 
 Uninstalling a version re-points the link to the next highest one, and removes the link
