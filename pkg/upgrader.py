@@ -28,7 +28,7 @@ from pkginstaller import (
     handle_install,
     parse_flags,
 )
-from pkgversionparser import safe_parse_pkg_version as version_key
+from versioncompare import safe_parse_pkg_version as version_key
 from uninstaller import find_installed_versions, select_versions, uninstall_versions
 
 RED_BOLD = '\033[1;31m'

@@ -451,7 +451,7 @@ def fetch_max_version(package_name, arch):
             if "@" in fname:
                 versions.append(fname.split("@")[1])
 
-        from pkgversionparser import get_max_version
+        from versioncompare import get_max_version
         return get_max_version(versions)
     except Exception as e:
         print(f"{RED_BOLD}🌊 Error: Failed to fetch version list: {e}{RESET}")

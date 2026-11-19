@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # depsversionparser.py
-# 负责依赖引用的解析与依赖版本号的比较逻辑，版本比较复用 pkgversionparser.py。
+# 负责依赖引用的解析与依赖版本号的比较逻辑，版本比较复用 lib/versioncompare.py。
 
 import sys
 
@@ -15,14 +15,14 @@ RESET = '\033[0m'
 # -------------------- 依赖库检查 --------------------
 
 try:
-    from pkgversionparser import (
+    from versioncompare import (
         is_special_version,
         safe_parse_pkg_version,
         sort_versions,
         get_max_version,
     )
 except ImportError:
-    print(f"{RED_BOLD}🌊 Error: 'pkgversionparser' module is not available.{RESET}")
+    print(f"{RED_BOLD}🌊 Error: 'versioncompare' module is not available.{RESET}")
     sys.exit(1)
 
 
@@ -67,6 +67,6 @@ def parse_dep_refs(dep_refs):
 
 def get_latest_version(versions):
 
-    # 取最高版本号，复用 pkgversionparser.py 的排序规则。
+    # 取最高版本号，复用 lib/versioncompare.py 的排序规则。
 
     return get_max_version(versions)

@@ -33,9 +33,9 @@ LINKS_DIR = BASE_DIR / "links"
 # -------------------- 版本库 --------------------
 
 try:
-    from pkgversionparser import get_max_version
+    from versioncompare import get_max_version
 except ImportError:
-    print(f"{RED_BOLD}🌊 Error: 'pkgversionparser' module is not available.{RESET}")
+    print(f"{RED_BOLD}🌊 Error: 'versioncompare' module is not available.{RESET}")
     sys.exit(1)
 
 

@@ -33,9 +33,9 @@ TAGGER_SCRIPT = Path(__file__).resolve().parent.parent / "surfboard" / "tagger.s
 # -------------------- 依赖库检查 --------------------
 
 try:
-    from pkgversionparser import get_max_version, sort_versions
+    from versioncompare import get_max_version, sort_versions
 except ImportError:
-    print(f"{RED_BOLD}🌊 Error: 'pkgversionparser' module is not available.{RESET}")
+    print(f"{RED_BOLD}🌊 Error: 'versioncompare' module is not available.{RESET}")
     sys.exit(1)
 
 try:

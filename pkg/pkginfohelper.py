@@ -43,9 +43,9 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from pkgversionparser import sort_versions
+    from versioncompare import sort_versions
 except ImportError:
-    print(f"{RED_BOLD}🌊 Error: 'pkgversionparser' module is not available.{RESET}")
+    print(f"{RED_BOLD}🌊 Error: 'versioncompare' module is not available.{RESET}")
     sys.exit(1)
 
 
