@@ -14,7 +14,7 @@ set -e
 # ==========================================
 if [[ "$(uname -s 2>/dev/null)" != "Linux" ]]; then
     echo "🌊 Error: this updater is for Linux; this system is $(uname -s 2>/dev/null)." >&2
-    echo "🌊 On macOS use MacWave instead: https://github.com/MacWaveOrg/MacWave" >&2
+    echo "🌊 On macOS use MacWave instead: https://macwave.org" >&2
     exit 1
 fi
 

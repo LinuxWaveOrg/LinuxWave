@@ -11,7 +11,7 @@
 # 装个新 bash，然后发现这个安装器根本不是给他用的。macOS 上该用的是 MacWave。
 if [[ "$(uname -s 2>/dev/null)" != "Linux" ]]; then
     echo "🌊 Error: this installer is for Linux; this system is $(uname -s 2>/dev/null)." >&2
-    echo "🌊 On macOS use MacWave instead: https://github.com/MacWaveOrg/MacWave" >&2
+    echo "🌊 On macOS use MacWave instead: https://macwave.org" >&2
     exit 1
 fi
 
