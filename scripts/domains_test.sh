@@ -452,6 +452,8 @@ run_banner() {
     fn="$(mktemp)"
     {
         extract_redact "$REPO_DIR/lib/install.sh"
+        # 提示走输出层；这里只要它的文本，给个最小的 lw_say 桩
+        echo 'lw_say() { printf "%b\n" "$1"; }'
         sed -n '/^# 用了镜像就明说一句/,/^fi$/p' "$REPO_DIR/lib/install.sh"
     } > "$fn"
     bash -c 'CORE_URL="$2"; CORE_DEFAULT_URL="$3"; source "$1"' _ "$fn" "$core_url" "$default_url" 2>&1

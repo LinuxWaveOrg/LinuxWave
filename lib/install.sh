@@ -853,7 +853,8 @@ case "$0" in
             "${YELLOW}🌊 警告：'$0' 被当成了脚本名，而不是选项。${RESET}"
         lw_say_err "${YELLOW}🌊 Put installer options after '--', which ends bash's own options.${RESET}" \
             "${YELLOW}🌊 请把选项写在 '--' 之后：'--' 会结束 bash 自身的选项。${RESET}"
-        echo "🌊   /bin/bash -c \"\$(curl -fsSL <url>)\" -- $0" >&2
+        lw_say_err "🌊   /bin/bash -c \"\$(curl -fsSL <url>)\" -- $0" \
+            "🌊   正确写法：/bin/bash -c \"\$(curl -fsSL <url>)\" -- --ci"
         ;;
 esac
 
@@ -865,7 +866,8 @@ if [[ -n "$CLI_DIR_OPTION" && ! "$CLI_DIR_OPTION" =~ ^[0-9]+$ ]]; then
 fi
 
 if [[ -n "$CLI_DIR_OPTION" && ! "$CLI_DIR_OPTION" =~ ^[1-5]$ ]]; then
-    echo -e "${RED_BOLD}🌊 Error: --dir-option must be 1-5, got '$CLI_DIR_OPTION'.${RESET}" >&2
+    lw_say_err "${RED_BOLD}🌊 Error: --dir-option must be 1-5, got '$CLI_DIR_OPTION'.${RESET}" \
+        "${RED_BOLD}🌊 错误：--dir-option 必须是 1-5，收到 '$CLI_DIR_OPTION'。${RESET}"
     exit 1
 fi
 
@@ -880,12 +882,13 @@ fi
 # 显示欢迎信息
 # ==========================================
 
-echo "🌊 Welcome to LinuxWave $LINUXWAVE_VERSION!"
+lw_say "🌊 Welcome to LinuxWave $LINUXWAVE_VERSION!" "🌊 欢迎使用 LinuxWave $LINUXWAVE_VERSION！"
 
 # 用了镜像就明说一句。装完遇到问题，第一件事是确认自己连的到底是谁 —— 而镜像地址里
 # 可能带凭据，所以过一遍 mw_redact。
 if [[ "$CORE_URL" != "$CORE_DEFAULT_URL" ]]; then
-    echo "🌊 Core files come from a mirror: $(mw_redact "$CORE_URL")"
+    lw_say "🌊 Core files come from a mirror: $(mw_redact "$CORE_URL")" \
+        "🌊 程序文件来自镜像：$(mw_redact "$CORE_URL")"
 fi
 
 echo ""
@@ -895,7 +898,7 @@ echo ""
 # ==========================================
 
 ARCH=$(uname -m)
-echo "🌊 Detected architecture: $ARCH"
+lw_say "🌊 Detected architecture: $ARCH" "🌊 检测到架构：$ARCH"
 
 # ==========================================
 # 共享安装（菜单推荐项，选项 1）相关常量
@@ -929,7 +932,8 @@ print_dir_menu() {
 # Linux 没有这个限制，因此这里不做区分。
 if [[ -n "$CLI_DIR_OPTION" ]]; then
     choice="$CLI_DIR_OPTION"
-    echo "🌊 Directory option: $choice (from --dir-option)"
+    lw_say "🌊 Directory option: $choice (from --dir-option)" \
+        "🌊 目录选项：$choice（来自 --dir-option）"
 elif [[ "$CLI_CI" == "true" ]]; then
     # --ci 承诺「自动应答目录菜单」，那就明确地选默认项并说出来，
     # 而不是去读一个可能不存在的终端、再靠「无效输入」兜底。
@@ -986,9 +990,11 @@ case "$choice" in
     5)
         if [[ -n "$CLI_CUSTOM_DIR" ]]; then
             custom_dir="$CLI_CUSTOM_DIR"
-            echo "🌊 Installation directory: $custom_dir (from --dir-option)"
+            lw_say "🌊 Installation directory: $custom_dir (from --dir-option)" \
+                "🌊 安装目录：$custom_dir（来自 --dir-option）"
         else
-            echo -e "${YELLOW}Please enter the installation directory:${RESET}"
+            lw_say "${YELLOW}Please enter the installation directory:${RESET}" \
+                "${YELLOW}请输入安装目录：${RESET}"
             read -r custom_dir < /dev/tty
         fi
         validated=$(validate_custom_dir "$custom_dir") || exit 1
@@ -997,7 +1003,8 @@ case "$choice" in
     *)
         # 上面已把选择校验到 1-5，这里只是兜底；
         # 无论如何都不静默换成别的目录。
-        echo -e "${RED_BOLD}🌊 Error: unsupported directory choice '$choice'. Nothing was installed.${RESET}" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: unsupported directory choice '$choice'. Nothing was installed.${RESET}" \
+            "${RED_BOLD}🌊 错误：不支持的目录选项 '$choice'。什么都没装。${RESET}"
         exit 1
         ;;
 esac
@@ -1065,16 +1072,17 @@ if [[ "$NEED_SUDO" == "true" ]]; then
             exit 1
         fi
     else
-        echo -e "${YELLOW}🌊 Granting temporary administrator access for installation...${RESET}"
+        lw_say "${YELLOW}🌊 Granting temporary administrator access for installation...${RESET}" \
+            "${YELLOW}🌊 正在获取临时的管理员权限以完成安装……${RESET}"
         sudo -v
     fi
 fi
 
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     if id "$SHARED_USER" >/dev/null 2>&1; then
-        echo "🌊 User '$SHARED_USER' already exists."
+        lw_say "🌊 User '$SHARED_USER' already exists." "🌊 用户 '$SHARED_USER' 已存在。"
     else
-        echo "🌊 Creating user '$SHARED_USER'..."
+        lw_say "🌊 Creating user '$SHARED_USER'..." "🌊 正在创建用户 '$SHARED_USER'……"
         lw_privileged useradd -m -d "$SHARED_HOME" -s /bin/bash "$SHARED_USER"
     fi
 
@@ -1245,12 +1253,15 @@ UPDATEDATA_URL="$CONFIGDATA_URL/updatedata/$LINUXWAVE_VERSION"
 DIR_STRUCTURE_CHANGE="$(curl -fsSL --max-time 30 "$UPDATEDATA_URL/dir_structure_change" 2>/dev/null | tr -d '[:space:]')" || DIR_STRUCTURE_CHANGE=""
 
 if [[ "$DIR_STRUCTURE_CHANGE" == "Y" || "$DIR_STRUCTURE_CHANGE" == "y" ]]; then
-    echo -e "${YELLOW}🌊 Directory structure changed in $LINUXWAVE_VERSION, running migration...${RESET}"
+    lw_say "${YELLOW}🌊 Directory structure changed in $LINUXWAVE_VERSION, running migration...${RESET}" \
+        "${YELLOW}🌊 $LINUXWAVE_VERSION 改变了目录结构，正在执行迁移……${RESET}"
 
     TRANSFER_COMMANDS="$(curl -fsSL --max-time 60 "$UPDATEDATA_URL/transfer_commands" 2>/dev/null)" || TRANSFER_COMMANDS=""
     if [[ -z "$TRANSFER_COMMANDS" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Cannot fetch the migration script for $LINUXWAVE_VERSION.${RESET}"
-        echo -e "${RED_BOLD}🌊 Nothing was installed. Check your network, then run the installer again.${RESET}"
+        lw_say_err "${RED_BOLD}🌊 Error: Cannot fetch the migration script for $LINUXWAVE_VERSION.${RESET}" \
+            "${RED_BOLD}🌊 错误：取不到 $LINUXWAVE_VERSION 的迁移脚本。${RESET}"
+        lw_say_err "${RED_BOLD}🌊 Nothing was installed. Check your network, then run the installer again.${RESET}" \
+            "${RED_BOLD}🌊 什么都没装。请检查网络后重新运行安装器。${RESET}"
         exit 1
     fi
 
@@ -1260,8 +1271,10 @@ if [[ "$DIR_STRUCTURE_CHANGE" == "Y" || "$DIR_STRUCTURE_CHANGE" == "y" ]]; then
     export LINUXWAVE_TARGET_VERSION="$LINUXWAVE_VERSION"
 
     if ! bash -c "$TRANSFER_COMMANDS"; then
-        echo -e "${RED_BOLD}🌊 Error: The migration for $LINUXWAVE_VERSION failed.${RESET}"
-        echo -e "${RED_BOLD}🌊 Nothing was installed. Fix the issue above, then run the installer again.${RESET}"
+        lw_say_err "${RED_BOLD}🌊 Error: The migration for $LINUXWAVE_VERSION failed.${RESET}" \
+            "${RED_BOLD}🌊 错误：$LINUXWAVE_VERSION 的迁移失败。${RESET}"
+        lw_say_err "${RED_BOLD}🌊 Nothing was installed. Fix the issue above, then run the installer again.${RESET}" \
+            "${RED_BOLD}🌊 什么都没装。请按上面的提示排除原因后重新运行安装器。${RESET}"
         exit 1
     fi
 
@@ -1312,8 +1325,8 @@ run_cmd chmod 755 "$CONFIG_DIR"
 run_cmd chmod 644 "$CONFIG_FILE"
 run_cmd chmod 644 "$VERSION_FILE"
 
-echo "🌊 Configuration saved to $CONFIG_FILE"
-echo "🌊 Version saved to $VERSION_FILE"
+lw_say "🌊 Configuration saved to $CONFIG_FILE" "🌊 配置已保存到 $CONFIG_FILE"
+lw_say "🌊 Version saved to $VERSION_FILE" "🌊 版本信息已保存到 $VERSION_FILE"
 
 # ==========================================
 # 删除旧版 repo.json
@@ -1321,7 +1334,7 @@ echo "🌊 Version saved to $VERSION_FILE"
 
 OLD_JSON="$REPO_DIR/repo.json"
 if [ -f "$OLD_JSON" ]; then
-    echo "🌊 Removing old repo.json (legacy format)..."
+    lw_say "🌊 Removing old repo.json (legacy format)..." "🌊 正在删除旧格式的 repo.json……"
     run_cmd rm -f "$OLD_JSON"
 fi
 
@@ -1331,15 +1344,18 @@ fi
 
 LEGACY_BINS=$(find "$INSTALL_DIR" -maxdepth 1 -type f 2>/dev/null || true)
 if [[ -n "$LEGACY_BINS" ]]; then
-    echo -e "${YELLOW}🌊 Removing files installed by an older version in $DISPLAY_DIR/bin:${RESET}"
+    lw_say "${YELLOW}🌊 Removing files installed by an older version in $DISPLAY_DIR/bin:${RESET}" \
+        "${YELLOW}🌊 正在删除旧版本装在 $DISPLAY_DIR/bin 里的文件：${RESET}"
     while IFS= read -r legacy_file; do
         echo -e "${YELLOW}    $(basename "$legacy_file")${RESET}"
     done <<< "$LEGACY_BINS"
     while IFS= read -r legacy_file; do
         run_cmd rm -f "$legacy_file"
     done <<< "$LEGACY_BINS"
-    echo -e "${YELLOW}🌊 ${BRANCH} keeps packages in bin/{name}@{version}/ directories.${RESET}"
-    echo -e "${YELLOW}🌊 Please reinstall the packages: wave install {name}${RESET}"
+    lw_say "${YELLOW}🌊 ${BRANCH} keeps packages in bin/{name}@{version}/ directories.${RESET}" \
+        "${YELLOW}🌊 ${BRANCH} 把软件包放在 bin/{name}@{version}/ 目录里。${RESET}"
+    lw_say "${YELLOW}🌊 Please reinstall the packages: wave install {name}${RESET}" \
+        "${YELLOW}🌊 请重新安装这些包：wave install {name}${RESET}"
 fi
 
 # ==========================================
@@ -1347,11 +1363,15 @@ fi
 # ==========================================
 
 if command -v patchelf > /dev/null 2>&1; then
-    echo "🌊 patchelf detected (dependency library relocation enabled)."
+    lw_say "🌊 patchelf detected (dependency library relocation enabled)." \
+        "🌊 已检测到 patchelf（启用依赖库重定位）。"
 else
-    echo -e "${YELLOW}🌊 Warning: patchelf not found.${RESET}"
-    echo -e "${YELLOW}🌊 Dependency libraries cannot be relocated, so some packages may fail to run.${RESET}"
-    echo "🌊 You can install it later with: sudo apt install patchelf   (or: sudo dnf install patchelf)"
+    lw_say "${YELLOW}🌊 Warning: patchelf not found.${RESET}" \
+        "${YELLOW}🌊 警告：没有找到 patchelf。${RESET}"
+    lw_say "${YELLOW}🌊 Dependency libraries cannot be relocated, so some packages may fail to run.${RESET}" \
+        "${YELLOW}🌊 无法重定位依赖库，部分软件包可能跑不起来。${RESET}"
+    lw_say "🌊 You can install it later with: sudo apt install patchelf   (or: sudo dnf install patchelf)" \
+        "🌊 之后可以这样安装：sudo apt install patchelf（或 sudo dnf install patchelf）"
 fi
 
 # ==========================================
@@ -1494,7 +1514,7 @@ ensure_portable_python() {
     done
 
     # 本机没有，才去版本数据里找该下哪个。进度写 stderr：stdout 是返回值通道。
-    echo "🌊 Fetching the bundled Python definition..." >&2
+    lw_say_err "🌊 Fetching the bundled Python definition..." "🌊 正在获取自带解释器的版本信息……"
     data_file="$(mktemp)"
     if ! curl -fsSL --max-time 30 -o "$data_file" "$data_url" 2>/dev/null; then
         rm -f "$data_file"
@@ -1515,7 +1535,8 @@ ensure_portable_python() {
     if py="$(portable_python_binary "$target" 2>/dev/null)"; then
         :
     else
-        echo "🌊 Downloading the bundled Python $version (about 30 MB)..." >&2
+        lw_say_err "🌊 Downloading the bundled Python $version (about 30 MB)..." \
+            "🌊 正在下载自带解释器 $version（约 30 MB）……"
         archive="$base_dir/downloads/tmp/portable-python-$version.tar.gz"
         run_cmd mkdir -p "$base_dir/downloads/tmp" 2>/dev/null || true
         # 默认先试我们自己托管的 `pythondata/<版本>/<文件名>`（镜像直连，省一次境外下载）；
@@ -1528,7 +1549,8 @@ ensure_portable_python() {
                 :
             else
                 run_cmd rm -f "$archive" 2>/dev/null || true
-                echo -e "${YELLOW}🌊 No hosted copy of the bundled Python; using the upstream URL.${RESET}" >&2
+                lw_say_err "${YELLOW}🌊 No hosted copy of the bundled Python; using the upstream URL.${RESET}" \
+                    "${YELLOW}🌊 自有存储里没有这份解释器，改从上游地址取。${RESET}"
             fi
         fi
 
@@ -1543,7 +1565,8 @@ ensure_portable_python() {
                 break
             fi
             if [[ "$attempt" -lt 3 ]]; then
-                echo -e "${YELLOW}🌊 Retrying the bundled Python download ($((attempt + 1))/3)...${RESET}"
+                lw_say_err "${YELLOW}🌊 Retrying the bundled Python download ($((attempt + 1))/3)...${RESET}" \
+                    "${YELLOW}🌊 正在重试下载自带解释器（$((attempt + 1))/3）……${RESET}"
                 sleep 3
             fi
         done
@@ -1557,7 +1580,8 @@ ensure_portable_python() {
         fi
         if [[ "$actual" != "$sha" ]]; then
             run_cmd rm -f "$archive" 2>/dev/null || true
-            echo -e "${RED_BOLD}🌊 Error: the bundled Python download failed its checksum check.${RESET}" >&2
+            lw_say_err "${RED_BOLD}🌊 Error: the bundled Python download failed its checksum check.${RESET}" \
+                "${RED_BOLD}🌊 错误：自带解释器下载后校验值不符。${RESET}"
             return 1
         fi
         run_cmd mkdir -p "$target" 2>/dev/null || true
@@ -1673,24 +1697,29 @@ VENV_PY=""
 PYTHON_BIN=""
 PYTHON_SOURCE=""
 
-echo "🌊 Preparing the Python runtime..."
+lw_say "🌊 Preparing the Python runtime..." "🌊 正在准备 Python 运行环境……"
 mw_try ensure_portable_python "$BASE_DIR" "$(portable_python_arch)"
 BUNDLED_PY="$MW_OPTIONAL_RESULT"
 
 if [[ -n "$BUNDLED_PY" ]]; then
     PYTHON_BIN="$BUNDLED_PY"
     PYTHON_SOURCE="bundled"
-    echo "🌊 Using the bundled Python: ${BUNDLED_PY#"$BASE_DIR"/}"
+    lw_say "🌊 Using the bundled Python: ${BUNDLED_PY#"$BASE_DIR"/}" \
+        "🌊 使用自带解释器：${BUNDLED_PY#"$BASE_DIR"/}"
 else
     PYTHON_BIN="$(command -v python3 || true)"
     PYTHON_SOURCE="system"
     if [[ -z "$PYTHON_BIN" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: no Python 3 interpreter is available.${RESET}"
-        echo -e "${RED_BOLD}🌊 The bundled Python could not be downloaded and python3 is not in PATH.${RESET}"
+        lw_say_err "${RED_BOLD}🌊 Error: no Python 3 interpreter is available.${RESET}" \
+            "${RED_BOLD}🌊 错误：没有可用的 Python 3 解释器。${RESET}"
+        lw_say_err "${RED_BOLD}🌊 The bundled Python could not be downloaded and python3 is not in PATH.${RESET}" \
+            "${RED_BOLD}🌊 自带解释器下载失败，PATH 上也没有 python3。${RESET}"
         exit 1
     fi
-    echo -e "${YELLOW}🌊 Warning: could not prepare the bundled Python; using $PYTHON_BIN instead.${RESET}"
-    echo -e "${YELLOW}🌊 Re-run the installer when the network is available to make this installation self-contained.${RESET}"
+    lw_say "${YELLOW}🌊 Warning: could not prepare the bundled Python; using $PYTHON_BIN instead.${RESET}" \
+        "${YELLOW}🌊 警告：没能准备好自带解释器，改用 $PYTHON_BIN。${RESET}"
+    lw_say "${YELLOW}🌊 Re-run the installer when the network is available to make this installation self-contained.${RESET}" \
+        "${YELLOW}🌊 网络可用时重跑一次安装器，就能把这次安装补齐成自带环境的形态。${RESET}"
 fi
 
 run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
@@ -1698,10 +1727,12 @@ run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
 if run_cmd "$PYTHON_BIN" -m venv "$VENV_DIR" >/dev/null 2>&1; then
     VENV_PY="$VENV_DIR/bin/python3"
     [[ -x "$VENV_PY" ]] || VENV_PY="$VENV_DIR/bin/python"
-    echo "🌊 Private Python environment ready: ${VENV_DIR#"$BASE_DIR"/}"
+    lw_say "🌊 Private Python environment ready: ${VENV_DIR#"$BASE_DIR"/}" \
+        "🌊 私有 Python 环境已就绪：${VENV_DIR#"$BASE_DIR"/}"
 else
     VENV_PY=""
-    echo -e "${YELLOW}🌊 Warning: could not create a private virtualenv; using the ${PYTHON_SOURCE} interpreter directly.${RESET}"
+    lw_say "${YELLOW}🌊 Warning: could not create a private virtualenv; using the ${PYTHON_SOURCE} interpreter directly.${RESET}" \
+        "${YELLOW}🌊 警告：无法创建私有 venv，直接使用 ${PYTHON_SOURCE} 解释器。${RESET}"
 fi
 
 deps_present() {
@@ -1711,7 +1742,8 @@ deps_present() {
 }
 
 if [[ -n "$VENV_PY" && -x "$VENV_PY" ]]; then
-    echo "🌊 Installing Python dependencies into the private environment..."
+    lw_say "🌊 Installing Python dependencies into the private environment..." \
+        "🌊 正在把 Python 依赖装进私有环境……"
     # --timeout/--retries 收小：离线环境里让 pip 尽快失败，好走到下面的降级分支，
     # 而不是死等默认的长超时（隔离测试根里每次安装都会走一遍）。
     run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 --upgrade pip >/dev/null 2>&1 || true
@@ -1723,7 +1755,8 @@ if [[ -n "$VENV_PY" && -x "$VENV_PY" ]]; then
         # 拿不到 PyPI 时（离线安装、镜像不可达），退回「继承父解释器 site-packages」
         # 的 venv —— 系统 python3 上通常已经有这三个包（apt 的 python3-requests 等），
         # 这样离线环境也能装完并跑起来，而不是直接失败。
-        echo -e "${YELLOW}🌊 Could not install the dependencies into the venv; retrying with the parent's packages.${RESET}"
+        lw_say "${YELLOW}🌊 Could not install the dependencies into the venv; retrying with the parent's packages.${RESET}" \
+            "${YELLOW}🌊 依赖没能装进 venv，改用继承父解释器 site-packages 的方式重试。${RESET}"
         run_cmd rm -rf "$VENV_DIR" 2>/dev/null || true
         run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
         if run_cmd "$PYTHON_BIN" -m venv --system-site-packages "$VENV_DIR" >/dev/null 2>&1; then
@@ -1737,14 +1770,17 @@ if [[ -n "$VENV_PY" && -x "$VENV_PY" ]]; then
 fi
 
 if [[ -z "$VENV_PY" ]]; then
-    echo -e "${YELLOW}🌊 Warning: no private environment with the dependencies; using $PYTHON_BIN directly.${RESET}"
+    lw_say "${YELLOW}🌊 Warning: no private environment with the dependencies; using $PYTHON_BIN directly.${RESET}" \
+        "${YELLOW}🌊 警告：没有带依赖的私有环境，直接使用 $PYTHON_BIN。${RESET}"
 fi
 
 # 最后一道判据：选定解释器必须真的能 import。给不出可用的解释器就不要谎报安装成功。
 if ! deps_present "$VENV_PY" && ! deps_present "$PYTHON_BIN"; then
-    echo -e "${RED_BOLD}🌊 Error: no Python interpreter with requests/packaging/rich is available.${RESET}"
-    echo -e "${RED_BOLD}🌊 Install them for one interpreter and re-run, or retry when the network is up.${RESET}"
-    echo -e "${RED_BOLD}🌊   python3 -m pip install requests packaging rich${RESET}"
+    lw_say_err "${RED_BOLD}🌊 Error: no Python interpreter with requests/packaging/rich is available.${RESET}" \
+        "${RED_BOLD}🌊 错误：没有哪个 Python 解释器能 import requests/packaging/rich。${RESET}"
+    lw_say_err "${RED_BOLD}🌊 Install them for one interpreter and re-run, or retry when the network is up.${RESET}" \
+        "${RED_BOLD}🌊 请给其中一个解释器装上这三个包后重跑，或等网络恢复再试。${RESET}"
+    lw_say_err "${RED_BOLD}🌊   python3 -m pip install requests packaging rich${RESET}"
     exit 1
 fi
 
@@ -1771,18 +1807,23 @@ if [[ "$NEED_SUDO" == "true" ]]; then
         lw_privileged chown -R root:root "$BASE_DIR"
         lw_privileged chmod -R u+rwX,go+rX,go-w "$BASE_DIR"
         echo ""
-        echo "🌊 Ownership: $BASE_DIR -> root:root, mode 755"
-        echo "🌊 Changing packages (install / upgrade / uninstall) needs sudo,"
-        echo "🌊 and sudo has its own PATH, so give the full path:"
-        echo "🌊   sudo $BASE_DIR/lib/wave install <package>"
-        echo "🌊 Everyone else can still run the installed packages."
+        lw_say "🌊 Ownership: $BASE_DIR -> root:root, mode 755" \
+            "🌊 属主：$BASE_DIR -> root:root，权限 755"
+        lw_say "🌊 Changing packages (install / upgrade / uninstall) needs sudo," \
+            "🌊 改动软件包（安装 / 升级 / 卸载）需要 sudo，"
+        lw_say "🌊 and sudo has its own PATH, so give the full path:" \
+            "🌊 而 sudo 有自己的 PATH，所以要写全路径："
+        lw_say "🌊   sudo $BASE_DIR/lib/wave install <package>"
+        lw_say "🌊 Everyone else can still run the installed packages." \
+            "🌊 其他用户仍可直接运行已安装的软件包。"
     fi
 fi
 
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     # useradd -m 建出的家目录默认是 750，其他用户连进入都不行；
     # a+rX 里大写的 X 只给目录和原本可执行的文件加 x，不会误改普通文件。
-    echo "🌊 Opening $SHARED_HOME and $BASE_DIR to all users..."
+    lw_say "🌊 Opening $SHARED_HOME and $BASE_DIR to all users..." \
+        "🌊 正在把 $SHARED_HOME 与 $BASE_DIR 开放给所有用户……"
     lw_privileged chmod 755 "$SHARED_HOME"
     lw_privileged chmod -R a+rX "$BASE_DIR"
 
@@ -1790,7 +1831,8 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     # 只给读 + 执行是不够的——组员连 downloads/tmp 都建不出来，装包必然失败，
     # 所以这里把组写位打开。代价是组员能改动整棵树，包括 lib/wave 本体
     # （见 .templates/SPECIAL/INSTALL_BY_INTERNET.md 末尾对这一点说明）。
-    echo "🌊 Setting up the '$SHARED_USER' group for shared installs..."
+    lw_say "🌊 Setting up the '$SHARED_USER' group for shared installs..." \
+        "🌊 正在为共享安装配置 '$SHARED_USER' 组……"
     lw_privileged groupadd -f "$SHARED_USER"
 
     RELOGIN_NEEDED=false
@@ -1808,8 +1850,10 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         if lw_privileged usermod -aG "$SHARED_USER" "$CURRENT_USER"; then
             RELOGIN_NEEDED=true
         else
-            echo -e "${YELLOW}🌊 Could not add '$CURRENT_USER' to '$SHARED_USER' automatically.${RESET}"
-            echo -e "${YELLOW}🌊 Add it by hand: sudo usermod -aG $SHARED_USER $CURRENT_USER${RESET}"
+            lw_say "${YELLOW}🌊 Could not add '$CURRENT_USER' to '$SHARED_USER' automatically.${RESET}" \
+                "${YELLOW}🌊 没能自动把 '$CURRENT_USER' 加进 '$SHARED_USER' 组。${RESET}"
+            lw_say "${YELLOW}🌊 Add it by hand: sudo usermod -aG $SHARED_USER $CURRENT_USER${RESET}" \
+                "${YELLOW}🌊 请手工执行：sudo usermod -aG $SHARED_USER $CURRENT_USER${RESET}"
         fi
     fi
 
@@ -1851,42 +1895,49 @@ remove_lw_path_entries() {
     grep -v -F -e "$PATH_LINE" -e "# LinuxWave" "$rc" > "$rc.linuxwave.tmp" || true
     cat "$rc.linuxwave.tmp" > "$rc"
     rm -f "$rc.linuxwave.tmp"
-    echo "🌊 Removed LinuxWave PATH entries from $rc"
+    lw_say "🌊 Removed LinuxWave PATH entries from $rc" \
+        "🌊 已从 $rc 移除 LinuxWave 的 PATH 条目"
 }
 
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     # 共享安装：$SHARED_USER 自己的 shell 也要能直接用 wave
     SHARED_RC="$SHARED_HOME/.bashrc"
     if sudo grep -qF "$PATH_LINE" "$SHARED_RC" 2>/dev/null; then
-        echo "🌊 LinuxWave is already in $SHARED_RC."
+        lw_say "🌊 LinuxWave is already in $SHARED_RC." "🌊 $SHARED_RC 里已经有 LinuxWave 了。"
     elif sudo test -f "$SHARED_RC"; then
-        echo "🌊 Adding LinuxWave to PATH in $SHARED_RC..."
+        lw_say "🌊 Adding LinuxWave to PATH in $SHARED_RC..." \
+            "🌊 正在把 LinuxWave 写进 $SHARED_RC 的 PATH……"
         printf '\n# LinuxWave\n%s\n' "$PATH_LINE" | lw_privileged tee -a "$SHARED_RC" > /dev/null
         lw_privileged chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
     elif printf '# LinuxWave\n%s\n' "$PATH_LINE" | lw_privileged tee "$SHARED_RC" > /dev/null; then
         # 账号预存、或 /etc/skel 里没有 .bashrc 时文件不存在。
         # 建出来，否则这个账号反而跑不了 wave，而安装却自称已完成。
-        echo "🌊 Created $SHARED_RC with LinuxWave in PATH."
+        lw_say "🌊 Created $SHARED_RC with LinuxWave in PATH." \
+            "🌊 已创建 $SHARED_RC，并在其中写好 LinuxWave 的 PATH。"
         lw_privileged chmod 644 "$SHARED_RC"
         lw_privileged chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
     else
-        echo -e "${YELLOW}🌊 Warning: could not write $SHARED_RC.${RESET}"
-        echo "🌊 '$SHARED_USER' can add it manually with:"
+        lw_say "${YELLOW}🌊 Warning: could not write $SHARED_RC.${RESET}" \
+            "${YELLOW}🌊 警告：没能写入 $SHARED_RC。${RESET}"
+        lw_say "🌊 '$SHARED_USER' can add it manually with:" \
+            "🌊 '$SHARED_USER' 可以手工加上这一行："
         echo "     echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc"
     fi
 fi
 
 if grep -qF "$PATH_LINE" "$RC_FILE" 2>/dev/null; then
-    echo "🌊 LinuxWave is already in your PATH."
+    lw_say "🌊 LinuxWave is already in your PATH." "🌊 你的 PATH 里已经有 LinuxWave 了。"
 else
     if grep -qF "$INSTALL_DIR" "$RC_FILE" 2>/dev/null; then
         # 旧版本（如 2.1.0）的 PATH 行只有 bin/ 与 lib/，升级后需要换成含 links/ 的新行
-        echo "🌊 Replacing old LinuxWave PATH entry in $RC_FILE..."
+        lw_say "🌊 Replacing old LinuxWave PATH entry in $RC_FILE..." \
+            "🌊 正在替换 $RC_FILE 里旧版 LinuxWave 的 PATH 条目……"
         grep -v -F "export PATH=\"$INSTALL_DIR" "$RC_FILE" > "$RC_FILE.linuxwave.tmp" || true
         cat "$RC_FILE.linuxwave.tmp" > "$RC_FILE"
         rm -f "$RC_FILE.linuxwave.tmp"
     else
-        echo "🌊 Adding LinuxWave to PATH in $RC_FILE..."
+        lw_say "🌊 Adding LinuxWave to PATH in $RC_FILE..." \
+            "🌊 正在把 LinuxWave 写进 $RC_FILE 的 PATH……"
         echo "" >> "$RC_FILE"
         echo "# LinuxWave" >> "$RC_FILE"
     fi

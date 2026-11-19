@@ -100,6 +100,14 @@ run_case() {
         # selfupdate.sh 的下载走 fetch_to_file（自带重试）；这里给个等价桩
         fetch_to_file() { local url="$1" dest="$2" limit="$3"; run_cmd curl -fsSL --max-time "$limit" -o "$dest" "$url"; }
         port_arch() { echo amd64; }
+        # 输出层桩：安装器把进度信息过 lw_say_err（写 stderr，不污染 stdout 这个返回值通道）
+        # 真实现两种语言都打（当前语言在前），这里照此给桩 —— 英文那行是测试的判据
+        lw_say_err() {
+            printf '%b\n' "$1" >&2
+            [[ -n "${2:-}" && "${2:-}" != "$1" ]] && printf '%b\n' "$2" >&2
+            return 0
+        }
+        lw_say() { printf '%b\n' "${2-$1}"; }
 
         eval "$(sed -n '/^ensure_portable_python() {/,/^}$/p' "$script")"
 

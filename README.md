@@ -49,10 +49,10 @@ LinuxWave is a **package manager** that runs on **Linux**, designed to host comm
 In the terminal, run:
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" && source ~/.bashrc
+curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh | /bin/bash
 ```
 
-(If you are using zsh instead of bash, run ```source ~/.zshrc```)
+(When it finishes, the installer prints the exact command that makes `wave` available in the current terminal.)
 
 **Requirements: Python (3.14 and above), patchelf (for dependency library relocation).**
 
@@ -65,8 +65,7 @@ For scripts and batch use, the installer takes flags so it never waits for input
 bash install.sh --ci
 
 # straight from the repository
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" \
-  -- --ci
+curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh | /bin/bash -s -- --ci
 ```
 
 `--ci` answers the directory menu and the agreement automatically. (This
@@ -80,14 +79,18 @@ used, instead of reading a terminal that may not exist.
 after `=`, as in `--dir-option=5=/opt/mylw`, or just pass the path on its own, as in
 `--dir-option=~/mylw`. Run `install.sh --help` for the list.
 
-> **Fetch with `/bin/bash -c`, and put options after `--`.** Calling `/bin/bash`
-> by absolute path means a tampered `PATH` cannot decide which shell runs the
-> script, and `curl` runs to completion before `bash` executes anything, so a
-> download that fails partway is not executed as it arrives. `--` ends bash's own
-> options, so everything after it reaches the installer. Writing `… --ci`
-> instead makes `--ci` the script name (`$0`), so it is silently dropped and
-> the installer stops at a prompt nobody is watching; the installer warns when it
-> sees an option in `$0`.
+> **About this command.** The installer is streamed directly into `/bin/bash`, so
+> nothing is saved to disk first. Please run it on a reliable network, and avoid
+> pressing `Ctrl-C` while it is working: an interrupted stream stops the install
+> partway. If that happens, simply run the same command again.
+>
+> **Please use this form as written.** Do not rewrite it as
+> `/bin/bash -c "$(curl …)"`: that packs the entire script into a single
+> command-line argument, and Linux refuses any single argument longer than
+> 131 071 bytes (`Argument list too long`) — this installer is already close to
+> that size. Do not pipe it into `sudo bash` either: `sudo` resets the environment
+> (including `PATH` and proxy variables) and bypasses the installer's own
+> privilege handling. To pass options, use `/bin/bash -s -- <options>`.
 
 `uninstall.sh` is scriptable in the same way: `--force` skips both confirmations
 and keeps the `linuxwave` account, while `--remove-user` also deletes that account.
@@ -173,7 +176,7 @@ unattended script never hangs.
 To completely remove LinuxWave from your system, run the following command in your terminal:
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/uninstall.sh)"
+curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/uninstall.sh | /bin/bash
 ```
 
 ## 🌊 Run Packages

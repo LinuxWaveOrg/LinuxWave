@@ -43,10 +43,10 @@ LinuxWave 是 MacWave 的官方 Linux 移植版。从 MacWave 2.0 起，MacWave 
 在终端中运行：
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" && source ~/.bashrc
+curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh | /bin/bash
 ```
 
-（如果你使用的是 zsh 而非 bash，请运行 ```source ~/.zshrc```）
+（安装结束时，安装器会打印出让 `wave` 在当前终端立刻可用的确切命令。）
 
 **环境要求：Linux（x86_64 / arm64）、Python（3.14 及以上）、patchelf（用于依赖库重定位）。**
 
@@ -59,8 +59,7 @@ LinuxWave 是 MacWave 的官方 Linux 移植版。从 MacWave 2.0 起，MacWave 
 bash install.sh --ci
 
 # straight from the repository
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" \
-  -- --ci
+curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh | /bin/bash -s -- --ci
 ```
 
 `--ci` 会自动应答目录菜单与许可协议；当选中的目录需要提权时，它要求免密 sudo
@@ -69,11 +68,14 @@ bash install.sh --ci
 （1-5）；自定义项要附上路径，写成 `--dir-option=5=/opt/mylw`，或直接写 `--dir-option=~/mylw`。
 完整参数列表可运行 `install.sh --help` 查看。
 
-> **用 `/bin/bash -c` 取脚本，并把参数放在 `--` 之后。** 以绝对路径调用 `/bin/bash`，
-> 意味着被篡改的 `PATH` 无法决定由哪个 shell 来执行脚本；而 `curl` 会先跑完，`bash` 才开始
-> 执行，因此下载中途失败的内容不会被一边到达一边执行。`--` 会结束 bash 自身的选项，其后的
-> 一切都原样传给安装器。若写成 `… --ci`，`--ci` 就成了脚本名（`$0`）而被静默丢弃，
-> 安装器会停在一个没人看的提示符上；当安装器发现 `$0` 里是选项时会给出警告。
+> **关于这条命令。** 安装脚本被直接送进 `/bin/bash` 执行，不会先存到磁盘。请在网络状况良好时
+> 运行，并在执行过程中尽量避免按 `Ctrl-C`：数据流一旦中断，安装就会停在半途，重新执行同一条
+> 命令即可。
+>
+> **请照这一种写法用。** 不要改成 `/bin/bash -c "$(curl …)"`：那会把整份脚本塞进命令行里的
+> 一个参数，而 Linux 对单个参数有 131 071 字节的上限（`Argument list too long`），这个安装
+> 脚本已经接近那个尺寸。也不要接 `sudo bash`：`sudo` 会重置环境（`PATH` 与代理变量都在其中），
+> 并绕过安装器自己的提权流程与提示。需要传参数时写成 `/bin/bash -s -- <参数>`。
 
 `uninstall.sh` 同样支持脚本化调用：`--force` 跳过两次确认并**保留** `linuxwave` 账号；
 `--remove-user` 则会连同该账号一并删除。两者同时使用即可完全无人值守地卸载。
@@ -143,7 +145,7 @@ wave install jq -sS         # 同上，但保留错误（行首不带 🌊，方
 要从系统中彻底移除 LinuxWave，请在终端中运行以下命令：
 
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/uninstall.sh)"
+curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/uninstall.sh | /bin/bash
 ```
 
 ## 🌊 运行软件包
