@@ -455,3 +455,4 @@ BASE_DIR/links/                  wget@1.25.0，以及每个依赖 bin/ 下可执
 
 卸载时的逆向动作见「六、关键机制」第 3、4 条：先删自己的标记，某个依赖再无任何标记时才连同它的依赖一起级联删除。
 | `signature_test.sh` | 信任链回归（14 项）：`lw_check_integrity` 的空期望/一致/不一致/严格模式，`lw_verify_latest_signature` 的无公钥/.sig 缺失/签名正确/签名不对（含严格模式），以及 `install.sh` 内置公钥与 `Keys/` 是否同步。验签用临时 RSA 钥 + `file://` URL，全程不联网 |
+| `state_test.sh` | 状态文件与同意记录回归（16 项）：`read_toml_string` 的引号/空白/行尾注释/键名前缀，`agreement_id` 从 `selfupdate.py` 取值与文件缺失，`record_agreement` 的写出、读不到 id 时如实告知且不留空文件、试运行不写，`lw_can_write` 的可写/不可写/试运行不试写 |

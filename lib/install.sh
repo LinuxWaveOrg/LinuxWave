@@ -89,6 +89,79 @@ set -eE
 
 LW_RSA_PUB_TMP=""
 
+read_toml_string() {
+    # read_toml_string <文本> <键> —— 取平铺的字符串值，去掉引号与行尾注释
+    printf '%s\n' "$1" \
+        | sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
+        | head -n 1
+}
+
+LW_WRITE_ERROR=""
+LW_WRITE_ERROR_PATH=""
+
+lw_can_write() {
+    # 能往这个路径里写吗？返回 0 可写 / 1 需要提权 / 2 写不进去但不是权限问题。
+    #
+    # 两步，先「猜」再「问」：
+    #   1. `test -w` —— 权限位与 ACL 的静态判断，够快，能挡住「/opt 属于 root」这类；
+    #   2. 真写一个空文件再删掉 —— 只读挂载、磁盘满、目录带 immutable 标志时
+    #      `test -w` 会说能写而实际写不进去。既然安装第一件事就是往里写，那就先写一次。
+    #
+    # 探针失败分两类，不能一律当成「需要提权」：
+    #   Permission denied → 提权能解决，返回 1；
+    #   其它（只读文件系统、磁盘满…）→ 提权也没用，返回 2 并留下原因，由调用方当场报。
+    #
+    # 不存在的路径沿祖先往上找第一个存在的目录 —— 直接对不存在的路径 test -w 恒为假，
+    # 会让每一次新装都被判定成需要提权。
+    local path="$1" probe errfile reason
+    LW_WRITE_ERROR=""
+    LW_WRITE_ERROR_PATH=""
+    [[ -n "$path" ]] || return 1
+    while [[ ! -e "$path" && "$path" != "/" ]]; do
+        path="$(dirname "$path")"
+    done
+    [[ -d "$path" ]] || return 1
+    [[ -w "$path" ]] || return 1
+
+    # --dry-run 承诺「不写文件」，所以试运行只用上面那步静态判断；
+    # --skip-probe 是用户显式要求跳过这次写探针。
+    if [[ "$CLI_DRY_RUN" == "true" || "$CLI_SKIP_PROBE" == "true" ]]; then
+        return 0
+    fi
+
+    errfile="$(mktemp)"
+    if probe="$(mktemp "$path/.linuxwave-write-probe.XXXXXX" 2>"$errfile")"; then
+        rm -f "$probe" "$errfile"
+        return 0
+    fi
+    reason="$(cat "$errfile" 2>/dev/null)"
+    rm -f "$errfile"
+    case "$reason" in
+        *"Permission denied"*) return 1 ;;
+    esac
+    LW_WRITE_ERROR="$reason"
+    LW_WRITE_ERROR_PATH="$path"
+    return 2
+}
+
+lw_write_state() {
+    # 写一处状态文件之前的统一检查：两个目标都要能写。
+    # 返回 2 直接报错退出（提权解决不了）。
+    local status=0
+    lw_can_write "$1" || status=$?
+    if [[ "$status" -eq 2 ]]; then
+        lw_say_err "${RED_BOLD}🌊 Error: cannot create files in '$LW_WRITE_ERROR_PATH'.${RESET}" \
+            "${RED_BOLD}🌊 错误：无法在 '$LW_WRITE_ERROR_PATH' 里创建文件。${RESET}"
+        lw_say_err "🌊 ${LW_WRITE_ERROR}" "🌊 ${LW_WRITE_ERROR}"
+        lw_say_err "🌊 This is not a privilege problem: sudo would fail the same way." \
+            "🌊 这不是权限问题：提权也会一样失败。"
+        lw_say_err "🌊 Fix the filesystem (read-only mount, full disk, …) or choose another directory." \
+            "🌊 请处理文件系统本身（只读挂载、磁盘已满等），或者换一个目录。"
+        exit 1
+    fi
+    return "$status"
+}
+
 lw_sha256() {
     # 用 openssl：Linux 上不需要额外的 shasum/perl 依赖
     openssl dgst -sha256 -r "$1" 2>/dev/null | awk '{print $1}'
@@ -415,9 +488,9 @@ else
     if [[ -n "$PROBE_DATA" ]]; then
         # 先验签再看字段：签名覆盖的正是下面要读的这份内容。
         lw_verify_latest_signature "$PROBE_DATA" "$PROBE_URL"
-        LINUXWAVE_VERSION="$(printf '%s\n' "$PROBE_DATA" | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
-        LATEST_BRANCH="$(printf '%s\n' "$PROBE_DATA" | sed -n 's/^branch[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
-        EXPECTED_UPDATE_COMMANDS_SHA256="$(printf '%s\n' "$PROBE_DATA" | sed -n 's/^update_commands_sha256[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        LINUXWAVE_VERSION="$(read_toml_string "$PROBE_DATA" version)"
+        LATEST_BRANCH="$(read_toml_string "$PROBE_DATA" branch)"
+        EXPECTED_UPDATE_COMMANDS_SHA256="$(read_toml_string "$PROBE_DATA" update_commands_sha256)"
     fi
 fi
 
@@ -1041,6 +1114,9 @@ else
 fi
 CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
+# 同意记录。selfupdate.py 读的就是这个文件（AGREEMENT_FILE_NAME）；
+# 里面的值来自装好的 lib/selfupdate.py 的 AGREEMENT_ID，安装器不另抄一份。
+AGREEMENT_FILE="$CONFIG_DIR/AGREEMENT.json"
 
 # 中途失败时给出明确指引。刻意**不自动删除**已下载的内容：升级安装时
 # 删掉安装树会把用户原有的可用安装一起毁掉，重跑安装器才是安全的做法。
@@ -1766,6 +1842,41 @@ else
 fi
 
 # ==========================================
+# 同意记录
+# ==========================================
+# 协议标识的唯一来源是装好的 lib/selfupdate.py（AGREEMENT_ID），这里不再抄一份日期：
+# 抄两份必然漂移，而漂移的后果是「以为用户同意过新版协议」。
+
+agreement_id() {
+    local source="$LIB_DIR/selfupdate.py"
+    [[ -f "$source" ]] || return 1
+    sed -n 's/^AGREEMENT_ID = "\([^"]*\)"$/\1/p' "$source" | head -n 1
+}
+
+record_agreement() {
+    local id
+    id="$(agreement_id || true)"
+    if [[ -z "$id" ]]; then
+        lw_say "${YELLOW}🌊 Note: cannot read AGREEMENT_ID from ${LIB_DIR}/selfupdate.py; the acceptance was not recorded.${RESET}" \
+            "${YELLOW}🌊 注意：读不到 ${LIB_DIR}/selfupdate.py 里的 AGREEMENT_ID，本次同意未被记录。${RESET}"
+        return 0
+    fi
+    if [[ "$CLI_DRY_RUN" == "true" ]]; then
+        lw_say "${YELLOW}🌊 Dry run: would record the agreement (\"$id\") in $AGREEMENT_FILE.${RESET}" \
+            "${YELLOW}🌊 试运行：本该把同意（\"$id\"）记进 $AGREEMENT_FILE。${RESET}"
+        return 0
+    fi
+    lw_write_state "$AGREEMENT_FILE" || return 0
+    if ! printf '{\n  "agreement": "%s"\n}\n' "$id" | run_cmd tee "$AGREEMENT_FILE" > /dev/null 2>&1; then
+        lw_say "${YELLOW}🌊 Note: could not record the agreement in $AGREEMENT_FILE.${RESET}" \
+            "${YELLOW}🌊 注意：未能把同意写进 $AGREEMENT_FILE。${RESET}"
+        return 0
+    fi
+    run_cmd chmod 644 "$AGREEMENT_FILE" > /dev/null 2>&1 || true
+    return 0
+}
+
+# ==========================================
 # 许可协议确认
 # ==========================================
 # 必须放在「安装完成」之前：否则先告诉用户已经装好，随后又因为不同意而全部删除。
@@ -1811,6 +1922,8 @@ else
     done
 fi
 if [[ "$agreement" == "yes" ]]; then
+    # CI 的自动同意也要记下来：否则装完再跑 `wave selfupdate` 会卡在协议询问上。
+    record_agreement
     lw_say "${GREEN}You have agreed to the agreement.${RESET}" "${GREEN}已记录你的同意。${RESET}"
 else
     lw_say "${RED_BOLD}You do not agree to the agreement. Installation stopped.${RESET}" \

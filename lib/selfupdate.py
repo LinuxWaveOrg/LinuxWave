@@ -26,6 +26,18 @@ import domains
 import quiet
 from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir, load_base_dir
 
+# -------------------- 同意记录 --------------------
+#
+# 安装器把「用户同意的是哪一版协议」写进配置目录的 AGREEMENT.json，值就是这里的
+# AGREEMENT_ID。CI 装完再跑 `wave selfupdate` 时据此免去再问一次 —— 否则无人值守
+# 的流水线会卡在一个没人看的提示符上。
+#
+# 改协议内容时**必须**同时改 AGREEMENT_ID（用协议生效日期），否则已经同意旧协议
+# 的用户会被当成同意过新的。
+AGREEMENT_ID = "2026-11-19"
+AGREEMENT_FILE_NAME = "AGREEMENT.json"
+
+
 # 版本数据的位置由 domains 决定（LINUXWAVE_SELFUPDATE_DOMAIN 可整体换掉）。
 # 目前仍在 configdata 里，搬到独立的 Selfupdate 仓库后只需改 domains 的默认值。
 VERSION_DATA_URL = f"{domains.selfupdate_domain()}/versiondata/latest_version"
