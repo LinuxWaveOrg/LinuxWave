@@ -118,6 +118,24 @@ bash install.sh --silent --dir-option=4
 > ```
 > 这棵树不能对普通用户可写：它的二进制在系统 `PATH` 上，谁能替换 `links/<名>`，谁就可能让它被
 > 别的账号甚至 root 执行。想要「`wave install` 不带 `sudo`」，请用共享安装（选项 4）。
+
+## 🌊 写脚本时
+
+要让 `wave` 的输出不打搅你的脚本，它用的是与 `curl` 同一套写法：
+
+```bash
+wave install jq -s          # 什么都不打印，退出码是唯一信号
+wave install jq -sS         # 同上，但保留错误（行首不带 🌊，方便 grep）
+```
+
+`-s` 只适用于「有过程可安静」的命令 —— `install`、`upgrade`、`uninstall`、
+`link`、`unlink`、`selfupdate`。给只读命令（`list`、`search`、`info`、
+`linkquery`、`mirror`）加 `-s` 会报错，而不是安静地什么都不做：打印正是这些命令的
+用途。`-s` 优先于 `-v`，两者都可以和其它短旗标合并（`-sX`、`-CsX`）。
+
+询问会被跳过而不是干等：`-s` 下「是否重试下载」按「否」处理，「要卸哪个版本」直接
+取消，所以无人值守的脚本不会卡住。
+
 ## 卸载 LinuxWave
 
 要从系统中彻底移除 LinuxWave，请在终端中运行以下命令：

@@ -26,6 +26,7 @@ RESET = '\033[0m'
 # -------------------- 配置加载 --------------------
 
 import domains
+import quiet
 from configpaths import (
     VERSION_FILE,
     assert_inside,
@@ -211,18 +212,15 @@ def handle_download_args(input_string):
 
     # 1. --skip-ssl 安全询问
     if "--skip-ssl" in flags:
-        print('🌊 You selected --skip-ssl, this will skip SSL certificate verification, which may cause security risks. Are you sure?')
-        try:
-            confirm = input().strip()
-        except (EOFError, KeyboardInterrupt):
-            # 非交互（CI / 脚本里 stdin 是 /dev/null）读不到答复：按拒绝处理，
-            # 也就是不跳过 SSL 校验 —— 缺省往安全的方向倒。
-            confirm = ""
+        quiet.say('🌊 You selected --skip-ssl, this will skip SSL certificate verification, which may cause security risks. Are you sure?')
+        # quiet.ask 在静默模式下不读 stdin 直接返回 None —— 与「读不到答复」
+        # 走同一条分支：不跳过 SSL 校验，缺省往安全的方向倒。
+        confirm = (quiet.ask() or "").strip()
         if confirm in ("Y", "y"):
             config["skip_ssl_verify"] = True
 
-    # 2. verbose 判定
-    if "-v" in flags or "--verbose" in flags:
+    # 2. verbose 判定（静默优先于啰嗦：-s 与 -v 同时给时，-v 不生效）
+    if ("-v" in flags or "--verbose" in flags) and not quiet.is_silent():
         config["verbose"] = True
 
     # 3. 断点续传开关
@@ -321,7 +319,7 @@ def download_file(url, temp_path, config, input_string, display_name):
 
             # 如果服务器不支持续传
             if response.status_code == 200 and existing_size > 0:
-                print(f"{RED_BOLD}🌊 Server does not support resume, restarting download.{RESET}")
+                quiet.say(f"{RED_BOLD}🌊 Server does not support resume, restarting download.{RESET}")
                 existing_size = 0
                 mode = "wb"
 
@@ -331,7 +329,9 @@ def download_file(url, temp_path, config, input_string, display_name):
 
             limit_bps = config["limit_rate"]
 
-            if RICH_AVAILABLE:
+            # 静默（-s / -sS）下不要进度条：它的每一次刷新都直接写终端，
+            # 既不经过 print，也不该算进「只留错误」的那一份输出里。
+            if RICH_AVAILABLE and not quiet.is_silent():
                 console = Console()
                 progress_columns = [
                     TextColumn("[progress.description]{task.description}"),
@@ -378,9 +378,9 @@ def download_file(url, temp_path, config, input_string, display_name):
                         if chunk:
                             f.write(chunk)
                             if config["verbose"]:
-                                print(".", end="", flush=True)
+                                quiet.say(".", end="", flush=True)
                 if config["verbose"]:
-                    print(" ")
+                    quiet.say(" ")
 
             download_success = True
             break
@@ -388,10 +388,14 @@ def download_file(url, temp_path, config, input_string, display_name):
         except (ConnectionError, Timeout) as e:
             # 超时或连接失败：每次都询问是否重试，不再直接放弃
             print(f"{RED_BOLD}🌊 Download failed: {e}{RESET}")
-            print(f"{RED_BOLD}🌊 Do you want to retry? [y/N]: {RESET}")
-
+            quiet.say(f"{RED_BOLD}🌊 Do you want to retry? [y/N]: {RESET}")
             try:
-                retry = input().strip().lower()
+                # 静默（-s / -sS）下没人能回答，quiet.ask 返回 None：按「不重试」
+                # 处理，而不是卡在 input() 上等一个永远不会来的答复。
+                answer = quiet.ask()
+                if answer is None:
+                    raise EOFError
+                retry = answer.strip().lower()
             except KeyboardInterrupt:
                 # Ctrl-C 是「打断」，不是「不想重试」——交给顶层统一报成 interrupted，
                 # 否则这里会打印 "Failed to download package"，把用户打断说成下载失败。
@@ -577,9 +581,9 @@ def handle_install(input_string):
             sys.exit(1)
         ParsePkgVersion = ver_flag
     else:
-        print("🌊 Fetching version info...")
+        quiet.say("🌊 Fetching version info...")
         ParsePkgVersion = fetch_max_version(ParsePkgName, ARCH)
-        print("🌊 Version info fetched successfully.")
+        quiet.say("🌊 Version info fetched successfully.")
 
     # 版本号同样会进 URL 与目录名：`%`、`/`、`..` 这类一律拒绝
     ParsePkgVersion = require_safe_token(ParsePkgVersion, "package version")
@@ -610,7 +614,7 @@ def handle_install(input_string):
         resp = requests.get(pkg_version_url, timeout=domains.timeout_from_env())
         if resp.status_code != 200:
             if config["verbose"]:
-                print(resp.text)
+                quiet.say(resp.text)
             elif resp.status_code == 404:
                 print(f"{RED_BOLD}🌊 Error: Can't find parse package version.\n🌊 If you certain this version is existent, Please contact the administrator.{RESET}")
                 sys.exit(1)
@@ -708,8 +712,7 @@ def handle_install(input_string):
             ['bash', script_path, pkg_info_string, deps_string],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
-        if result.stdout.strip():
-            print(result.stdout.strip())
+        quiet.show(result)
         if result.returncode != 0:
             sys.exit(result.returncode)
     except Exception as e:
@@ -730,7 +733,7 @@ def handle_install(input_string):
         try:
             from linker import link_package
             if link_package(bin_name, ParsePkgVersion):
-                print(f"🌊 Linked {bin_name} -> {bin_name}@{ParsePkgVersion}")
+                quiet.say(f"🌊 Linked {bin_name} -> {bin_name}@{ParsePkgVersion}")
         except Exception as error:
             print(f"{YELLOW}🌊 Warning: could not create the unversioned link ({error}).{RESET}")
 
@@ -740,6 +743,6 @@ if __name__ == "__main__":
         input_string = " ".join(sys.argv[1:])
         handle_install(input_string)
     except KeyboardInterrupt:
-        print("🌊 Operation cancelled by user.")
-        print("🌊 You can use -C to resume the download next time.")
+        quiet.say("🌊 Operation cancelled by user.")
+        quiet.say("🌊 You can use -C to resume the download next time.")
         sys.exit(130)

@@ -120,10 +120,14 @@ def print_custom_help():
         (_flag("--skip-ssl"), "Skip SSL certificate verification (insecure)"),
         (_flag("--limit-rate", "<string>"), "Limit download speed (e.g., 200K, 1M, 5M)"),
         (_flag("--ver", "<string>"), "Install a specific version (install only; --ver=1.0 works too)"),
+        (_flag("-s, --silent"), "Print nothing; the exit code is the only signal (like curl -s)"),
+        (_flag("-S, --show-error"), "With -s, keep the error output (like curl -sS); errors carry no 🌊"),
         (_flag("LINUXWAVE_PIP_INDEX"), "Env var. pip index for the Python deps; default pypi.org/simple"),
     ])
     _print_note("--proxy also applies to the child processes (curl, pip), "
                 "e.g. http://127.0.0.1:8080.")
+    _print_note("-s only applies to commands that have progress to quiet: "
+                "install, upgrade, uninstall, link, unlink, selfupdate.")
 
     _print_section("Special Flags", [
         (_command("wave install", (" <pkgname>@<version>", YELLOW)),

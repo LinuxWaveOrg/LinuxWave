@@ -169,6 +169,11 @@ jobs:
         run: |
           bash scripts/linksafety_test.sh
 
+      # -s 什么都不输出、-sS 只留错误且不带 🌊、只读命令上给 -s 要报错
+      - name: Run quiet-mode test
+        run: |
+          bash scripts/quiet_test.sh
+
       - name: Run dependency chain test
         run: |
           bash scripts/deps_test.sh

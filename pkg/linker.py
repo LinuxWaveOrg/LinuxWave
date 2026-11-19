@@ -21,6 +21,7 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
+import quiet
 from configpaths import assert_inside, assert_inside_entry, load_base_dir, require_safe_token
 
 
@@ -200,17 +201,17 @@ def handle_link_command(input_string=""):
         create_link(name, chosen)
 
         if previous == chosen:
-            print(f"🌊 {name} is already linked to {chosen}")
+            quiet.say(f"🌊 {name} is already linked to {chosen}")
         elif previous:
-            print(f"🌊 {name}: re-linked from {previous} to {chosen}")
+            quiet.say(f"🌊 {name}: re-linked from {previous} to {chosen}")
         else:
-            print(f"🌊 {name}: linked to {chosen}")
+            quiet.say(f"🌊 {name}: linked to {chosen}")
         linked += 1
 
     if linked:
-        print(f"{GREEN}🌊 Linked {linked} package(s).{RESET}")
+        quiet.say(f"{GREEN}🌊 Linked {linked} package(s).{RESET}")
     else:
-        print(f"{YELLOW}🌊 Nothing was linked.{RESET}")
+        quiet.say(f"{YELLOW}🌊 Nothing was linked.{RESET}")
     sys.exit(0)
 
 
@@ -222,7 +223,7 @@ def handle_unlink_command(input_string=""):
     if everything:
         targets = unversioned_links()
         if not targets:
-            print(f"{YELLOW}🌊 No unversioned links found, nothing to unlink.{RESET}")
+            quiet.say(f"{YELLOW}🌊 No unversioned links found, nothing to unlink.{RESET}")
             sys.exit(0)
 
     if not targets:
@@ -233,15 +234,15 @@ def handle_unlink_command(input_string=""):
     for target in targets:
         name = target.partition("@")[0]
         if remove_link(name):
-            print(f"🌊 {name}: unlinked")
+            quiet.say(f"🌊 {name}: unlinked")
             unlinked += 1
         else:
-            print(f"{YELLOW}🌊 Warning: {name} has no unversioned link, skipping.{RESET}")
+            quiet.say(f"{YELLOW}🌊 Warning: {name} has no unversioned link, skipping.{RESET}")
 
     if unlinked:
-        print(f"{GREEN}🌊 Unlinked {unlinked} package(s).{RESET}")
+        quiet.say(f"{GREEN}🌊 Unlinked {unlinked} package(s).{RESET}")
     else:
-        print(f"{YELLOW}🌊 Nothing was unlinked.{RESET}")
+        quiet.say(f"{YELLOW}🌊 Nothing was unlinked.{RESET}")
     sys.exit(0)
 
 

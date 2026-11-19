@@ -62,7 +62,9 @@ bash install.sh --silent --dir-option=4
   -- --silent --dir-option=4
 ```
 
-`--silent` (`-S`) answers the directory menu and the agreement automatically. It
+`--silent` (`-S`) answers the directory menu and the agreement automatically. (This
+is the **installer's** flag; `wave` has its own `-s / --silent`, which prints nothing
+at all — see *Scripting* below.) It
 needs passwordless sudo, or root, when the chosen directory requires privilege.
 Without `--dir-option`, it takes menu entry `1` (`~/.local/linuxwave`) and prints
 which default it used, instead of reading a terminal that may not exist.
@@ -137,6 +139,27 @@ on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
 > `PATH`, so anyone who can replace `links/<name>` may get it executed by another
 > account, or by root. If you want plain `wave install` without `sudo`, use the
 > shared install (option 4).
+
+## 🌊 Scripting
+
+`wave` speaks the same dialect as `curl` when you need its output to stay out of
+the way:
+
+```bash
+wave install jq -s          # print nothing; the exit code is the only signal
+wave install jq -sS         # same, but keep the errors (no 🌊 prefix, so grep works)
+```
+
+`-s` only applies to commands that have progress to quiet — `install`, `upgrade`,
+`uninstall`, `link`, `unlink`, `selfupdate`. Giving it to a read-only command
+(`list`, `search`, `info`, `linkquery`, `mirror`) is an error rather than a silent
+no-op: printing is what those commands are for. `-s` beats `-v`, and both may be
+combined with other short flags (`-sX`, `-CsX`).
+
+Prompts are skipped rather than left waiting: with `-s`, a "retry the download?"
+question is answered "no" and a "which version?" question cancels, so an
+unattended script never hangs.
+
 ## Uninstall LinuxWave
 
 To completely remove LinuxWave from your system, run the following command in your terminal:

@@ -124,8 +124,7 @@ def delete_depender_tag(dep_path, depender_kind, depender_name, depender_version
     result = run_tagger(action, str(dep_path), depender_name, depender_version)
 
     if result.returncode != 0:
-        if result.stdout.strip():
-            print(result.stdout.strip())
+        quiet.show(result)
         if result.stderr.strip():
             print(result.stderr.strip())
         sys.exit(result.returncode)
@@ -178,7 +177,7 @@ def remove_dependency(artifact_dir, depender_kind, depender_name, depender_versi
         visited.add(resolved_dep)
 
         # 已无任何依赖者：先清软链接与它自己的依赖，再删除目录
-        print(f"🌊 Removing orphan dependency {dep_name}@{dep_version}...")
+        quiet.say(f"🌊 Removing orphan dependency {dep_name}@{dep_version}...")
 
         remove_dep_links(dep_path)
 
@@ -215,7 +214,7 @@ def remove_one(pkg_name, version, installed):
     else:
         display_path = target
 
-    print(f"🌊 Deleting {to_tilde(display_path)}...")
+    quiet.say(f"🌊 Deleting {to_tilde(display_path)}...")
 
     if target.is_dir():
         # 先按 _DEPS 清理依赖标记与孤立依赖，再删除整个目录
@@ -267,10 +266,10 @@ def refresh_link(pkg_name):
     if versions:
         version = get_max_version(versions)
         linker.create_link(pkg_name, version)
-        print(f"🌊 Unversioned link now points to {pkg_name}@{version}")
+        quiet.say(f"🌊 Unversioned link now points to {pkg_name}@{version}")
     else:
         linker.remove_link(pkg_name)
-        print(f"🌊 Removed the unversioned link for {pkg_name}")
+        quiet.say(f"🌊 Removed the unversioned link for {pkg_name}")
 
 
 def broken_link_target(pkg_name, versions):
@@ -302,25 +301,29 @@ def uninstall_versions(pkg_name, versions, keep_link=False):
     if changed:
         save_installed(installed)
     if keep_link:
-        print(f"🌊 Left the unversioned link for {pkg_name} untouched")
+        quiet.say(f"🌊 Left the unversioned link for {pkg_name} untouched")
     else:
         refresh_link(pkg_name)
     for version in versions:
-        print(f"{GREEN}🌊 Successfully uninstalled {pkg_name}@{version}.{RESET}")
+        quiet.say(f"{GREEN}🌊 Successfully uninstalled {pkg_name}@{version}.{RESET}")
 
 
 # -------------------- 交互式选择 --------------------
 
 def select_versions(pkg_name, versions):
-    print(f"🌊 Multiple versions found for '{pkg_name}':")
+    quiet.say(f"🌊 Multiple versions found for '{pkg_name}':")
     for index, version in enumerate(versions, start=1):
-        print(f"🌊 - {index}. {version}")
-    print("🌊 Enter the number(s) to uninstall (separate by @ or space):")
+        quiet.say(f"🌊 - {index}. {version}")
+    quiet.say("🌊 Enter the number(s) to uninstall (separate by @ or space):")
 
     try:
-        choice = input().strip()
+        # 静默（-s / -sS）下没人能回答：按「取消」处理，不卡在 input() 上。
+        choice = quiet.ask()
+        if choice is None:
+            raise EOFError
+        choice = choice.strip()
     except (EOFError, KeyboardInterrupt):
-        print("🌊 Operation cancelled by user.")
+        quiet.say("🌊 Operation cancelled by user.")
         sys.exit(130)
 
     selected = []
@@ -331,7 +334,7 @@ def select_versions(pkg_name, versions):
         selected.append(versions[int(token) - 1])
 
     if not selected:
-        print("🌊 Nothing selected.")
+        quiet.say("🌊 Nothing selected.")
         sys.exit(0)
 
     return selected
@@ -396,7 +399,7 @@ def handle_uninstall(input_string):
         sys.exit(1)
 
     for version in missing:
-        print(f"{YELLOW}🌊 Warning: {pkg_name}@{version} is not installed, skipping.{RESET}")
+        quiet.say(f"{YELLOW}🌊 Warning: {pkg_name}@{version} is not installed, skipping.{RESET}")
 
     uninstall_versions(pkg_name, targets, keep_link)
 
