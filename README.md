@@ -62,14 +62,14 @@ For scripts and batch use, the installer takes flags so it never waits for input
 
 ```
 # script already on disk
-bash install.sh --silent
+bash install.sh --ci
 
 # straight from the repository
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" \
-  -- --silent
+  -- --ci
 ```
 
-`--silent` (`-S`) answers the directory menu and the agreement automatically. (This
+`--ci` answers the directory menu and the agreement automatically. (This
 is the **installer's** flag; `wave` has its own `-s / --silent`, which prints nothing
 at all — see *Scripting* below.) It
 needs passwordless sudo, or root, when the chosen directory requires privilege.
@@ -84,8 +84,8 @@ after `=`, as in `--dir-option=5=/opt/mylw`, or just pass the path on its own, a
 > by absolute path means a tampered `PATH` cannot decide which shell runs the
 > script, and `curl` runs to completion before `bash` executes anything, so a
 > download that fails partway is not executed as it arrives. `--` ends bash's own
-> options, so everything after it reaches the installer. Writing `… --silent`
-> instead makes `--silent` the script name (`$0`), so it is silently dropped and
+> options, so everything after it reaches the installer. Writing `… --ci`
+> instead makes `--ci` the script name (`$0`), so it is silently dropped and
 > the installer stops at a prompt nobody is watching; the installer warns when it
 > sees an option in `$0`.
 

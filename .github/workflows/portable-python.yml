@@ -159,7 +159,7 @@ jobs:
           set -euo pipefail
           target="$HOME/.linuxwave-e2e"
           # 用户级安装目录：不需要 sudo、不动 /etc，也不会污染 runner 的其它部分
-          bash lib/install.sh --silent --dir-option="$target"
+          bash lib/install.sh --ci --dir-option="$target"
 
       - name: The entry point must not need python3 on PATH
         run: |

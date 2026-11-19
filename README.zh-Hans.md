@@ -56,14 +56,14 @@ LinuxWave 是 MacWave 的官方 Linux 移植版。从 MacWave 2.0 起，MacWave 
 
 ```
 # script already on disk
-bash install.sh --silent
+bash install.sh --ci
 
 # straight from the repository
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" \
-  -- --silent
+  -- --ci
 ```
 
-`--silent`（`-S`）会自动应答目录菜单与许可协议；当选中的目录需要提权时，它要求免密 sudo
+`--ci` 会自动应答目录菜单与许可协议；当选中的目录需要提权时，它要求免密 sudo
 或以 root 运行。不带 `--dir-option` 时它会选用推荐默认项 `1`（`/home/linuxwave/.linuxwave`，
 共享安装）并说明用的是哪个默认值，而不是去读一个可能并不存在的终端。`--dir-option=N` 免菜单直接选定第 `N` 项
 （1-5）；自定义项要附上路径，写成 `--dir-option=5=/opt/mylw`，或直接写 `--dir-option=~/mylw`。
@@ -72,7 +72,7 @@ bash install.sh --silent
 > **用 `/bin/bash -c` 取脚本，并把参数放在 `--` 之后。** 以绝对路径调用 `/bin/bash`，
 > 意味着被篡改的 `PATH` 无法决定由哪个 shell 来执行脚本；而 `curl` 会先跑完，`bash` 才开始
 > 执行，因此下载中途失败的内容不会被一边到达一边执行。`--` 会结束 bash 自身的选项，其后的
-> 一切都原样传给安装器。若写成 `… --silent`，`--silent` 就成了脚本名（`$0`）而被静默丢弃，
+> 一切都原样传给安装器。若写成 `… --ci`，`--ci` 就成了脚本名（`$0`）而被静默丢弃，
 > 安装器会停在一个没人看的提示符上；当安装器发现 `$0` 里是选项时会给出警告。
 
 `uninstall.sh` 同样支持脚本化调用：`--force` 跳过两次确认并**保留** `linuxwave` 账号；

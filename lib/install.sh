@@ -217,6 +217,67 @@ YELLOW='\033[33m'
 RESET='\033[0m'
 
 # ==========================================
+# 输出层：双语与呈现
+# ==========================================
+# 所有面向用户的话都过 lw_say / lw_say_err，于是三件事只在这两个函数里做一次：
+#   1. 双语：lw_say "<English>" "<中文>"；只给一句时两种语言共用。
+#   2. --raw：去掉颜色与行首的 🌊，给日志与 grep 用（逐行过滤，见 lw_raw_filter）。
+#   3. --zh：说中文。默认英文 —— 终端不一定有中文 locale，反过来会让英文用户
+#      看到乱码。
+CLI_RAW=false
+LW_LANG="en"
+_PRESENTATION_APPLIED=false
+
+lw_raw() { [[ "${CLI_RAW:-false}" == "true" ]]; }
+
+# 逐行读 stdin，去掉行首的 🌊 与紧跟的一个空格。
+# 🌊 用 printf 的字节写：$'\U0001F30A' 这种写法要 bash 4.2+，这里不赌。
+lw_raw_filter() {
+    local line item
+    item="$(printf '\xf0\x9f\x8c\x8a')"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            "$item "*) line="${line#"$item "}" ;;
+            "$item"*) line="${line#"$item"}" ;;
+        esac
+        printf '%s\n' "$line"
+    done
+}
+
+lw_say() {
+    # 只给一句时两种语言都用它（`${2-$1}`）—— 空行、纯符号行、中英同文的命令行
+    # 都属于这种。注意是 `-` 不是 `:-`：显式传了空串（英文有下半句、中文已经说完）
+    # 必须打空行，不能回退到英文。
+    if [[ "$LW_LANG" == "zh" ]]; then
+        printf '%b\n' "${2-$1}"
+    else
+        printf '%b\n' "$1"
+    fi
+}
+
+lw_say_err() {
+    # 错误信息两边都打：英文给日志与工单，中文给用户。语言只决定先后。
+    if [[ "$LW_LANG" == "zh" ]]; then
+        printf '%b\n' "${2-$1}" >&2
+        [[ -n "${1:-}" && "${1:-}" != "${2:-}" ]] && printf '%b\n' "$1" >&2
+    else
+        printf '%b\n' "$1" >&2
+        [[ -n "${2:-}" && "${2:-}" != "${1:-}" ]] && printf '%b\n' "$2" >&2
+    fi
+}
+
+# --raw 要关颜色、改输出管道，而参数是在后面才解析的。所以解析完之后再调一次，
+# 把「还没开始说话之前」就已经定了的事补上。
+lw_apply_presentation() {
+    [[ "$_PRESENTATION_APPLIED" == "true" ]] && return 0
+    if lw_raw; then
+        RED_BOLD=""; GREEN=""; YELLOW=""; RESET=""
+        exec > >(lw_raw_filter) 2>&1
+    fi
+    _PRESENTATION_APPLIED=true
+}
+
+# ==========================================
 # 版本号与代码分支（从 configdata 读取，不写死在脚本里）
 # ==========================================
 #
@@ -375,12 +436,53 @@ print_shared_install_notes() {
 # 命令行参数（批量 / 脚本化安装）
 # ==========================================
 
-CLI_SILENT=false
+CLI_CI=false
+CLI_DRY_RUN=false
+CLI_PRINT_USAGE=false
+CLI_SKIP_PROBE=false
 CLI_DIR_OPTION=""
 CLI_CUSTOM_DIR=""
 
 usage() {
-    cat <<'USAGE_EOF'
+    if [[ "$LW_LANG" == "zh" ]]; then
+        cat <<'USAGE_EOF'
+LinuxWave 安装器
+
+用法：
+  install.sh [选项]
+
+选项：
+  --install-python-from-source
+                         自带解释器从数据里记的上游地址取，不走我们自己的仓库
+                         （与 `wave selfupdate` 同名旗标含义一致）
+      --ci               全程无交互：目录菜单与协议都自动应答。不带 --dir-option
+                         时用推荐默认项（第 1 项，共享安装），那一项需要 sudo。
+                         需要提权时要求免密 sudo 或 root。
+      --dry-run          只打印将要做什么，不建目录、不下载、不写配置
+      --raw              纯文本输出：无颜色、无 🌊，给日志与脚本用
+      --zh               说中文（默认英文）
+      --print-usage      打印本用法后继续执行（--help 则打印后停止）
+      --skip-probe       不访问自更新探针（离线/自建镜像时用）
+      --dir-option=N     免菜单直接选第 N 项（1-5）
+      --dir-option=DIR   直接用 DIR 作为安装目录（等同 --dir-option=5=DIR）
+      --dir-option=N=DIR 选第 N 项；自定义项（5）用 DIR 作为安装目录
+  -h, --help             显示本帮助后停止
+
+目录菜单：
+  1. /home/linuxwave/.linuxwave（共享安装，全机可用）[推荐]
+  2. ~/.local/linuxwave
+  3. /opt/linuxwave
+  4. /usr/local/linuxwave
+  5. 其它（自行输入目录）
+
+示例：
+  install.sh --ci                      # 推荐：共享安装
+  install.sh --ci --dir-option=2       # 用户级安装，不需要 sudo
+  install.sh --ci --dir-option=5=/opt/mylw
+  install.sh --ci --dir-option=/opt/mylw
+USAGE_EOF
+    else
+        cat <<'USAGE_EOF'
 LinuxWave installer
 
 Usage:
@@ -390,17 +492,22 @@ Options:
   --install-python-from-source
                          Fetch the bundled Python from its upstream URL instead of
                          our own store (same meaning as on `wave selfupdate`)
-  -S, --silent            No interaction at all: the directory menu and the
-                          agreement are answered automatically. Without
-                          --dir-option the recommended default (option 1, the
-                          shared install) is used, and that one needs sudo.
-                          Requires passwordless sudo when privilege is needed.
-      --dir-option=N      Pick menu entry N without prompting (1-5).
-      --dir-option=DIR    Use DIR as the installation directory (shorthand for
-                          --dir-option=5=DIR).
-      --dir-option=N=DIR  Pick entry N and, for the custom entry (5), use DIR
-                          as the installation directory.
-  -h, --help              Show this help.
+      --ci               No interaction at all: the directory menu and the
+                         agreement are answered automatically. Without
+                         --dir-option the recommended default (option 1, the
+                         shared install) is used, and that one needs sudo.
+                         Requires passwordless sudo when privilege is needed.
+      --dry-run          Print what would be done; create/download/write nothing
+      --raw              Plain output: no colours, no 🌊, for logs and scripts
+      --zh               Speak Chinese (English by default)
+      --print-usage      Print this usage, then continue (--help stops instead)
+      --skip-probe       Do not contact the self-update probe (offline mirrors)
+      --dir-option=N     Pick menu entry N without prompting (1-5).
+      --dir-option=DIR   Use DIR as the installation directory (shorthand for
+                         --dir-option=5=DIR).
+      --dir-option=N=DIR Pick entry N and, for the custom entry (5), use DIR
+                         as the installation directory.
+  -h, --help             Show this help and stop.
 
 Directory menu:
   1. /home/linuxwave/.linuxwave (shared, all users) [recommended]
@@ -410,17 +517,41 @@ Directory menu:
   5. other (enter custom directory)
 
 Examples:
-  install.sh --silent                     # recommended: shared install
-  install.sh --silent --dir-option=2      # user-level, no sudo
-  install.sh --silent --dir-option=5=/opt/mylw
-  install.sh --silent --dir-option=/opt/mylw
+  install.sh --ci                      # recommended: shared install
+  install.sh --ci --dir-option=2       # user-level, no sudo
+  install.sh --ci --dir-option=5=/opt/mylw
+  install.sh --ci --dir-option=/opt/mylw
 USAGE_EOF
+    fi
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --ci|--CI)
+            # 无人值守：目录菜单与协议都自动应答。旧名字 -S/--silent 在 4.0
+            # 废弃（大版本允许破坏性变更），见到就说清楚该换成什么。
+            CLI_CI=true
+            ;;
         -S|--silent)
-            CLI_SILENT=true
+            lw_say_err "${RED_BOLD}🌊 Error: -S/--silent was renamed to --ci in 4.0.${RESET}" \
+                "${RED_BOLD}🌊 错误：-S/--silent 在 4.0 已更名为 --ci。${RESET}"
+            lw_say_err "🌊 Use: install.sh --ci …" "🌊 请改用：install.sh --ci …"
+            exit 1
+            ;;
+        --dry-run|--DRY-RUN)
+            CLI_DRY_RUN=true
+            ;;
+        --raw|--RAW)
+            CLI_RAW=true
+            ;;
+        --zh|--ZH)
+            LW_LANG="zh"
+            ;;
+        --print-usage|--PRINT-USAGE)
+            CLI_PRINT_USAGE=true
+            ;;
+        --skip-probe|--SKIP-PROBE)
+            CLI_SKIP_PROBE=true
             ;;
         --install-python-from-source)
             # 自带的解释器一律从数据里的上游地址取，不试我们自己托管的副本
@@ -442,22 +573,31 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            echo -e "${RED_BOLD}🌊 Error: unknown option '$1'. Try --help.${RESET}" >&2
+            lw_say_err "${RED_BOLD}🌊 Error: unknown option '$1'. Try --help.${RESET}" \
+                "${RED_BOLD}🌊 错误：未知选项 '$1'。可试 --help。${RESET}"
             exit 1
             ;;
     esac
     shift
 done
 
+# --raw / --zh 要在真正开始说话之前生效：后面每一行都经 lw_say。
+lw_apply_presentation
+if [[ "$CLI_PRINT_USAGE" == "true" ]]; then
+    usage
+fi
+
 # 用 `/bin/bash -c "$(curl ...)"` 运行时，第一个参数会变成脚本名（$0）：
-#   /bin/bash -c "$(curl ...)" --silent    ← --silent 成了 $0，被静默丢掉
+#   /bin/bash -c "$(curl ...)" --ci        ← --ci 成了 $0，被静默丢掉
 # 正确写法是加 `--`：它结束 bash 自身的选项，后面的参数才会传进脚本。
 # 这里明确提示，避免「静默模式没生效、脚本却卡在交互上」。
 case "$0" in
     --) ;;              # 正确写法：`--` 之后的参数才轮到脚本
     -*)
-        echo -e "${YELLOW}🌊 Warning: '$0' was treated as the script name, not as an option.${RESET}" >&2
-        echo -e "${YELLOW}🌊 Put installer options after '--', which ends bash's own options.${RESET}" >&2
+        lw_say_err "${YELLOW}🌊 Warning: '$0' was treated as the script name, not as an option.${RESET}" \
+            "${YELLOW}🌊 警告：'$0' 被当成了脚本名，而不是选项。${RESET}"
+        lw_say_err "${YELLOW}🌊 Put installer options after '--', which ends bash's own options.${RESET}" \
+            "${YELLOW}🌊 请把选项写在 '--' 之后：'--' 会结束 bash 自身的选项。${RESET}"
         echo "🌊   /bin/bash -c \"\$(curl -fsSL <url>)\" -- $0" >&2
         ;;
 esac
@@ -474,9 +614,10 @@ if [[ -n "$CLI_DIR_OPTION" && ! "$CLI_DIR_OPTION" =~ ^[1-5]$ ]]; then
     exit 1
 fi
 
-if [[ "$CLI_DIR_OPTION" == "5" && -z "$CLI_CUSTOM_DIR" && "$CLI_SILENT" == "true" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: --dir-option=5 needs a directory in --silent mode.${RESET}" >&2
-    echo -e "${RED_BOLD}🌊 Use --dir-option=5=/some/dir${RESET}" >&2
+if [[ "$CLI_DIR_OPTION" == "5" && -z "$CLI_CUSTOM_DIR" && "$CLI_CI" == "true" ]]; then
+    lw_say_err "${RED_BOLD}🌊 Error: --dir-option=5 needs a directory in --ci mode.${RESET}" \
+        "${RED_BOLD}🌊 错误：--ci 模式下 --dir-option=5 必须附上目录。${RESET}"
+    lw_say_err "${RED_BOLD}🌊 Use --dir-option=5=/some/dir${RESET}" "${RED_BOLD}🌊 请写成 --dir-option=5=/some/dir${RESET}"
     exit 1
 fi
 
@@ -516,14 +657,16 @@ SHARED_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 # ==========================================
 
 print_dir_menu() {
-    echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
-    echo "1. $SHARED_BASE_DIR (shared, all users) [recommended]"
-    echo "2. ~/.local/linuxwave"
-    echo "3. /opt/linuxwave"
-    echo "4. /usr/local/linuxwave"
-    echo "5. other (enter custom directory)"
+    lw_say "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}" \
+        "${YELLOW}你想把 LinuxWave 装到哪里？（输入序号）${RESET}"
+    lw_say "1. $SHARED_BASE_DIR (shared, all users) [recommended]" \
+        "1. $SHARED_BASE_DIR（共享安装，全机可用）[推荐]"
+    lw_say "2. ~/.local/linuxwave" "2. ~/.local/linuxwave"
+    lw_say "3. /opt/linuxwave" "3. /opt/linuxwave"
+    lw_say "4. /usr/local/linuxwave" "4. /usr/local/linuxwave"
+    lw_say "5. other (enter custom directory)" "5. 其它（自行输入目录）"
     echo ""
-    echo -e "${YELLOW}Enter your choice:${RESET}"
+    lw_say "${YELLOW}Enter your choice:${RESET}" "${YELLOW}请输入序号：${RESET}"
 }
 
 # 目录菜单对 x86_64 与 arm64 完全一致。
@@ -532,11 +675,12 @@ print_dir_menu() {
 if [[ -n "$CLI_DIR_OPTION" ]]; then
     choice="$CLI_DIR_OPTION"
     echo "🌊 Directory option: $choice (from --dir-option)"
-elif [[ "$CLI_SILENT" == "true" ]]; then
-    # --silent 承诺「自动应答目录菜单」，那就明确地选默认项并说出来，
+elif [[ "$CLI_CI" == "true" ]]; then
+    # --ci 承诺「自动应答目录菜单」，那就明确地选默认项并说出来，
     # 而不是去读一个可能不存在的终端、再靠「无效输入」兜底。
     choice="1"
-    echo "🌊 --silent without --dir-option: using the recommended default, $SHARED_BASE_DIR (shared)"
+    lw_say "🌊 --ci without --dir-option: using the recommended default, $SHARED_BASE_DIR (shared)" \
+        "🌊 --ci 未指定 --dir-option：使用推荐默认项 $SHARED_BASE_DIR（共享安装）"
 else
     MENU_ATTEMPTS=3
     menu_try=0
@@ -552,14 +696,18 @@ else
             *)
                 menu_try=$((menu_try + 1))
                 echo ""
-                echo -e "${RED_BOLD}🌊 Error: '$choice' is not one of 1-5.${RESET}" >&2
+                lw_say_err "${RED_BOLD}🌊 Error: '$choice' is not one of 1-5.${RESET}" \
+                    "${RED_BOLD}🌊 错误：'$choice' 不是 1-5 之一。${RESET}"
                 # 绝不静默换到别的目录：那等于把东西装到用户没选的位置。
                 if [[ "$menu_try" -ge "$MENU_ATTEMPTS" ]]; then
-                    echo -e "${RED_BOLD}🌊 Gave up after $MENU_ATTEMPTS attempts. Nothing was installed.${RESET}" >&2
-                    echo "🌊 Re-run the installer, or pass --dir-option=N (see --help)." >&2
+                    lw_say_err "${RED_BOLD}🌊 Gave up after $MENU_ATTEMPTS attempts. Nothing was installed.${RESET}" \
+                        "${RED_BOLD}🌊 已尝试 $MENU_ATTEMPTS 次，放弃。什么都没装。${RESET}"
+                    lw_say_err "🌊 Re-run the installer, or pass --dir-option=N (see --help)." \
+                        "🌊 请重新运行安装器，或用 --dir-option=N（见 --help）。"
                     exit 1
                 fi
-                echo -e "${YELLOW}🌊 Please enter a number from 1 to 5.${RESET}" >&2
+                lw_say_err "${YELLOW}🌊 Please enter a number from 1 to 5.${RESET}" \
+                    "${YELLOW}🌊 请输入 1 到 5 之间的序号。${RESET}"
                 echo ""
                 ;;
         esac
@@ -623,6 +771,15 @@ else
 fi
 
 run_cmd() {
+    # 试运行只把命令打出来：建目录、写配置、删旧文件都经由这里。
+    if [[ "${CLI_DRY_RUN:-false}" == "true" ]]; then
+        if [[ "$NEED_SUDO" == "true" ]]; then
+            lw_say "${YELLOW}    sudo $*${RESET}"
+        else
+            lw_say "${YELLOW}    $*${RESET}"
+        fi
+        return 0
+    fi
     if [[ "$NEED_SUDO" == "true" ]]; then
         mw_sudo "$@"
     else
@@ -631,11 +788,13 @@ run_cmd() {
 }
 
 if [[ "$NEED_SUDO" == "true" ]]; then
-    if [[ "$CLI_SILENT" == "true" ]]; then
-        # --silent 不能停下来等密码：要么已经是 root，要么已有免密 sudo
+    if [[ "$CLI_CI" == "true" ]]; then
+        # --ci 不能停下来等密码：要么已经是 root，要么已有免密 sudo
         if ! sudo -n true 2> /dev/null; then
-            echo -e "${RED_BOLD}🌊 Error: this install needs privilege, but --silent cannot ask for a password.${RESET}" >&2
-            echo -e "${RED_BOLD}🌊 Run as root, or configure passwordless sudo for the install user.${RESET}" >&2
+            lw_say_err "${RED_BOLD}🌊 Error: this install needs privilege, but --ci cannot ask for a password.${RESET}" \
+                "${RED_BOLD}🌊 错误：本次安装需要提权，而 --ci 不能停下来问密码。${RESET}"
+            lw_say_err "${RED_BOLD}🌊 Run as root, or configure passwordless sudo for the install user.${RESET}" \
+                "${RED_BOLD}🌊 请以 root 运行，或为安装用户配置免密 sudo。${RESET}"
             exit 1
         fi
     else
@@ -762,13 +921,17 @@ install_failed() {
     if [[ -n "${MW_FAILURE_HANDLED:-}" ]]; then
         return 0
     fi
-    echo "" >&2
-    echo -e "${RED_BOLD}🌊 Installation did not finish (exit $code).${RESET}" >&2
-    echo "🌊 Nothing was removed. Files already downloaded may be left in:" >&2
-    echo "     ${BASE_DIR:-<not chosen yet>}" >&2
-    echo "     ${CONFIG_DIR:-<not chosen yet>}" >&2
-    echo "🌊 Fix the cause (network, permissions, disk space) and run the installer again;" >&2
-    echo "🌊 a repeated install overwrites what it downloaded and is safe to rerun." >&2
+    lw_say_err "" ""
+    lw_say_err "${RED_BOLD}🌊 Installation did not finish (exit $code).${RESET}" \
+        "${RED_BOLD}🌊 安装未完成（退出码 $code）。${RESET}"
+    lw_say_err "🌊 Nothing was removed. Files already downloaded may be left in:" \
+        "🌊 没有删除任何内容。已下载的文件可能留在："
+    lw_say_err "     ${BASE_DIR:-<not chosen yet>}" "     ${BASE_DIR:-<尚未选定>}"
+    lw_say_err "     ${CONFIG_DIR:-<not chosen yet>}" "     ${CONFIG_DIR:-<尚未选定>}"
+    lw_say_err "🌊 Fix the cause (network, permissions, disk space) and run the installer again;" \
+        "🌊 请排除原因（网络、权限、磁盘空间）后重新运行安装器；"
+    lw_say_err "🌊 a repeated install overwrites what it downloaded and is safe to rerun." \
+        "🌊 重复安装会覆盖已下载的内容，可以安全重跑。"
 }
 trap install_failed ERR
 
@@ -990,7 +1153,7 @@ while IFS=$'\t' read -r repo_path local_path executable; do
     for attempt in $(seq 1 "$DOWNLOAD_ATTEMPTS"); do
         if [[ "$attempt" -eq 1 ]]; then
             # --silent 只省交互，过程仍要留痕；逐文件进度才在 silent 下压掉
-            if [[ "$CLI_SILENT" != "true" ]]; then
+            if [[ "$CLI_CI" != "true" ]]; then
                 echo "🌊 Downloading $repo_path..."
             fi
         else
@@ -1532,9 +1695,10 @@ fi
 # 必须放在「安装完成」之前：否则先告诉用户已经装好，随后又因为不同意而全部删除。
 
 echo ""
-echo -e "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.org).${RESET}"
-if [[ "$CLI_SILENT" == "true" ]]; then
-    echo "🌊 --silent: the agreement is accepted automatically."
+lw_say "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.org).${RESET}" \
+    "${YELLOW}使用前请先阅读用户协议（见 https://linuxwave.org 页面底部）。${RESET}"
+if [[ "$CLI_CI" == "true" ]]; then
+    lw_say "🌊 --ci: the agreement is accepted automatically." "🌊 --ci：自动接受用户协议。"
     agreement="yes"
 else
     # 应答归一化：去空白、转小写后再判断。空 / y / yes → 同意，n / no → 拒绝，
@@ -1544,7 +1708,8 @@ else
     _agreement_tries=0
     while [[ -z "$agreement" ]]; do
         _agreement_tries=$((_agreement_tries + 1))
-        echo -e "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}"
+        lw_say "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}" \
+            "${YELLOW}你是否已阅读并同意该协议？[Y/n]${RESET}"
         _answer=""
         read -r _answer < /dev/tty || _answer=""
         _answer="${_answer//[[:space:]]/}"
@@ -1558,23 +1723,26 @@ else
                 ;;
             *)
                 if [[ "$_agreement_tries" -ge 3 ]]; then
-                    echo -e "${YELLOW}Unrecognized answer, treating it as \"no\".${RESET}" >&2
+                    lw_say_err "${YELLOW}Unrecognized answer, treating it as \"no\".${RESET}" \
+                        "${YELLOW}无法识别的回答，按「不同意」处理。${RESET}"
                     agreement="no"
                 else
-                    echo -e "${YELLOW}Please answer y (agree) or n (do not agree).${RESET}" >&2
+                    lw_say_err "${YELLOW}Please answer y (agree) or n (do not agree).${RESET}" \
+                        "${YELLOW}请回答 y（同意）或 n（不同意）。${RESET}"
                 fi
                 ;;
         esac
     done
 fi
 if [[ "$agreement" == "yes" ]]; then
-    echo -e "${GREEN}You have agreed to the agreement.${RESET}"
+    lw_say "${GREEN}You have agreed to the agreement.${RESET}" "${GREEN}已记录你的同意。${RESET}"
 else
-    echo -e "${RED_BOLD}You do not agree to the agreement. Installation stopped.${RESET}"
+    lw_say "${RED_BOLD}You do not agree to the agreement. Installation stopped.${RESET}" \
+        "${RED_BOLD}你未同意该协议，安装已停止。${RESET}"
     if [[ "$TREE_PREEXISTED" == "0" ]]; then
         # 回滚要连 rc 里的 PATH 一起清掉，否则会留下指向已删除目录的一行。
         # 这里不写死 sudo：用户级安装全程无需提权，回滚也不该突然要密码。
-        echo -e "${RED_BOLD}🌊 Cleaning up downloaded files...${RESET}"
+        lw_say "${RED_BOLD}🌊 Cleaning up downloaded files...${RESET}" "${RED_BOLD}🌊 正在清理已下载的文件……${RESET}"
         run_cmd rm -rf "$BASE_DIR"
         run_cmd rm -rf "$CONFIG_DIR"
         remove_lw_path_entries "$RC_FILE"
@@ -1589,12 +1757,14 @@ kept = [line for line in rc_file.read_text().splitlines()
         if line.strip() != "# LinuxWave" and line != path_line]
 rc_file.write_text("\n".join(kept) + ("\n" if kept else ""))
 PYEOF
-            echo "🌊 Removed LinuxWave PATH entries from $SHARED_HOME/.bashrc"
+            lw_say "🌊 Removed LinuxWave PATH entries from $SHARED_HOME/.bashrc" \
+                "🌊 已从 $SHARED_HOME/.bashrc 移除 LinuxWave 的 PATH 条目"
         fi
-        echo -e "${RED_BOLD}🌊 All files have been deleted.${RESET}"
+        lw_say "${RED_BOLD}🌊 All files have been deleted.${RESET}" "${RED_BOLD}🌊 所有文件已删除。${RESET}"
     else
         # 升级覆盖时这棵树本来就是用户的，不能替人删。
-        echo -e "${YELLOW}🌊 Existing installation left untouched; run the installer again to continue.${RESET}"
+        lw_say "${YELLOW}🌊 Existing installation left untouched; run the installer again to continue.${RESET}" \
+            "${YELLOW}🌊 已有安装保持原样，重新运行安装器可继续。${RESET}"
     fi
     exit 1
 fi
