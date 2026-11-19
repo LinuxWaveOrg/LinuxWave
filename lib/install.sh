@@ -4,6 +4,10 @@
 # This script downloads wave.py, installs dependencies, and configures PATH.
 # Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 
+set -eE
+set -u
+set -o pipefail
+
 # ==========================================
 # 平台闸门：LinuxWave 只装 Linux
 # ==========================================
