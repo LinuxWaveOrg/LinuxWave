@@ -22,6 +22,8 @@ Linux (x86_64 / arm64)
 
 LinuxWave 是 MacWave 的官方 Linux 移植版。从 MacWave 2.0 起，MacWave 主线不再支持 Linux，LinuxWave 承接了这部分支持。它运行在 Linux（x86_64 / arm64）上，是一个为 Linux 软件开发者托管常用软件包的**包管理器**。
 
+> **定位是补充，不是取代。** 和 Linuxbrew 一样，LinuxWave 只负责发行版包管理器没提供、或者版本太旧的常用开发软件；系统自带的 `apt` / `dnf` / `pacman` 依旧是装系统组件、库和驱动的地方。两者并存而不互相接管：LinuxWave 不安装、不升级、也不删除任何由发行版管理的包，除自己那棵安装树、配置目录和 shell 启动文件之外不写别处。
+
 ## 🌊 为什么选择 LinuxWave
 
 1. **轻量化设计，节约磁盘空间。** 采用安装脚本拉取文件的安装方式代替 clone，节约你的磁盘空间。

@@ -3,6 +3,8 @@
 面向 Linux 软件开发者的包管理器，主要托管面向 Linux 的预编译软件包。
 技术栈：Python + Shell。
 
+**定位：补充而非取代。** 与 Linuxbrew 一样，LinuxWave 只提供发行版包管理器没有、或版本太旧的常用开发软件，`apt` / `dnf` / `pacman` 仍然负责系统组件、库与驱动。LinuxWave 不安装、不升级、不删除任何由发行版管理的包，除自己的安装树、配置目录与 shell 启动文件外不写别处；因此它可以和发行版包管理器长期共存，也可以随时整个删掉。
+
 - `main` 与版本分支（当前的 `3.0`）：程序代码，两者保持同步
 - `configdata` 分支：版本数据（`versiondata/latest_version` 给 `wave selfupdate` 判断有没有新版本，`versiondata/files_info` 是要更新的文件清单）
 - `infosource` 分支：纯数据（包与依赖的元数据、下载地址、校验值）

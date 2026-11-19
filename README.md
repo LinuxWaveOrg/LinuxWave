@@ -22,6 +22,13 @@ Linux (x86_64 / arm64)
 
 LinuxWave is a **package manager** that runs on **Linux**, designed to host common software packages for Linux software developers.
 
+> **A supplement, not a replacement.** Like Linuxbrew, LinuxWave only covers the common
+> developer software your distro's package manager does not ship, or ships too old.
+> `apt` / `dnf` / `pacman` remain the way to install system components, libraries and
+> drivers. The two coexist without taking each other over: LinuxWave never installs,
+> upgrades or removes a distro-managed package, and writes nowhere except its own
+> install tree, its config directory and your shell startup file.
+
 ## 🌊 Why LinuxWave
 
 1. **Lightweight design, saves disk space.** Files are pulled by the install script instead of cloning the repository, saving your disk space.
