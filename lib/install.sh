@@ -5,6 +5,17 @@
 # Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 
 # ==========================================
+# 平台闸门：LinuxWave 只装 Linux
+# ==========================================
+# 先判平台再判 bash 版本：macOS 自带 bash 3.2，若先报「请升级 bash」，用户会去
+# 装个新 bash，然后发现这个安装器根本不是给他用的。macOS 上该用的是 MacWave。
+if [[ "$(uname -s 2>/dev/null)" != "Linux" ]]; then
+    echo "🌊 Error: this installer is for Linux; this system is $(uname -s 2>/dev/null)." >&2
+    echo "🌊 On macOS use MacWave instead: https://github.com/MacWaveOrg/MacWave" >&2
+    exit 1
+fi
+
+# ==========================================
 # 解释器版本闸门
 # ==========================================
 # 下面用到 bash 4.4 的展开（${var,,} 之类）。3.x 不会报错，只会静默算出错误
@@ -17,7 +28,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
     echo "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION." >&2
-    echo "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash   macOS: brew install bash" >&2
+    echo "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash" >&2
     exit 1
 fi
 
@@ -760,6 +771,14 @@ install_failed() {
     echo "🌊 a repeated install overwrites what it downloaded and is safe to rerun." >&2
 }
 trap install_failed ERR
+
+# 回滚（拒绝协议时）要不要删这棵树，取决于它是不是**本次**安装建出来的：
+# 覆盖升级时 BASE_DIR 本来就在，删掉它等于毁掉用户已有的安装。
+# 必须在第一条 mkdir 之前判断。
+TREE_PREEXISTED=0
+if [[ -d "$BASE_DIR" || -d "$CONFIG_DIR" ]]; then
+    TREE_PREEXISTED=1
+fi
 
 run_cmd mkdir -p "$INSTALL_DIR"
 run_cmd mkdir -p "$LINKS_DIR"
@@ -1516,23 +1535,51 @@ echo ""
 echo -e "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.org).${RESET}"
 if [[ "$CLI_SILENT" == "true" ]]; then
     echo "🌊 --silent: the agreement is accepted automatically."
-    agreement="y"
+    agreement="yes"
 else
-    echo -e "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}"
-    read -r agreement < /dev/tty
+    # 应答归一化：去空白、转小写后再判断。空 / y / yes → 同意，n / no → 拒绝，
+    # 其它输入重新提问，连续 3 次无法识别就按拒绝处理 —— 不能把「没听懂」
+    # 当成「同意」，也不能无限问下去。
+    agreement=""
+    _agreement_tries=0
+    while [[ -z "$agreement" ]]; do
+        _agreement_tries=$((_agreement_tries + 1))
+        echo -e "${YELLOW}Have you read and agreed to the agreement? [Y/n]${RESET}"
+        _answer=""
+        read -r _answer < /dev/tty || _answer=""
+        _answer="${_answer//[[:space:]]/}"
+        _answer="${_answer,,}"
+        case "$_answer" in
+            ""|y|yes)
+                agreement="yes"
+                ;;
+            n|no)
+                agreement="no"
+                ;;
+            *)
+                if [[ "$_agreement_tries" -ge 3 ]]; then
+                    echo -e "${YELLOW}Unrecognized answer, treating it as \"no\".${RESET}" >&2
+                    agreement="no"
+                else
+                    echo -e "${YELLOW}Please answer y (agree) or n (do not agree).${RESET}" >&2
+                fi
+                ;;
+        esac
+    done
 fi
-if [[ -z "$agreement" || "$agreement" =~ ^[Yy]$ ]]; then
+if [[ "$agreement" == "yes" ]]; then
     echo -e "${GREEN}You have agreed to the agreement.${RESET}"
 else
-    # 回滚要连 rc 里的 PATH 一起清掉，否则会留下指向已删除目录的一行。
-    # 这里不写死 sudo：用户级安装全程无需提权，回滚也不该突然要密码。
     echo -e "${RED_BOLD}You do not agree to the agreement. Installation stopped.${RESET}"
-    echo -e "${RED_BOLD}🌊 Cleaning up downloaded files...${RESET}"
-    run_cmd rm -rf "$BASE_DIR"
-    run_cmd rm -rf "$CONFIG_DIR"
-    remove_lw_path_entries "$RC_FILE"
-    if [[ "$SHARED_INSTALL" == "true" ]] && sudo test -f "$SHARED_HOME/.bashrc"; then
-        sudo python3 - "$SHARED_HOME/.bashrc" "$PATH_LINE" << 'PYEOF'
+    if [[ "$TREE_PREEXISTED" == "0" ]]; then
+        # 回滚要连 rc 里的 PATH 一起清掉，否则会留下指向已删除目录的一行。
+        # 这里不写死 sudo：用户级安装全程无需提权，回滚也不该突然要密码。
+        echo -e "${RED_BOLD}🌊 Cleaning up downloaded files...${RESET}"
+        run_cmd rm -rf "$BASE_DIR"
+        run_cmd rm -rf "$CONFIG_DIR"
+        remove_lw_path_entries "$RC_FILE"
+        if [[ "$SHARED_INSTALL" == "true" ]] && sudo test -f "$SHARED_HOME/.bashrc"; then
+            sudo python3 - "$SHARED_HOME/.bashrc" "$PATH_LINE" << 'PYEOF'
 import sys
 from pathlib import Path
 
@@ -1542,9 +1589,13 @@ kept = [line for line in rc_file.read_text().splitlines()
         if line.strip() != "# LinuxWave" and line != path_line]
 rc_file.write_text("\n".join(kept) + ("\n" if kept else ""))
 PYEOF
-        echo "🌊 Removed LinuxWave PATH entries from $SHARED_HOME/.bashrc"
+            echo "🌊 Removed LinuxWave PATH entries from $SHARED_HOME/.bashrc"
+        fi
+        echo -e "${RED_BOLD}🌊 All files have been deleted.${RESET}"
+    else
+        # 升级覆盖时这棵树本来就是用户的，不能替人删。
+        echo -e "${YELLOW}🌊 Existing installation left untouched; run the installer again to continue.${RESET}"
     fi
-    echo -e "${RED_BOLD}🌊 All files have been deleted.${RESET}"
     exit 1
 fi
 

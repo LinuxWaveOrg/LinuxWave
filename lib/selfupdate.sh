@@ -10,6 +10,15 @@
 set -e
 
 # ==========================================
+# 平台闸门：LinuxWave 只装 Linux
+# ==========================================
+if [[ "$(uname -s 2>/dev/null)" != "Linux" ]]; then
+    echo "🌊 Error: this updater is for Linux; this system is $(uname -s 2>/dev/null)." >&2
+    echo "🌊 On macOS use MacWave instead: https://github.com/MacWaveOrg/MacWave" >&2
+    exit 1
+fi
+
+# ==========================================
 # 解释器版本闸门
 # ==========================================
 # 下面用到 bash 4.4 的展开（${var,,} 之类）。3.x 不会报错，只会静默算出错误

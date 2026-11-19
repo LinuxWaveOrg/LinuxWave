@@ -19,6 +19,15 @@ if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) ))
     exit 1
 fi
 
+# ==========================================
+# 平台闸门：LinuxWave 只装 Linux
+# ==========================================
+if [[ "$(uname -s 2>/dev/null)" != "Linux" ]]; then
+    echo "🌊 Error: this uninstaller is for Linux; this system is $(uname -s 2>/dev/null)." >&2
+    echo "🌊 On macOS use MacWave instead: https://github.com/MacWaveOrg/MacWave" >&2
+    exit 1
+fi
+
 # -------------------- 测试根（隔离） --------------------
 # LINUXWAVE_TEST 指向一个目录时，把它当作 /：HOME 和所有系统路径都挂到它下面，
 # 整条链路都落在那个目录里，完全不碰真实系统。
