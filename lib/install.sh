@@ -4,6 +4,23 @@
 # This script downloads wave.py, installs dependencies, and configures PATH.
 # Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)"
 
+# ==========================================
+# 解释器版本闸门
+# ==========================================
+# 下面用到 bash 4.4 的展开（${var,,} 之类）。3.x 不会报错，只会静默算出错误
+# 结果，所以门槛必须立在最前面。
+# `-z $BASH_VERSION` 那半句同时挡住 `sh install.sh` / dash：否则脚本会跑到一半
+# 才炸在 [[ 上，报错还看不出真正原因。
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "🌊 Error: run the installer with bash, not sh." >&2
+    exit 1
+fi
+if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
+    echo "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION." >&2
+    echo "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash   macOS: brew install bash" >&2
+    exit 1
+fi
+
 # -------------------- 测试根（隔离） --------------------
 # LINUXWAVE_TEST 指向一个目录时，把它当作 /：HOME 和所有系统路径都挂到它下面，
 # 整条链路都落在那个目录里，完全不碰真实系统。
@@ -82,7 +99,7 @@ mw_domain() {
         exit 1
     fi
 
-    scheme="$(printf '%s' "$scheme" | tr '[:upper:]' '[:lower:]')"
+    scheme="${scheme,,}"
     case "$scheme" in
         https|file) printf '%s\n' "$value"; return 0 ;;
     esac
@@ -95,7 +112,7 @@ mw_domain() {
             \[*\]*) host="${authority#[}"; host="${host%%]*}" ;;
             *)     host="${authority%%:*}" ;;
         esac
-        host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
+        host="${host,,}"
         case "$host" in
             127.0.0.1|localhost|::1) printf '%s\n' "$value"; return 0 ;;
         esac

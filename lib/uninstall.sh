@@ -2,6 +2,23 @@
 # LinuxWave Uninstaller
 # 卸载 LinuxWave 及清理环境配置
 
+# ==========================================
+# 解释器版本闸门
+# ==========================================
+# 下面用到 bash 4.4 的展开（${var,,} 之类）。3.x 不会报错，只会静默算出错误
+# 结果，所以门槛必须立在最前面。
+# `-z $BASH_VERSION` 那半句同时挡住 `sh uninstall.sh` / dash：否则脚本会跑到一半
+# 才炸在 [[ 上，报错还看不出真正原因。
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "🌊 Error: run this with bash, not sh." >&2
+    exit 1
+fi
+if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
+    echo "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION." >&2
+    echo "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash   macOS: brew install bash" >&2
+    exit 1
+fi
+
 # -------------------- 测试根（隔离） --------------------
 # LINUXWAVE_TEST 指向一个目录时，把它当作 /：HOME 和所有系统路径都挂到它下面，
 # 整条链路都落在那个目录里，完全不碰真实系统。
@@ -132,7 +149,7 @@ else
         exit 1
     fi
     echo
-    if [[ -n "$REPLY" && ! "$REPLY" =~ ^[Yy]$ ]]; then
+    if [[ -n "$REPLY" && "${REPLY,,}" != "y" ]]; then
         echo "🌊 Uninstall cancelled."
         exit 0
     fi
@@ -309,7 +326,7 @@ if [[ "$SHARED_DETECTED" == "true" ]] && id "$SHARED_USER" > /dev/null 2>&1; the
         echo -e "\033[1;31mAlso remove the '$SHARED_USER' user? [y/N]\033[0m"
         read -n 1 -r < /dev/tty
         echo
-        if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+        if [[ "${REPLY,,}" == "y" ]]; then
             remove_shared_user || REMOVE_USER_FAILED=true
         else
             echo "🌊 Kept the '$SHARED_USER' user. Remove it later with:"
