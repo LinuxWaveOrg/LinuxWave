@@ -364,7 +364,8 @@ Options:
                          our own store (same meaning as on `wave selfupdate`)
   -S, --silent            No interaction at all: the directory menu and the
                           agreement are answered automatically. Without
-                          --dir-option the default (option 1) is used.
+                          --dir-option the recommended default (option 1, the
+                          shared install) is used, and that one needs sudo.
                           Requires passwordless sudo when privilege is needed.
       --dir-option=N      Pick menu entry N without prompting (1-5).
       --dir-option=DIR    Use DIR as the installation directory (shorthand for
@@ -374,15 +375,15 @@ Options:
   -h, --help              Show this help.
 
 Directory menu:
-  1. ~/.local/linuxwave
-  2. /opt/linuxwave
-  3. /usr/local/linuxwave
-  4. /home/linuxwave/.linuxwave (shared, all users)
+  1. /home/linuxwave/.linuxwave (shared, all users) [recommended]
+  2. ~/.local/linuxwave
+  3. /opt/linuxwave
+  4. /usr/local/linuxwave
   5. other (enter custom directory)
 
 Examples:
-  install.sh --silent --dir-option=4
-  install.sh -S --dir-option=1
+  install.sh --silent                     # recommended: shared install
+  install.sh --silent --dir-option=2      # user-level, no sudo
   install.sh --silent --dir-option=5=/opt/mylw
   install.sh --silent --dir-option=/opt/mylw
 USAGE_EOF
@@ -473,7 +474,7 @@ ARCH=$(uname -m)
 echo "🌊 Detected architecture: $ARCH"
 
 # ==========================================
-# 共享安装（x86_64 选项 4 / arm64 选项 3）相关常量
+# 共享安装（菜单推荐项，选项 1）相关常量
 # ==========================================
 
 SHARED_INSTALL=false
@@ -488,10 +489,10 @@ SHARED_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 
 print_dir_menu() {
     echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
-    echo "1. ~/.local/linuxwave"
-    echo "2. /opt/linuxwave"
-    echo "3. /usr/local/linuxwave"
-    echo "4. $SHARED_BASE_DIR (shared, all users)"
+    echo "1. $SHARED_BASE_DIR (shared, all users) [recommended]"
+    echo "2. ~/.local/linuxwave"
+    echo "3. /opt/linuxwave"
+    echo "4. /usr/local/linuxwave"
     echo "5. other (enter custom directory)"
     echo ""
     echo -e "${YELLOW}Enter your choice:${RESET}"
@@ -507,7 +508,7 @@ elif [[ "$CLI_SILENT" == "true" ]]; then
     # --silent 承诺「自动应答目录菜单」，那就明确地选默认项并说出来，
     # 而不是去读一个可能不存在的终端、再靠「无效输入」兜底。
     choice="1"
-    echo "🌊 --silent without --dir-option: using the default, \$HOME/.local/linuxwave"
+    echo "🌊 --silent without --dir-option: using the recommended default, $SHARED_BASE_DIR (shared)"
 else
     MENU_ATTEMPTS=3
     menu_try=0
@@ -539,17 +540,17 @@ fi
 
 case "$choice" in
     1)
-        BASE_DIR="$HOME/.local/linuxwave"
-        ;;
-    2)
-        BASE_DIR="$SYS_ROOT/opt/linuxwave"
-        ;;
-    3)
-        BASE_DIR="$SYS_ROOT/usr/local/linuxwave"
-        ;;
-    4)
         SHARED_INSTALL=true
         BASE_DIR="$SHARED_BASE_DIR"
+        ;;
+    2)
+        BASE_DIR="$HOME/.local/linuxwave"
+        ;;
+    3)
+        BASE_DIR="$SYS_ROOT/opt/linuxwave"
+        ;;
+    4)
+        BASE_DIR="$SYS_ROOT/usr/local/linuxwave"
         ;;
     5)
         if [[ -n "$CLI_CUSTOM_DIR" ]]; then

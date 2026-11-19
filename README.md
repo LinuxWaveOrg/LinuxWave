@@ -55,19 +55,20 @@ For scripts and batch use, the installer takes flags so it never waits for input
 
 ```
 # script already on disk
-bash install.sh --silent --dir-option=4
+bash install.sh --silent
 
 # straight from the repository
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" \
-  -- --silent --dir-option=4
+  -- --silent
 ```
 
 `--silent` (`-S`) answers the directory menu and the agreement automatically. (This
 is the **installer's** flag; `wave` has its own `-s / --silent`, which prints nothing
 at all — see *Scripting* below.) It
 needs passwordless sudo, or root, when the chosen directory requires privilege.
-Without `--dir-option`, it takes menu entry `1` (`~/.local/linuxwave`) and prints
-which default it used, instead of reading a terminal that may not exist.
+Without `--dir-option`, it takes the recommended menu entry `1`
+(`/home/linuxwave/.linuxwave`, the shared install) and prints which default it
+used, instead of reading a terminal that may not exist.
 `--dir-option=N` picks menu entry `N` (1-5); for the custom entry, append the path
 after `=`, as in `--dir-option=5=/opt/mylw`, or just pass the path on its own, as in
 `--dir-option=~/mylw`. Run `install.sh --help` for the list.
@@ -93,10 +94,10 @@ Add both for a fully unattended removal.
 ## 🌊 Download Directory 
 Installed binaries are stored in (options):    
 ```
-1. ~/.local/linuxwave
-2. /opt/linuxwave
-3. /usr/local/linuxwave
-4. /home/linuxwave/.linuxwave (shared, all users)
+1. /home/linuxwave/.linuxwave (shared, all users) [recommended]
+2. ~/.local/linuxwave
+3. /opt/linuxwave
+4. /usr/local/linuxwave
 5. Custom
 ```
 Config file is stored in (a system-level install always takes priority):
@@ -104,7 +105,7 @@ Config file is stored in (a system-level install always takes priority):
 1. /etc/linuxwave_config          system-level install (needs sudo)
 2. ~/.config/linuxwave_config     user-level install (no sudo)
 ```
-A shared install (option 4) always uses `/etc/linuxwave_config`, so every user
+A shared install (option 1, recommended) always uses `/etc/linuxwave_config`, so every user
 on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
 `sudo` once; the `linuxwave` account is created automatically if missing.
 
@@ -138,7 +139,7 @@ on the machine resolves the same install. It needs `patchelf`, Python 3.14+ and
 > The tree must not be writable by a normal user: its binaries sit on the system
 > `PATH`, so anyone who can replace `links/<name>` may get it executed by another
 > account, or by root. If you want plain `wave install` without `sudo`, use the
-> shared install (option 4).
+> shared install (option 1, recommended).
 
 ## 🌊 Scripting
 

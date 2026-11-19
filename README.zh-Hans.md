@@ -54,16 +54,16 @@ LinuxWave 是 MacWave 的官方 Linux 移植版。从 MacWave 2.0 起，MacWave 
 
 ```
 # script already on disk
-bash install.sh --silent --dir-option=4
+bash install.sh --silent
 
 # straight from the repository
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/install.sh)" \
-  -- --silent --dir-option=4
+  -- --silent
 ```
 
 `--silent`（`-S`）会自动应答目录菜单与许可协议；当选中的目录需要提权时，它要求免密 sudo
-或以 root 运行。不带 `--dir-option` 时它会选用默认项 `1`（`~/.local/linuxwave`）并说明
-用的是哪个默认值，而不是去读一个可能并不存在的终端。`--dir-option=N` 免菜单直接选定第 `N` 项
+或以 root 运行。不带 `--dir-option` 时它会选用推荐默认项 `1`（`/home/linuxwave/.linuxwave`，
+共享安装）并说明用的是哪个默认值，而不是去读一个可能并不存在的终端。`--dir-option=N` 免菜单直接选定第 `N` 项
 （1-5）；自定义项要附上路径，写成 `--dir-option=5=/opt/mylw`，或直接写 `--dir-option=~/mylw`。
 完整参数列表可运行 `install.sh --help` 查看。
 
@@ -82,10 +82,10 @@ bash install.sh --silent --dir-option=4
 ## 🌊 下载目录
 已安装的二进制文件存储于（可选）：    
 ```
-1. ~/.local/linuxwave
-2. /opt/linuxwave
-3. /usr/local/linuxwave
-4. /home/linuxwave/.linuxwave (shared, all users)
+1. /home/linuxwave/.linuxwave (shared, all users) [recommended]
+2. ~/.local/linuxwave
+3. /opt/linuxwave
+4. /usr/local/linuxwave
 5. Custom
 ```
 配置文件存储于（系统级安装始终优先）：
@@ -93,7 +93,7 @@ bash install.sh --silent --dir-option=4
 1. /etc/linuxwave_config          system-level install (needs sudo)
 2. ~/.config/linuxwave_config     user-level install (no sudo)
 ```
-共享安装（选项 4）始终使用 `/etc/linuxwave_config`，以保证全机所有用户解析到同一个安装。
+共享安装（选项 1，推荐项）始终使用 `/etc/linuxwave_config`，以保证全机所有用户解析到同一个安装。
 它需要 `patchelf`、Python 3.14+，以及一次性提供 `sudo`；若 `linuxwave` 账号不存在会自动创建。
 
 > **共享安装是组共享的（Linuxbrew 式）。** 安装树归 `linuxwave` 组，运行安装器的人自动入组，
@@ -117,7 +117,7 @@ bash install.sh --silent --dir-option=4
 > sudo /opt/linuxwave/lib/wave install <包名>
 > ```
 > 这棵树不能对普通用户可写：它的二进制在系统 `PATH` 上，谁能替换 `links/<名>`，谁就可能让它被
-> 别的账号甚至 root 执行。想要「`wave install` 不带 `sudo`」，请用共享安装（选项 4）。
+> 别的账号甚至 root 执行。想要「`wave install` 不带 `sudo`」，请用共享安装（选项 1，推荐项）。
 
 ## 🌊 写脚本时
 

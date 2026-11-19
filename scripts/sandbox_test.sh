@@ -21,7 +21,7 @@
 # 且必须以**非 root** 用户运行（要用 unshare -r 把自己的 uid 映射成命名空间里的 0）。
 #
 # 已知限制：发行版一般没装 newuidmap，一个命名空间里只能映射调用者自己的那个 uid，
-# 所以选项 4 没法真的建出一个不同 uid 的账号。这里改成「预置一个已存在的 linuxwave
+# 所以选项 1（共享安装）没法真的建出一个不同 uid 的账号。这里改成「预置一个已存在的 linuxwave
 # 账号，直接复用被映射的 uid」——除了 useradd 那一行，其余流程都真实执行。
 # 同理，sudo / loginctl / systemctl 用替身：命名空间内本就是 uid 0，且真去调
 # loginctl 会碰到宿主 systemd 的状态。
@@ -172,14 +172,14 @@ scenario_install_dirs() {
             "$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' \
                 "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version" | head -n 1)"
         check "--dir-option=$opt 写入了 PATH" "$(count_in /root/.bashrc "$dir")" "1"
-    done <<< "1 /root/.local/linuxwave /root/.config/linuxwave_config ~/.local/linuxwave
-2 /opt/linuxwave /etc/linuxwave_config /opt/linuxwave
-3 /usr/local/linuxwave /etc/linuxwave_config /usr/local/linuxwave
+    done <<< "2 /root/.local/linuxwave /root/.config/linuxwave_config ~/.local/linuxwave
+3 /opt/linuxwave /etc/linuxwave_config /opt/linuxwave
+4 /usr/local/linuxwave /etc/linuxwave_config /usr/local/linuxwave
 5 /srv/mylw /etc/linuxwave_config /srv/mylw"
 
     # 用户级安装不该碰 /etc
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     rc=$?
     check "用户级安装成功" "$rc" "0"
     check "用户级安装不写 /etc/linuxwave_config" \
@@ -228,7 +228,7 @@ scenario_agreement() {
     echo "========== 3. 许可协议：顺序与拒绝后的回滚 =========="
 
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     local n_agree n_done
     n_agree=$(grep -n "Please read the agreement" "$OUT" | head -1 | cut -d: -f1)
     n_done=$(grep -n "Installation complete" "$OUT" | head -1 | cut -d: -f1)
@@ -258,7 +258,7 @@ scenario_mid_failure() {
     local rc
     mv "$victim" "$victim.off"
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     rc=$?
     check "中途失败时退出码非 0" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)" "yes"
     contains "失败时说明安装未完成" "$OUT" "Installation did not finish"
@@ -270,7 +270,7 @@ scenario_mid_failure() {
     mv "$victim.off" "$victim"
 
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     check "修好后重跑可自愈" "$?" "0"
     check "自愈后源码文件数 25" "$(source_file_count /root/.local/linuxwave)" "25"
     check "正常安装不误报失败指引" "$(count_in "$OUT" "did not finish")" "0"
@@ -282,7 +282,7 @@ scenario_uninstall_confirm() {
 
     # 5.1 无终端：必须拒绝，不能把 EOF 当成同意
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     uninstall_copy_fresh
     /bin/bash /root/lw-uninstall.sh < /dev/null > "$OUT" 2>&1
     check "无终端时退出码非 0" "$([[ "$?" -ne 0 ]] && echo yes || echo no)" "yes"
@@ -292,14 +292,14 @@ scenario_uninstall_confirm() {
 
     if command -v script > /dev/null 2>&1; then
         # 5.2 回答 n → 取消
-        install_run --silent --dir-option=1
+        install_run --silent --dir-option=2
         uninstall_copy_fresh
         printf 'n' | script -qec "/bin/bash /root/lw-uninstall.sh" /dev/null > "$OUT" 2>&1
         check "答 n 时取消卸载" "$([[ -e /root/.local/linuxwave ]] && echo yes || echo no)" "yes"
         contains "答 n 时输出已取消" "$OUT" "Uninstall cancelled"
 
         # 5.3 回答 y → 删除
-        install_run --silent --dir-option=1
+        install_run --silent --dir-option=2
         uninstall_copy_fresh
         printf 'y' | script -qec "/bin/bash /root/lw-uninstall.sh" /dev/null > "$OUT" 2>&1
         check "答 y 时卸载完成" "$([[ -e /root/.local/linuxwave ]] && echo no || echo yes)" "yes"
@@ -309,7 +309,7 @@ scenario_uninstall_confirm() {
 
     # 5.4 --force：无需终端
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     uninstall_run --force
     check "--force 无人值守卸载成功" "$?" "0"
     check "--force 后安装树已删" "$([[ -e /root/.local/linuxwave ]] && echo yes || echo no)" "no"
@@ -322,7 +322,7 @@ scenario_self_delete() {
     echo "========== 6. 卸载器自删（\$0 的取值） =========="
 
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     check "安装成功（自删场景前置）" "$?" "0"
     uninstall_copy_fresh
     /bin/bash /root/lw-uninstall.sh --force > "$OUT" 2>&1
@@ -330,7 +330,7 @@ scenario_self_delete() {
 
     # 用 /bin/bash -c 运行时 $0 是解释器自身；曾经这里会把 /bin/bash 删掉
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     uninstall_run --force
     local rc=$?
     check "以 /bin/bash -c 运行卸载成功" "$rc" "0"
@@ -339,10 +339,10 @@ scenario_self_delete() {
 
 scenario_shared() {
     echo ""
-    echo "========== 7. 共享安装（选项 4）与账号处理 =========="
+    echo "========== 7. 共享安装（选项 1，菜单推荐项）与账号处理 =========="
 
     reset_state
-    install_run --silent --dir-option=4
+    install_run --silent --dir-option=1
     check "共享安装成功" "$?" "0"
     check "共享安装树就位" "$([[ -d /home/linuxwave/.linuxwave ]] && echo yes || echo no)" "yes"
     check "共享安装配置在 /etc/linuxwave_config" \
@@ -375,7 +375,7 @@ scenario_shared() {
 
     # 配置已被上一次卸载清掉、只剩共享安装树的场景（2.5.2 修过这里）
     reset_state
-    install_run --silent --dir-option=4
+    install_run --silent --dir-option=1
     contains "已在组内时不再谎称刚入组" "$OUT" "already has the 'linuxwave' group"
     rm -rf /etc/linuxwave_config
     mkdir -p /home/linuxwave/.config/linuxwave_config
@@ -388,7 +388,7 @@ scenario_shared() {
 
     # --remove-user：调用序列 + 失败时不谎报
     reset_state
-    install_run --silent --dir-option=4
+    install_run --silent --dir-option=1
     rm -f /root/calls.txt
     uninstall_run --force --remove-user
     check "userdel 失败时退出码为 1" "$?" "1"
@@ -410,7 +410,7 @@ scenario_shared() {
 exit 10
 STUB
     chmod +x /root/bin/usermod
-    install_run --silent --dir-option=4
+    install_run --silent --dir-option=1
     check "usermod 失败时安装仍然成功" "$?" "0"
     contains "usermod 失败时如实报告" "$OUT" "Could not add 'root' to 'linuxwave'"
     contains "usermod 失败时给出手工命令" "$OUT" "sudo usermod -aG linuxwave root"
@@ -424,7 +424,7 @@ scenario_link_regression() {
     echo "========== 8. 软链接回归（复用 link_test.sh） =========="
 
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     if [[ ! -f "$MIRROR_BASE/scripts/link_test.sh" ]]; then
         skip "link_test.sh 不在镜像里"
         return
@@ -456,8 +456,8 @@ scenario_install_menu() {
 
         # 9.2 有效输入照常工作（菜单 → 协议）
         reset_state
-        printf '2\ny\n' | script -qec "/bin/bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
-        check "菜单选 2 能装成功" "$([[ -d /opt/linuxwave ]] && echo yes || echo no)" "yes"
+        printf '3\ny\n' | script -qec "/bin/bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
+        check "菜单选 3 能装成功" "$([[ -d /opt/linuxwave ]] && echo yes || echo no)" "yes"
     else
         skip "菜单场景（缺 script，无法提供 pty）"
     fi
@@ -467,8 +467,9 @@ scenario_install_menu() {
     install_run --silent
     check "--silent 单独使用能装成功" "$?" "0"
     check "--silent 不打印菜单" "$(count_in "$OUT" "Where do you want to install")" "0"
-    contains "--silent 说明使用了默认目录" "$OUT" "using the default"
-    check "--silent 装到默认目录" "$([[ -d /root/.local/linuxwave ]] && echo yes || echo no)" "yes"
+    contains "--silent 说明使用了推荐默认目录" "$OUT" "using the recommended default"
+    check "--silent 装到推荐默认目录（共享安装）" \
+        "$([[ -d /home/linuxwave/.linuxwave ]] && echo yes || echo no)" "yes"
     check "--silent 不再泄漏 /dev/tty 原始报错" "$(count_in "$OUT" "No such device")" "0"
 }
 
@@ -483,7 +484,7 @@ scenario_download_retry() {
     reset_state
     mv "$victim" "$victim.hold"
     ( sleep 2; mv "$victim.hold" "$victim" ) &
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     rc=$?
     wait
     check "短暂失败后重试成功" "$rc" "0"
@@ -496,7 +497,7 @@ scenario_download_retry() {
     # 10.2 一直失败：重试到底后明确报错，不谎报成功
     reset_state
     mv "$victim" "$victim.hold"
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     rc=$?
     check "持续失败后退出码非 0" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)" "yes"
     contains "说明尝试了几次" "$OUT" "after 5 attempts"
@@ -511,7 +512,7 @@ scenario_write_permission() {
     # 用一个只读挂载来真实复现「树属于别人、自己写不进去」——
     # 只读挂载连 uid 0 也会被判为不可写，因此在沙箱里能诚实测试。
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     check "准备阶段安装到默认目录" "$([[ -x /root/.local/linuxwave/lib/wave ]] && echo yes || echo no)" "yes"
 
     mkdir -p /srv/ro-lw/linuxwave
@@ -558,7 +559,7 @@ print(P.group_name_for_gid(0), P.group_name_for_gid($probe_gid))
     # 11.2 安装器的共用提示：推荐的是免 sudo 的 `wave install`，
     # 而不是必然失败的 `sudo wave`（sudo 用自己那套 PATH）
     reset_state
-    install_run --silent --dir-option=4
+    install_run --silent --dir-option=1
     check "共用安装成功" "$?" "0"
     contains "共用提示推荐免 sudo 安装" "$OUT" "wave install <package>"
     contains "共用提示说明建组这件事" "$OUT" "group for shared installs"
@@ -571,7 +572,7 @@ scenario_interrupt() {
     echo "========== 12. Ctrl-C 不再打印 traceback =========="
 
     reset_state
-    install_run --silent --dir-option=1
+    install_run --silent --dir-option=2
     local W="/root/.local/linuxwave/lib/wave"
 
     # 用本地「挂起」代理让下载稳定地卡在读取上：接受连接但永不回应。
