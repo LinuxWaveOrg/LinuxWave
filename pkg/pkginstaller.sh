@@ -35,14 +35,14 @@ DEPS_STR="$2"
 # -------------------- 安装软件包本体 --------------------
 
 # 软件包只取一个可执行文件；依赖走 tree 模式（见 surfboard/depsinstaller.sh）
-mw_install_artifact "$INPUT_STR" "$DEPS_STR" "binary"
+lw_install_artifact "$INPUT_STR" "$DEPS_STR" "binary"
 
 # -------------------- 写入 installed.json --------------------
 
-INSTALLED_DB="$MW_BASE_DIR/pkg/installed.json"
+INSTALLED_DB="$LW_BASE_DIR/pkg/installed.json"
 mkdir -p "$(dirname "$INSTALLED_DB")"
 
-python3 - "$INSTALLED_DB" "$MW_NAME" "$MW_VERSION" "$MW_TARGET_DIR" << 'PYEOF'
+python3 - "$INSTALLED_DB" "$LW_NAME" "$LW_VERSION" "$LW_TARGET_DIR" << 'PYEOF'
 import sys
 import json
 import fcntl
@@ -76,9 +76,9 @@ PYEOF
 
 # -------------------- 输出成功 --------------------
 
-echo -e "${GREEN}🌊 Successfully installed ${MW_NAME}@${MW_VERSION}${RESET}"
-DISPLAY_DIR="${MW_TARGET_DIR/$HOME/~}"
-DISPLAY_LINK="${MW_LINK_PATH/$HOME/~}"
-echo "🌊 Binary installed to: $DISPLAY_DIR/$MW_BIN_NAME"
+echo -e "${GREEN}🌊 Successfully installed ${LW_NAME}@${LW_VERSION}${RESET}"
+DISPLAY_DIR="${LW_TARGET_DIR/$HOME/~}"
+DISPLAY_LINK="${LW_LINK_PATH/$HOME/~}"
+echo "🌊 Binary installed to: $DISPLAY_DIR/$LW_BIN_NAME"
 echo "🌊 Link created at: $DISPLAY_LINK"
 exit 0

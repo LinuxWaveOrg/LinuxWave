@@ -9,7 +9,7 @@
 # 所以缺 X 时不能只警告后放行（3.0.3 及之前就是放行的）。
 #
 # 三段覆盖：
-#   A. 校验核心 mw_verify_sha256 的行为（离线）—— 缺值 / 长度不足 / 大写 / 非十六进制
+#   A. 校验核心 lw_verify_sha256 的行为（离线）—— 缺值 / 长度不足 / 大写 / 非十六进制
 #      / 格式合法但内容不符（还要删掉损坏文件）/ 正确值
 #   B. 端到端拒绝（联网）—— wave install 缺校验值的包必须失败，且不留下任何安装痕迹
 #   C. 静态哨兵 —— 三处守卫（包记录 / 依赖记录 / 安装核心）缺一即失败，
@@ -97,11 +97,11 @@ SAMPLE_SHA="$(sha256sum "$SAMPLE_FILE" | awk '{print $1}')"
 echo "========== A. 校验核心的行为（离线） =========="
 # ============================================================
 
-# 每个用例都在独立子 shell 里跑：mw_verify_sha256 用 exit 1 表示拒绝，
+# 每个用例都在独立子 shell 里跑：lw_verify_sha256 用 exit 1 表示拒绝，
 # 直接在当前 shell 调用会把测试脚本本身干掉。source 会带进 set -e，子 shell 一并隔离。
 run_verify() {
     local expected="$1"
-    VERIFY_OUT="$(bash -c 'source "$1" > /dev/null 2>&1; mw_verify_sha256 "$2" "$3"' \
+    VERIFY_OUT="$(bash -c 'source "$1" > /dev/null 2>&1; lw_verify_sha256 "$2" "$3"' \
                        _ "$DEPSMANAGER_SH" "$SAMPLE_FILE" "$expected" 2>&1)" || VERIFY_RC=$?
     LAST_OUT="$VERIFY_OUT"
 }

@@ -45,8 +45,8 @@ fi
 #
 # 这一段必须与 lib/selfupdate.sh 逐字一致 —— scripts/domains_test.sh 有断言。
 
-mw_domain() {
-    # mw_domain <变量名> <值>：校验协议、去掉末尾斜杠，然后打印规范化后的值。
+lw_domain() {
+    # lw_domain <变量名> <值>：校验协议、去掉末尾斜杠，然后打印规范化后的值。
     # 规则必须与 lib/domains.py 的 _validate 完全一致 —— scripts/domains_test.sh
     # 会拿同一批输入分别喂给两边逐条比对。
     local name="$1"
@@ -100,8 +100,8 @@ mw_domain() {
     exit 1
 }
 
-mw_redact() {
-    # mw_redact <url>：把 URL 里的口令换成 ***，日志与报错里不能出现明文。
+lw_redact() {
+    # lw_redact <url>：把 URL 里的口令换成 ***，日志与报错里不能出现明文。
     # 只在 host 段找 @ —— path 里的 @ 是合法文件名（jq@1.7.1.arm64）。
     local url="$1"
     local scheme rest authority path userinfo host user
@@ -131,7 +131,7 @@ mw_redact() {
     fi
 }
 
-mw_sudo() {
+lw_sudo() {
     # sudo 默认 env_reset，会把 HTTPS_PROXY 这类变量清空。于是「配了代理」的机器上
     # 一旦需要提权（/opt、/usr/local 这类系统级安装），下载就绕过代理直连 ——
     # 内网里表现为超时，而不是任何看得懂的报错。
@@ -158,16 +158,16 @@ mw_sudo() {
 #
 # scripts/check_domain_defaults.py 会逐条比对 shell 与 Python，改一处就要改另一处。
 
-API_DOMAIN="$(mw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
-CORE_URL="$(mw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
+API_DOMAIN="$(lw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
+CORE_URL="$(lw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
 # 内置默认值，只用来判断「用户是不是在用镜像」（install.sh 的欢迎语据此提示一句）。
 # 必须与上一行的默认值、以及 lib/domains.py 的 DEFAULTS["core"] 一致 ——
 # scripts/check_domain_defaults.py 会比对这三处。
 CORE_DEFAULT_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave"
-SELFUPDATE_URL="$(mw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
-PYTHON_DATA_URL="$(mw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+PYTHON_DATA_URL="$(lw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 # pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
-PIP_INDEX_URL="$(mw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
+PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
 
 # ==========================================
 # 颜色定义
@@ -283,7 +283,7 @@ fi
 
 run_cmd() {
     if [[ "$NEED_SUDO" == "true" ]]; then
-        mw_sudo "$@"
+        lw_sudo "$@"
     else
         "$@"
     fi
@@ -293,7 +293,7 @@ run_cmd() {
 # 所以配置目录单独判断权限。
 config_cmd() {
     if [[ "$CONFIG_NEED_SUDO" == "true" ]]; then
-        mw_sudo "$@"
+        lw_sudo "$@"
     else
         "$@"
     fi

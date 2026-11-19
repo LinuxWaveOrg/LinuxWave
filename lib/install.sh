@@ -270,8 +270,8 @@ LW_RSA_PUB_PEM=''
 #
 # 这一段必须与 lib/selfupdate.sh 逐字一致 —— scripts/domains_test.sh 有断言。
 
-mw_domain() {
-    # mw_domain <变量名> <值>：校验协议、去掉末尾斜杠，然后打印规范化后的值。
+lw_domain() {
+    # lw_domain <变量名> <值>：校验协议、去掉末尾斜杠，然后打印规范化后的值。
     # 规则必须与 lib/domains.py 的 _validate 完全一致 —— scripts/domains_test.sh
     # 会拿同一批输入分别喂给两边逐条比对。
     local name="$1"
@@ -325,8 +325,8 @@ mw_domain() {
     exit 1
 }
 
-mw_redact() {
-    # mw_redact <url>：把 URL 里的口令换成 ***，日志与报错里不能出现明文。
+lw_redact() {
+    # lw_redact <url>：把 URL 里的口令换成 ***，日志与报错里不能出现明文。
     # 只在 host 段找 @ —— path 里的 @ 是合法文件名（jq@1.7.1.arm64）。
     local url="$1"
     local scheme rest authority path userinfo host user
@@ -356,7 +356,7 @@ mw_redact() {
     fi
 }
 
-mw_sudo() {
+lw_sudo() {
     # sudo 默认 env_reset，会把 HTTPS_PROXY 这类变量清空。于是「配了代理」的机器上
     # 一旦需要提权（/opt、/usr/local 这类系统级安装），下载就绕过代理直连 ——
     # 内网里表现为超时，而不是任何看得懂的报错。
@@ -383,16 +383,16 @@ mw_sudo() {
 #
 # scripts/check_domain_defaults.py 会逐条比对 shell 与 Python，改一处就要改另一处。
 
-API_DOMAIN="$(mw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
-CORE_URL="$(mw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
+API_DOMAIN="$(lw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
+CORE_URL="$(lw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
 # 内置默认值，只用来判断「用户是不是在用镜像」（install.sh 的欢迎语据此提示一句）。
 # 必须与上一行的默认值、以及 lib/domains.py 的 DEFAULTS["core"] 一致 ——
 # scripts/check_domain_defaults.py 会比对这三处。
 CORE_DEFAULT_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave"
-SELFUPDATE_URL="$(mw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
-PYTHON_DATA_URL="$(mw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+PYTHON_DATA_URL="$(lw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 # pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
-PIP_INDEX_URL="$(mw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
+PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
 
 # 数据仓库：版本号、代码分支与文件清单都从这里读
 CONFIGDATA_URL="$SELFUPDATE_URL"   # 版本数据与自更新数据同源，见下方域名块
@@ -895,10 +895,10 @@ fi
 lw_say "🌊 Welcome to LinuxWave $LINUXWAVE_VERSION!" "🌊 欢迎使用 LinuxWave $LINUXWAVE_VERSION！"
 
 # 用了镜像就明说一句。装完遇到问题，第一件事是确认自己连的到底是谁 —— 而镜像地址里
-# 可能带凭据，所以过一遍 mw_redact。
+# 可能带凭据，所以过一遍 lw_redact。
 if [[ "$CORE_URL" != "$CORE_DEFAULT_URL" ]]; then
-    lw_say "🌊 Core files come from a mirror: $(mw_redact "$CORE_URL")" \
-        "🌊 程序文件来自镜像：$(mw_redact "$CORE_URL")"
+    lw_say "🌊 Core files come from a mirror: $(lw_redact "$CORE_URL")" \
+        "🌊 程序文件来自镜像：$(lw_redact "$CORE_URL")"
 fi
 
 echo ""
@@ -1059,7 +1059,7 @@ lw_privileged() {
         lw_say "${YELLOW}    sudo $*${RESET}"
         return 0
     fi
-    mw_sudo "$@"
+    lw_sudo "$@"
 }
 
 run_cmd() {
@@ -1073,7 +1073,7 @@ run_cmd() {
         return 0
     fi
     if [[ "$NEED_SUDO" == "true" ]]; then
-        mw_sudo "$@"
+        lw_sudo "$@"
     else
         "$@"
     fi
@@ -1148,8 +1148,8 @@ done
 if [[ "$UPDATE_COMMANDS_OK" != "true" ]]; then
     lw_say_err "${RED_BOLD}🌊 Error: Cannot fetch the update commands for $LINUXWAVE_VERSION.${RESET}" \
         "${RED_BOLD}🌊 错误：取不到 $LINUXWAVE_VERSION 的更新命令。${RESET}"
-    lw_say_err "${RED_BOLD}🌊   $(mw_redact "$UPDATE_COMMANDS_URL")${RESET}" \
-        "${RED_BOLD}🌊   $(mw_redact "$UPDATE_COMMANDS_URL")${RESET}"
+    lw_say_err "${RED_BOLD}🌊   $(lw_redact "$UPDATE_COMMANDS_URL")${RESET}" \
+        "${RED_BOLD}🌊   $(lw_redact "$UPDATE_COMMANDS_URL")${RESET}"
     lw_say_err "🌊 Nothing was installed. Check your network or proxy, then run the installer again." \
         "🌊 什么都没装。请检查网络或代理后重新运行安装器。"
     exit 1
@@ -1199,19 +1199,19 @@ AGREEMENT_FILE="$CONFIG_DIR/AGREEMENT.json"
 
 # 中途失败时给出明确指引。刻意**不自动删除**已下载的内容：升级安装时
 # 删掉安装树会把用户原有的可用安装一起毁掉，重跑安装器才是安全的做法。
-MW_OPTIONAL_RESULT=""
+LW_OPTIONAL_RESULT=""
 
-mw_try() {
-    # mw_try <命令...>：跑一个「失败也无所谓」的命令，stdout 存进 MW_OPTIONAL_RESULT。
+lw_try() {
+    # lw_try <命令...>：跑一个「失败也无所谓」的命令，stdout 存进 LW_OPTIONAL_RESULT。
     # 失败时不惊动 ERR 陷阱 —— 否则用户会先看到「Installation did not finish」，
     # 几百行之后再看到「Installation complete!」，比不提示更糟。
     #
     # 旗标必须在**命令替换的整个生命周期内**保持设置：`set -E` 让 ERR 陷阱传进
     # 子 shell，而子 shell 退出时如果那条命令返回非零，陷阱照样会响。
     local output
-    MW_FAILURE_HANDLED=1
-    output="$("$@")" && MW_OPTIONAL_RESULT="$output" || MW_OPTIONAL_RESULT=""
-    unset MW_FAILURE_HANDLED
+    LW_FAILURE_HANDLED=1
+    output="$("$@")" && LW_OPTIONAL_RESULT="$output" || LW_OPTIONAL_RESULT=""
+    unset LW_FAILURE_HANDLED
     return 0
 }
 
@@ -1219,8 +1219,8 @@ install_failed() {
     local code=$?
 
     # 有些失败是**预期之内**的：自带解释器取不到时会回落到系统 python3，安装照常完成。
-    # 那些地方用 mw_try 包着，会临时立这个旗标，于是这里不报「安装未完成」。
-    if [[ -n "${MW_FAILURE_HANDLED:-}" ]]; then
+    # 那些地方用 lw_try 包着，会临时立这个旗标，于是这里不报「安装未完成」。
+    if [[ -n "${LW_FAILURE_HANDLED:-}" ]]; then
         return 0
     fi
     lw_say_err "" ""
@@ -1724,8 +1724,8 @@ PYTHON_BIN=""
 PYTHON_SOURCE=""
 
 lw_say "🌊 Preparing the Python runtime..." "🌊 正在准备 Python 运行环境……"
-mw_try ensure_portable_python "$BASE_DIR" "$(portable_python_arch)"
-BUNDLED_PY="$MW_OPTIONAL_RESULT"
+lw_try ensure_portable_python "$BASE_DIR" "$(portable_python_arch)"
+BUNDLED_PY="$LW_OPTIONAL_RESULT"
 
 if [[ -n "$BUNDLED_PY" ]]; then
     PYTHON_BIN="$BUNDLED_PY"

@@ -25,27 +25,27 @@ fi
 # -------------------- 安装依赖本体 --------------------
 
 # 依赖包多为库包，整棵目录保留，bin/ 下的可执行文件由 links/ 提供
-mw_install_artifact "$INPUT_STR" "$DEPS_STR" "tree"
+lw_install_artifact "$INPUT_STR" "$DEPS_STR" "tree"
 
 # -------------------- 记录依赖者 --------------------
 
-if [[ -n "$MW_DEPENDER" ]]; then
-    DEPENDER_KIND="${MW_DEPENDER%%:*}"
-    DEPENDER_REF="${MW_DEPENDER#*:}"
+if [[ -n "$LW_DEPENDER" ]]; then
+    DEPENDER_KIND="${LW_DEPENDER%%:*}"
+    DEPENDER_REF="${LW_DEPENDER#*:}"
     DEPENDER_NAME="${DEPENDER_REF%@*}"
     DEPENDER_VERSION="${DEPENDER_REF#*@}"
 
     if [[ -z "$DEPENDER_KIND" || -z "$DEPENDER_NAME" || -z "$DEPENDER_VERSION" || "$DEPENDER_REF" == "$DEPENDER_NAME" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Invalid depender info '$MW_DEPENDER'.${RESET}"
+        echo -e "${RED_BOLD}🌊 Error: Invalid depender info '$LW_DEPENDER'.${RESET}"
         exit 1
     fi
 
-    mw_tag_add_depender "$MW_TARGET_DIR" "$DEPENDER_KIND" "$DEPENDER_NAME" "$DEPENDER_VERSION"
+    lw_tag_add_depender "$LW_TARGET_DIR" "$DEPENDER_KIND" "$DEPENDER_NAME" "$DEPENDER_VERSION"
 fi
 
 # -------------------- 输出成功 --------------------
 
-echo -e "${GREEN}🌊 Successfully installed ${MW_NAME}@${MW_VERSION}${RESET}"
-DISPLAY_DIR="${MW_TARGET_DIR/$HOME/~}"
+echo -e "${GREEN}🌊 Successfully installed ${LW_NAME}@${LW_VERSION}${RESET}"
+DISPLAY_DIR="${LW_TARGET_DIR/$HOME/~}"
 echo "🌊 Dependency installed to: $DISPLAY_DIR"
 exit 0

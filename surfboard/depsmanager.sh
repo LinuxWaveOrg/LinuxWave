@@ -38,20 +38,20 @@ source "$TAGGER_SCRIPT"
 
 # -------------------- 全局变量 --------------------
 
-MW_NAME=""
-MW_VERSION=""
-MW_SHA256=""
-MW_TARGET_DIR=""
-MW_BASE_DIR=""
-MW_BIN_NAME=""
-MW_DEPENDER=""
-MW_RELATIVE_DIR=""
-MW_LINK_PATH=""
-MW_ORIGINAL_NAME=""
+LW_NAME=""
+LW_VERSION=""
+LW_SHA256=""
+LW_TARGET_DIR=""
+LW_BASE_DIR=""
+LW_BIN_NAME=""
+LW_DEPENDER=""
+LW_RELATIVE_DIR=""
+LW_LINK_PATH=""
+LW_ORIGINAL_NAME=""
 
 # -------------------- 拆解长字符串 --------------------
 
-mw_parse_info() {
+lw_parse_info() {
     local input_str="$1"
 
     if [[ -z "$input_str" ]]; then
@@ -64,16 +64,16 @@ mw_parse_info() {
         lines+=("$line")
     done <<< "$input_str"
 
-    MW_NAME="${lines[0]}"
-    MW_VERSION="${lines[1]}"
-    MW_SHA256="${lines[2]}"
-    MW_TARGET_DIR="${lines[3]}"
-    MW_BASE_DIR="${lines[4]}"
-    MW_BIN_NAME="${lines[5]}"
-    MW_DEPENDER="${lines[6]}"
-    MW_ORIGINAL_NAME="${lines[7]}"
+    LW_NAME="${lines[0]}"
+    LW_VERSION="${lines[1]}"
+    LW_SHA256="${lines[2]}"
+    LW_TARGET_DIR="${lines[3]}"
+    LW_BASE_DIR="${lines[4]}"
+    LW_BIN_NAME="${lines[5]}"
+    LW_DEPENDER="${lines[6]}"
+    LW_ORIGINAL_NAME="${lines[7]}"
 
-    if [[ -z "$MW_NAME" || -z "$MW_VERSION" || -z "$MW_TARGET_DIR" || -z "$MW_BASE_DIR" || -z "$MW_BIN_NAME" ]]; then
+    if [[ -z "$LW_NAME" || -z "$LW_VERSION" || -z "$LW_TARGET_DIR" || -z "$LW_BASE_DIR" || -z "$LW_BIN_NAME" ]]; then
         echo -e "${RED_BOLD}🌊 Error: Incomplete install info.${RESET}"
         exit 1
     fi
@@ -81,7 +81,7 @@ mw_parse_info() {
 
 # -------------------- 原文件与校验 --------------------
 
-mw_locate_original_file() {
+lw_locate_original_file() {
     # 在下载临时目录里定位本次下载的原文件。
     # 传入原文件名时精确匹配，避免残留文件被误用；
     # 未传时退回“第一个非 .partial 文件”。
@@ -113,7 +113,7 @@ mw_locate_original_file() {
     echo "$found"
 }
 
-mw_verify_sha256() {
+lw_verify_sha256() {
     local original_file="$1"
     local expected_sha256="$2"
 
@@ -154,7 +154,7 @@ mw_verify_sha256() {
 
 # -------------------- 解压与落盘 --------------------
 
-mw_extract_binary() {
+lw_extract_binary() {
     # 解压压缩包并输出二进制文件路径（提示信息走 stderr，避免污染返回值）
     local original_file="$1"
     local extract_dir="$2"
@@ -203,7 +203,7 @@ mw_extract_binary() {
     esac
 }
 
-mw_install_binary() {
+lw_install_binary() {
     local bin_file="$1"
     local target_dir="$2"
     local bin_name="$3"
@@ -213,7 +213,7 @@ mw_install_binary() {
     chmod 755 "$target_dir/$bin_name"
 }
 
-mw_extract_all() {
+lw_extract_all() {
     # 解压整包并输出可整体搬运的目录（提示信息走 stderr）
     local original_file="$1"
     local extract_dir="$2"
@@ -254,7 +254,7 @@ mw_extract_all() {
     esac
 }
 
-mw_install_tree() {
+lw_install_tree() {
     # 保留整棵解压目录（依赖包是库包，不能只取一个文件）
     local source_dir="$1"
     local target_dir="$2"
@@ -278,7 +278,7 @@ mw_install_tree() {
     fi
 }
 
-mw_link_tree_binaries() {
+lw_link_tree_binaries() {
     # 把依赖包里 bin/ 下的可执行文件软链到 links/{名字}@{版本号}，
     # 由已在 PATH 上的 links/ 目录提供命令，不再依赖“与包同名的二进制”。
     local base_dir="$1"
@@ -300,13 +300,13 @@ mw_link_tree_binaries() {
         fi
 
         name="$(basename "$file")"
-        mw_create_link "$base_dir" "$relative_dir/bin" "$name" "$name" "$version" > /dev/null
+        lw_create_link "$base_dir" "$relative_dir/bin" "$name" "$name" "$version" > /dev/null
     done
 }
 
 # -------------------- 软链接 --------------------
 
-mw_create_link() {
+lw_create_link() {
     # links/{链接名}@{版本号} -> ../{相对目录}/{目标名}
     # 软件包：链接名 = 可执行文件名；依赖：每个 bin/ 下的可执行文件各一条
     local base_dir="$1"
@@ -317,7 +317,7 @@ mw_create_link() {
 
     local links_dir="$base_dir/links"
     local link_path="$links_dir/$link_name@$version"
-    mw_assert_inside "$link_path"
+    lw_assert_inside "$link_path"
 
     mkdir -p "$links_dir"
 
@@ -333,7 +333,7 @@ mw_create_link() {
 
 # -------------------- _DEPS --------------------
 
-mw_write_deps_file() {
+lw_write_deps_file() {
     # 每行一个依赖，形如 "a@1.0"
     local target_dir="$1"
     local deps_str="$2"
@@ -355,7 +355,7 @@ mw_write_deps_file() {
 
 # -------------------- 标记文件 --------------------
 
-mw_tag_add_depender() {
+lw_tag_add_depender() {
     # 在依赖目录下记录“谁依赖了我”
     local dir="$1"
     local kind="$2"
@@ -365,7 +365,7 @@ mw_tag_add_depender() {
     tagger_create "$dir" "$kind" "$name" "$version"
 }
 
-mw_tag_remove_depender() {
+lw_tag_remove_depender() {
     local dir="$1"
     local kind="$2"
     local name="$3"
@@ -374,7 +374,7 @@ mw_tag_remove_depender() {
     tagger_delete "$dir" "$kind" "$name" "$version"
 }
 
-mw_tag_has_marks() {
+lw_tag_has_marks() {
     local dir="$1"
 
     tagger_has_any "$dir"
@@ -382,14 +382,14 @@ mw_tag_has_marks() {
 
 # -------------------- 路径安全兜底 --------------------
 
-mw_assert_inside() {
+lw_assert_inside() {
     # 目标路径必须落在 BASE_DIR 之内。Python 侧已经校验过输入字符，
     # 这里再兜一层，避免将来有别的调用方绕过校验。
     local path="$1"
     case "$path" in
-        "$MW_BASE_DIR"/*) return 0 ;;
+        "$LW_BASE_DIR"/*) return 0 ;;
         *)
-            echo -e "${RED_BOLD}🌊 Error: Refusing to write outside ${MW_BASE_DIR}: ${path}${RESET}" >&2
+            echo -e "${RED_BOLD}🌊 Error: Refusing to write outside ${LW_BASE_DIR}: ${path}${RESET}" >&2
             exit 1
             ;;
     esac
@@ -397,7 +397,7 @@ mw_assert_inside() {
 
 # -------------------- 产物里的符号链接 --------------------
 
-mw_assert_no_escaping_links() {
+lw_assert_no_escaping_links() {
     # 解压出来的树里可能带符号链接，其中可能有指向 base_dir 之外的 —— 那种链接既能
     # 让随包附带的程序读到隐私文件，也能让后面的 patchelf 重定位改写、或者卸载时
     # 的 rm -rf 以用户身份在树外写/删。
@@ -425,27 +425,27 @@ mw_assert_no_escaping_links() {
     # 之后突兀地停住或报错。
     echo "🌊 Running security checks..."
 
-    local checker="$MW_BASE_DIR/lib/configpaths.py"
+    local checker="$LW_BASE_DIR/lib/configpaths.py"
     if [[ ! -f "$checker" ]]; then
         echo -e "${RED_BOLD}🌊 Error: lib/configpaths.py not found; cannot verify links in the payload.${RESET}"
         echo "🌊 Reinstall LinuxWave with lib/install.sh."
         exit 1
     fi
 
-    if ! python3 "$checker" --check-links "$tree" "${MW_NAME}@${MW_VERSION}"; then
+    if ! python3 "$checker" --check-links "$tree" "${LW_NAME}@${LW_VERSION}"; then
         # assert_links_inside 已经把所有细节打在 stderr，这里只补一句「没装」，
         # 免得用户以为半成品已经落地。
         if [[ -n "$cleanup" && -d "$cleanup" ]]; then
             rm -rf "$cleanup"
         fi
-        echo -e "${RED_BOLD}🌊 Error: ${MW_NAME}@${MW_VERSION} was not installed.${RESET}"
+        echo -e "${RED_BOLD}🌊 Error: ${LW_NAME}@${LW_VERSION} was not installed.${RESET}"
         exit 1
     fi
 }
 
 # -------------------- 通用安装流程 --------------------
 
-mw_install_artifact() {
+lw_install_artifact() {
     # 软件包与依赖共用的安装流程，区别只在安装形态：
     #   binary：只取一个可执行文件（软件包）
     #   tree  ：保留整棵解压目录，并把 bin/ 下的可执行文件软链到 links/（依赖）
@@ -453,44 +453,44 @@ mw_install_artifact() {
     local deps_str="$2"
     local install_mode="${3:-binary}"
 
-    mw_parse_info "$info_str"
-    mw_assert_inside "$MW_TARGET_DIR"
+    lw_parse_info "$info_str"
+    lw_assert_inside "$LW_TARGET_DIR"
 
-    local unzip_script="$MW_BASE_DIR/pkg/pkgunzip.sh"
+    local unzip_script="$LW_BASE_DIR/pkg/pkgunzip.sh"
     if [[ ! -f "$unzip_script" ]]; then
         echo -e "${RED_BOLD}🌊 Error: pkgunzip.sh not found.${RESET}"
         exit 1
     fi
 
-    local download_tmp="$MW_BASE_DIR/downloads/tmp"
+    local download_tmp="$LW_BASE_DIR/downloads/tmp"
     local original_file
-    original_file="$(mw_locate_original_file "$download_tmp" "$MW_ORIGINAL_NAME")"
+    original_file="$(lw_locate_original_file "$download_tmp" "$LW_ORIGINAL_NAME")"
 
-    mw_verify_sha256 "$original_file" "$MW_SHA256"
+    lw_verify_sha256 "$original_file" "$LW_SHA256"
 
     echo "🌊 Extracting package..."
     local extract_dir="$download_tmp/extract_$$"
-    MW_RELATIVE_DIR="${MW_TARGET_DIR#"$MW_BASE_DIR"/}"
+    LW_RELATIVE_DIR="${LW_TARGET_DIR#"$LW_BASE_DIR"/}"
 
     if [[ "$install_mode" == "tree" ]]; then
         local tree_dir
-        tree_dir="$(mw_extract_all "$original_file" "$extract_dir" "$unzip_script")"
-        mw_assert_no_escaping_links "$tree_dir" "$extract_dir"
-        mw_install_tree "$tree_dir" "$MW_TARGET_DIR" "$MW_BIN_NAME"
-        mw_link_tree_binaries "$MW_BASE_DIR" "$MW_RELATIVE_DIR" "$MW_VERSION" "$MW_TARGET_DIR"
+        tree_dir="$(lw_extract_all "$original_file" "$extract_dir" "$unzip_script")"
+        lw_assert_no_escaping_links "$tree_dir" "$extract_dir"
+        lw_install_tree "$tree_dir" "$LW_TARGET_DIR" "$LW_BIN_NAME"
+        lw_link_tree_binaries "$LW_BASE_DIR" "$LW_RELATIVE_DIR" "$LW_VERSION" "$LW_TARGET_DIR"
     else
         local bin_file
-        bin_file="$(mw_extract_binary "$original_file" "$extract_dir" "$unzip_script" "$MW_BIN_NAME")"
+        bin_file="$(lw_extract_binary "$original_file" "$extract_dir" "$unzip_script" "$LW_BIN_NAME")"
         # 这里查的是整个解压目录，不只是选中的那个文件：binary 形态最后会用
         # mv 搬走一个文件，而搬的若是链接，链接本身就跟着走 —— 装出来的
         # "二进制" 会指向树外。裸二进制时 extract_dir 不存在，函数会说明跳过。
-        mw_assert_no_escaping_links "$extract_dir" "$extract_dir"
-        mw_install_binary "$bin_file" "$MW_TARGET_DIR" "$MW_BIN_NAME"
-        MW_LINK_PATH="$(mw_create_link "$MW_BASE_DIR" "$MW_RELATIVE_DIR" "$MW_BIN_NAME" "$MW_BIN_NAME" "$MW_VERSION")"
+        lw_assert_no_escaping_links "$extract_dir" "$extract_dir"
+        lw_install_binary "$bin_file" "$LW_TARGET_DIR" "$LW_BIN_NAME"
+        LW_LINK_PATH="$(lw_create_link "$LW_BASE_DIR" "$LW_RELATIVE_DIR" "$LW_BIN_NAME" "$LW_BIN_NAME" "$LW_VERSION")"
     fi
 
     rm -rf "$extract_dir"
     rm -f "$original_file"
 
-    mw_write_deps_file "$MW_TARGET_DIR" "$deps_str"
+    lw_write_deps_file "$LW_TARGET_DIR" "$deps_str"
 }

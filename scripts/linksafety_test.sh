@@ -13,7 +13,7 @@
 # → 以用户身份在树外写或删。
 #
 # 第三段是唯一会跑真实安装流程的部分：把一份带越界链接的产物丢进
-# downloads/tmp，让 mw_install_artifact 走一遍（校验 → 解压 → 检查），要求它
+# downloads/tmp，让 lw_install_artifact 走一遍（校验 → 解压 → 检查），要求它
 # 拒绝、并且**不留下**半成品目录 —— 「报错了但东西已经落地」比不检查更糟。
 #
 # 全程离线。
@@ -147,7 +147,7 @@ SHA=$(shasum -a 256 "$BASE/downloads/tmp/evil-1.0.tar.gz" | awk '{print $1}')
 
 OUT=$(cd "$BASE" && bash -c "
     source ./surfboard/depsmanager.sh
-    mw_install_artifact \"evil
+    lw_install_artifact \"evil
 1.0
 $SHA
 $BASE/deps/evil/evil@1.0
@@ -187,7 +187,7 @@ PSHA=$(shasum -a 256 "$BASE/downloads/tmp/plainbin-1.0" | awk '{print $1}')
 
 OUT=$(cd "$BASE" && bash -c "
     source ./surfboard/depsmanager.sh
-    mw_install_artifact \"plainbin
+    lw_install_artifact \"plainbin
 1.0
 $PSHA
 $BASE/bin/plainbin@1.0
@@ -216,7 +216,7 @@ SHA2=$(shasum -a 256 "$BASE/downloads/tmp/good-1.0.tar.gz" | awk '{print $1}')
 
 OUT=$(cd "$BASE" && bash -c "
     source ./surfboard/depsmanager.sh
-    mw_install_artifact \"good
+    lw_install_artifact \"good
 1.0
 $SHA2
 $BASE/deps/good/good@1.0
@@ -240,8 +240,8 @@ fi
 
 echo "========== 4. 检查点没被绕过 =========="
 # 函数写在脚本里、但调用点被删掉，是最容易发生的回归：测试全绿而防护没了。
-if grep -q 'mw_assert_no_escaping_links "\$tree_dir"' "$REPO_DIR/surfboard/depsmanager.sh" \
-   && grep -q 'mw_assert_no_escaping_links "\$extract_dir"' "$REPO_DIR/surfboard/depsmanager.sh"; then
+if grep -q 'lw_assert_no_escaping_links "\$tree_dir"' "$REPO_DIR/surfboard/depsmanager.sh" \
+   && grep -q 'lw_assert_no_escaping_links "\$extract_dir"' "$REPO_DIR/surfboard/depsmanager.sh"; then
     pass "tree 与 binary 两种形态都调用了检查"
 else
     fail "安装流程里少了调用点（tree 或 binary）"

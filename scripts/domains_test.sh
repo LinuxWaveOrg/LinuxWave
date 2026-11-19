@@ -126,7 +126,7 @@ while IFS= read -r case_value; do
 
     shell_verdict=reject
     if ( RED_BOLD=""; RESET=""; source <(sed -n '/# 域名（4\.0/,/^}/p' "$REPO_DIR/lib/install.sh"); \
-         mw_domain T "$case_value" ) > /dev/null 2>&1; then
+         lw_domain T "$case_value" ) > /dev/null 2>&1; then
         shell_verdict=accept
     fi
 
@@ -388,20 +388,20 @@ else
 fi
 
 echo
-echo "========== 8. mw_redact：日志与欢迎语里不能出现明文口令 =========="
+echo "========== 8. lw_redact：日志与欢迎语里不能出现明文口令 =========="
 
 # 镜像地址可以带凭据（https://user:token@host/repo）。这些值会被写进 ~/.zshrc，
-# 也会被打印出来贴进 issue —— 所以打印前必须过一遍 mw_redact。两份脚本各抄一份，
+# 也会被打印出来贴进 issue —— 所以打印前必须过一遍 lw_redact。两份脚本各抄一份，
 # 同样逐字比对。
 extract_redact() {
-    awk '/^mw_redact\(\) \{/,/^\}/' "$1"
+    awk '/^lw_redact\(\) \{/,/^\}/' "$1"
 }
 
 if diff -q <(extract_redact "$REPO_DIR/lib/install.sh") \
            <(extract_redact "$REPO_DIR/lib/selfupdate.sh") > /dev/null; then
-    pass "install.sh 与 selfupdate.sh 的 mw_redact 一致"
+    pass "install.sh 与 selfupdate.sh 的 lw_redact 一致"
 else
-    fail "两份脚本的 mw_redact 已经漂移"
+    fail "两份脚本的 lw_redact 已经漂移"
     diff <(extract_redact "$REPO_DIR/lib/install.sh") \
          <(extract_redact "$REPO_DIR/lib/selfupdate.sh") | head -20
 fi
@@ -412,7 +412,7 @@ check_redact() {
     local fn out
     fn="$(mktemp)"
     extract_redact "$script" > "$fn"
-    out="$(bash -c 'source "$1"; mw_redact "$2"' _ "$fn" "$input" 2>/dev/null)"
+    out="$(bash -c 'source "$1"; lw_redact "$2"' _ "$fn" "$input" 2>/dev/null)"
     rm -f "$fn"
 
     if [[ "$out" == *"$must_have"* && "$out" != *"$must_not_have"* ]]; then
@@ -439,13 +439,13 @@ done
 
 # 用了镜像的欢迎语：这条提示是用户第一次接触「我连的不是官方」的地方，不能悄悄消失
 if grep -q 'Core files come from a mirror' "$REPO_DIR/lib/install.sh" \
-   && grep -q 'mw_redact "\$CORE_URL"' "$REPO_DIR/lib/install.sh"; then
-    pass "install.sh 在用了镜像时提示，并且过了一遍 mw_redact"
+   && grep -q 'lw_redact "\$CORE_URL"' "$REPO_DIR/lib/install.sh"; then
+    pass "install.sh 在用了镜像时提示，并且过了一遍 lw_redact"
 else
     fail "install.sh 缺了「正在用镜像」的提示（或没有脱敏）"
 fi
 
-# 真的把那几行跑一遍：把 mw_redact 与提示块摘出来，设好 CORE_URL / CORE_DEFAULT_URL 再 source
+# 真的把那几行跑一遍：把 lw_redact 与提示块摘出来，设好 CORE_URL / CORE_DEFAULT_URL 再 source
 run_banner() {
     local core_url="$1" default_url="$2"
     local fn
@@ -481,27 +481,27 @@ echo "========== 9. 提权下载不能把代理丢掉 =========="
 
 # sudo 默认 env_reset：`sudo curl ...` 会拿到一个干净环境，HTTPS_PROXY 没了。
 # 于是「配了代理」的机器上，系统级安装（/opt、/usr/local）的下载全部绕过代理直连，
-# 内网里表现为超时。mw_sudo 用 `sudo env K=V ...` 显式带过去。
+# 内网里表现为超时。lw_sudo 用 `sudo env K=V ...` 显式带过去。
 extract_sudo() {
-    awk '/^mw_sudo\(\) \{/,/^\}/' "$1"
+    awk '/^lw_sudo\(\) \{/,/^\}/' "$1"
 }
 
 if diff -q <(extract_sudo "$REPO_DIR/lib/install.sh") \
            <(extract_sudo "$REPO_DIR/lib/selfupdate.sh") > /dev/null; then
-    pass "install.sh 与 selfupdate.sh 的 mw_sudo 一致"
+    pass "install.sh 与 selfupdate.sh 的 lw_sudo 一致"
 else
-    fail "两份脚本的 mw_sudo 已经漂移"
+    fail "两份脚本的 lw_sudo 已经漂移"
     diff <(extract_sudo "$REPO_DIR/lib/install.sh") \
          <(extract_sudo "$REPO_DIR/lib/selfupdate.sh") | head -20
 fi
 
-# runner 必须走 mw_sudo：除了 mw_sudo 内部的兜底那一行，文件里不该再有裸的 sudo "$@"
+# runner 必须走 lw_sudo：除了 lw_sudo 内部的兜底那一行，文件里不该再有裸的 sudo "$@"
 for script in "$REPO_DIR/lib/install.sh" "$REPO_DIR/lib/selfupdate.sh"; do
     total="$(grep -cE '^[[:space:]]*sudo "\$@"$' "$script" 2>/dev/null || true)"
     inside="$(extract_sudo "$script" | grep -cE '^[[:space:]]*sudo "\$@"$' 2>/dev/null || true)"
     total="${total:-0}"; inside="${inside:-0}"
     if [[ "$total" -eq "$inside" ]]; then
-        pass "$(basename "$script")：$total 处 sudo 调用全在 mw_sudo 里，runner 都走它"
+        pass "$(basename "$script")：$total 处 sudo 调用全在 lw_sudo 里，runner 都走它"
     else
         fail "$(basename "$script")：有 $((total - inside)) 处裸 sudo 会丢代理"
         grep -nE '^[[:space:]]*sudo "\$@"$' "$script" | sed 's/^/    /'
@@ -514,7 +514,7 @@ run_sudo_case() {
     local fn
     fn="$(mktemp)"
     extract_sudo "$script" > "$fn"
-    bash -c 'source "$1"; shift; sudo() { printf "sudo|%s\n" "$*"; }; mw_sudo "$@"' _ "$fn" "$@"
+    bash -c 'source "$1"; shift; sudo() { printf "sudo|%s\n" "$*"; }; lw_sudo "$@"' _ "$fn" "$@"
     rm -f "$fn"
 }
 
