@@ -408,6 +408,22 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
+# --dry-run：只报告将要做什么，不下载、不落盘。
+# 这是 update_commands.sh 与客户端之间的合同的一部分（见 scripts/build_update_commands.py
+# 的文件头：LINUXWAVE_DRY_RUN 1 = 只报告将要做什么）。
+if [[ "${LINUXWAVE_DRY_RUN:-}" == "1" ]]; then
+    echo "🌊 Dry run: nothing will be downloaded or written."
+    echo "🌊 Target version : $VERSION"
+    echo "🌊 Branch         : ${LINUXWAVE_UPDATE_BRANCH:-<unchanged>}"
+    echo "🌊 Install dir    : $BASE_DIR"
+    echo "🌊 Config dir     : $CONFIG_DIR"
+    echo "🌊 Would refresh every file listed in configdata/versiondata/files_info,"
+    echo "🌊 regenerate lib/wave, install the Python dependencies, and rewrite"
+    echo "🌊 $VERSION_FILE."
+    exit 0
+fi
+
+
 echo "🌊 Updating LinuxWave to $VERSION"
 
 # ==========================================

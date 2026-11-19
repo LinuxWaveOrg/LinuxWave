@@ -224,6 +224,7 @@ COMMAND_HELP = {
         "usage": "wave selfupdate [flags]",
         "desc": "Update LinuxWave itself to the version published in the configdata repository.",
         "flags": [
+            ("--dry-run", "Print what would be updated without downloading or writing anything"),
             ("--max-time <string>", "Timeout for each request (40s, 1min, 1min20s, 2h; bare numbers are seconds)"),
             ("--install-python-from-source", "Fetch the bundled Python from its upstream URL "
                                              "instead of our own store"),

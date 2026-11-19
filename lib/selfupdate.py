@@ -211,6 +211,13 @@ def _apply_max_time(input_string):
     os.environ[domains.MAX_TIME_ENV] = str(seconds)
 
 
+def _apply_dry_run(input_string):
+    """把 --dry-run 写进环境，由 selfupdate.sh 执行「只报告、不落盘」。"""
+    if re.search(r"(^|\s)--dry-run(\s|$)", input_string or ""):
+        os.environ["LINUXWAVE_DRY_RUN"] = "1"
+        quiet.say("🌊 Dry run: nothing will be downloaded or written.")
+
+
 def _apply_python_source(input_string):
     """`--install-python-from-source`：自带解释器直接从上游取，不试我们托管的副本。
 
@@ -224,6 +231,7 @@ def _apply_python_source(input_string):
 def handle_selfupdate(input_string=""):
     _apply_max_time(input_string)
     _apply_python_source(input_string)
+    _apply_dry_run(input_string)
 
     if find_config_dir() is None:
         print(f"{RED_BOLD}🌊 Error: LinuxWave is not installed. Run lib/install.sh first.{RESET}")

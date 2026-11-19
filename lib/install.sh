@@ -673,6 +673,16 @@ print_shared_install_notes() {
         "${YELLOW}🌊    什么都没坏：注销重登即可，也可以在当前 shell 里运行${RESET}"
     lw_say "${YELLOW}🌊    'newgrp $SHARED_USER' in this shell).${RESET}" \
         "${YELLOW}🌊    'newgrp $SHARED_USER'。${RESET}"
+    lw_say "🌊    To start installing now, without re-logging:${RESET}" \
+        "🌊    不想重登、现在就要装包的话：${RESET}"
+    lw_say "       newgrp $SHARED_USER           # new subshell with the group; 'exit' leaves it" \
+        "       newgrp $SHARED_USER           # 进入带该组的子 shell，exit 退出"
+    lw_say "       sg $SHARED_USER -c 'wave install <package>'    # one-off" \
+        "       sg $SHARED_USER -c 'wave install <包名>'    # 只跑一次"
+    lw_say "🌊    Afterwards, run 'id -G' inside that shell: some implementations of newgrp${RESET}" \
+        "🌊    进去之后先跑一次 'id -G'：某些 newgrp 实现会把你的其他组权限一并重置${RESET}"
+    lw_say "🌊    reset your other supplementary groups (docker, sudo, …) in that shell.${RESET}" \
+        "🌊    （docker、sudo 之类），那一层 shell 里就没有它们了。${RESET}"
     lw_say ""
     lw_say "🌊 The '$SHARED_USER' account is created automatically if missing." \
         "🌊 缺少 '$SHARED_USER' 账号时会自动创建。"
@@ -2135,6 +2145,16 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         lw_say "${YELLOW}     systemctl --user exit${RESET}"
         lw_say "${YELLOW}🌊 then log in again (a reboot does the same).${RESET}" \
             "${YELLOW}🌊 然后再登录一次（重启等效）。${RESET}"
+        lw_say "🌊 To install packages right now instead of re-logging in:" \
+            "🌊 不想重登、现在就装包的话："
+        lw_say "       newgrp $SHARED_USER           # new subshell with the group; 'exit' leaves it" \
+            "       newgrp $SHARED_USER           # 进入带该组的子 shell，exit 退出"
+        lw_say "       sg $SHARED_USER -c 'wave install <package>'    # one-off" \
+            "       sg $SHARED_USER -c 'wave install <包名>'    # 只跑一次"
+        lw_say "🌊 Run 'id -G' in that shell first: some newgrp implementations drop your other" \
+            "🌊 进去之后先跑 'id -G'：某些 newgrp 实现会把你其他的组权限一并重置"
+        lw_say "🌊 supplementary groups (docker, sudo, …) for that shell." \
+            "🌊 （docker、sudo 之类），那一层 shell 里就没有它们了。"
     else
         lw_say "🌊 '$CURRENT_USER' already has the '$SHARED_USER' group; nothing to re-login for." \
             "🌊 '$CURRENT_USER' 已在 '$SHARED_USER' 组里，不需要为了它重新登录。"
