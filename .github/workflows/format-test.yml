@@ -113,6 +113,11 @@ jobs:
         run: |
           bash scripts/arglen_test.sh
 
+      # 信任链：哈希与签名验不过必须说出来，LINUXWAVE_STRICT_HASHES=1 时必须失败
+      - name: Run signature test
+        run: |
+          bash scripts/signature_test.sh
+
       - name: Run format tests
         run: |
           bash scripts/format_test.sh

@@ -454,3 +454,4 @@ BASE_DIR/links/                  wget@1.25.0，以及每个依赖 bin/ 下可执
 ```
 
 卸载时的逆向动作见「六、关键机制」第 3、4 条：先删自己的标记，某个依赖再无任何标记时才连同它的依赖一起级联删除。
+| `signature_test.sh` | 信任链回归（14 项）：`lw_check_integrity` 的空期望/一致/不一致/严格模式，`lw_verify_latest_signature` 的无公钥/.sig 缺失/签名正确/签名不对（含严格模式），以及 `install.sh` 内置公钥与 `Keys/` 是否同步。验签用临时 RSA 钥 + `file://` URL，全程不联网 |

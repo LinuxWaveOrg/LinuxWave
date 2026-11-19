@@ -76,6 +76,114 @@ set -eE
 # 命名规则照旧：输出函数叫 lw_say。误粘贴只会得到 command not found。
 
 # ==========================================
+# 完整性校验与签名
+# ==========================================
+# 这一层守的是「拿到的字节是不是发布时那一份」。HTTPS 只保护传输，保护不了
+# 数据源被换掉。
+#
+#   latest.toml        探针：定版本与分支，所以它附带一份 RSA 签名（latest.toml.sig）
+#   update_commands.sh 按探针里 update_commands_sha256 校验（SHA-256 装进已签名的探针里）
+#
+# 实验期策略与 MacWave 4.4 一致：**验不过只警告**。要让它变成硬失败，设
+# LINUXWAVE_STRICT_HASHES=1。
+
+LW_RSA_PUB_TMP=""
+
+lw_sha256() {
+    # 用 openssl：Linux 上不需要额外的 shasum/perl 依赖
+    openssl dgst -sha256 -r "$1" 2>/dev/null | awk '{print $1}'
+}
+
+lw_signature_note() {
+    # lw_signature_note <一行英文> <一行中文>：签名相关的提示一律黄字进 stderr
+    echo -e "${YELLOW}$1${RESET}" >&2
+    echo -e "${YELLOW}${2-$1}${RESET}" >&2
+}
+
+lw_trusted_pub() {
+    # 输出一个可读的 PEM 路径，给 openssl 用。两个来源：
+    #   1. LINUXWAVE_RSA_PUB（运维/测试自己指定）
+    #   2. 脚本内置的那一份
+    # 刻意**不读**安装树里的 Keys/*.pem：那份和 latest.toml 走同一条下载通道，
+    # 能换数据的人也能换公钥，拿它验等于自证。脚本内置的这份是「上一次可信
+    # 安装」留下的锚点。
+    # 两个都没有就输出空串，调用方据此整段跳过。
+    if [[ -n "${LINUXWAVE_RSA_PUB:-}" ]]; then
+        printf '%s' "$LINUXWAVE_RSA_PUB"
+        return 0
+    fi
+    if [[ -z "$LW_RSA_PUB_TMP" ]]; then
+        LW_RSA_PUB_TMP="$(mktemp -d 2>/dev/null)" || return 0
+        printf '%s\n' "$LW_RSA_PUB_PEM" > "$LW_RSA_PUB_TMP/linuxwave-rsa.pub.pem"
+        chmod 700 "$LW_RSA_PUB_TMP"
+        chmod 600 "$LW_RSA_PUB_TMP/linuxwave-rsa.pub.pem"
+    fi
+    printf '%s' "$LW_RSA_PUB_TMP/linuxwave-rsa.pub.pem"
+}
+
+lw_check_integrity() {
+    # lw_check_integrity <说明> <文件> <期望 sha256>
+    # 期望值为空 = 这一版没带哈希，直接放行。
+    local what="$1" file="$2" expect="$3" got
+    [[ -n "$expect" ]] || return 0
+    got="$(lw_sha256 "$file")"
+    [[ "$got" == "$expect" ]] && return 0
+    if [[ "${LINUXWAVE_STRICT_HASHES:-}" == "1" ]]; then
+        lw_say_err "${RED_BOLD}🌊 Error: $what does not match the signed data.${RESET}" \
+            "${RED_BOLD}🌊 错误：$what 与已签名数据不符。${RESET}"
+        lw_say_err "🌊   expected $expect" "🌊   期望 $expect"
+        lw_say_err "🌊   got      ${got:-<unreadable>}" "🌊   实际 ${got:-<读不出>}"
+        exit 1
+    fi
+    lw_signature_note "🌊 Warning: $what does not match the signed data (continuing)" \
+        "🌊 警告：$what 与已签名数据不符（继续）"
+    echo -e "${YELLOW}🌊   expected $expect${RESET}" >&2
+    echo -e "${YELLOW}🌊   got      ${got:-<unreadable>}${RESET}" >&2
+    return 0
+}
+
+lw_verify_latest_signature() {
+    # lw_verify_latest_signature <latest.toml 的内容> <它的 URL>
+    #
+    # 没有公钥就整段跳过；有公钥但下载不到 .sig（404）也算「这一版没签名」——
+    # 实验期这是常态，不能当错误。
+    local data="$1" url="$2"
+    local pub
+    pub="$(lw_trusted_pub)"
+    [[ -n "$pub" ]] || return 0
+
+    local tmp sig status=0
+    tmp="$(mktemp)"
+    sig="$(mktemp)"
+    printf '%s\n' "$data" > "$tmp"
+    curl -fsSL --max-time 30 -o "$sig" "$url.sig" 2>/dev/null || status=$?
+    if [[ "$status" -ne 0 ]]; then
+        lw_signature_note "🌊 No signature for the self-update data (this release predates signing)." \
+            "🌊 这份自更新数据没有签名（早于签名制度，属正常情况）。"
+        rm -f "$tmp" "$sig"
+        return 0
+    fi
+
+    if openssl dgst -sha256 -verify "$pub" -signature "$sig" "$tmp" > /dev/null 2>&1; then
+        lw_signature_note "🌊 Self-update data: signature OK." "🌊 自更新数据：签名校验通过。"
+    elif [[ "${LINUXWAVE_STRICT_HASHES:-}" == "1" ]]; then
+        lw_say_err "${RED_BOLD}🌊 Error: the self-update data is not signed by the trusted key.${RESET}" \
+            "${RED_BOLD}🌊 错误：自更新数据不是由可信密钥签的。${RESET}"
+        rm -f "$tmp" "$sig"
+        exit 1
+    else
+        lw_signature_note "🌊 Warning: the self-update data is not signed by the trusted key (continuing)" \
+            "🌊 警告：自更新数据的签名不对（继续）"
+    fi
+    rm -f "$tmp" "$sig"
+    return 0
+}
+
+# >>> RSA public key (managed by scripts/embed_rsa_pub.py) >>>
+LW_RSA_PUB_PEM=''
+# <<< RSA public key <<<
+
+# ==========================================
 # 域名（4.0 起所有对外地址都可由环境变量覆盖）
 # ==========================================
 #
@@ -295,6 +403,7 @@ PROBE_URL="$CONFIGDATA_URL/linuxwavedata/latest.toml"
 PROBE_DATA=""
 LINUXWAVE_VERSION=""
 LATEST_BRANCH=""
+EXPECTED_UPDATE_COMMANDS_SHA256=""
 
 if [[ "$CLI_SKIP_PROBE" == "true" ]]; then
     # --skip-probe：不碰探针。此时版本号与分支只能靠环境变量给，否则后面的下载
@@ -304,8 +413,11 @@ if [[ "$CLI_SKIP_PROBE" == "true" ]]; then
 else
     PROBE_DATA="$(curl -fsSL --max-time 30 "$PROBE_URL" 2>/dev/null || true)"
     if [[ -n "$PROBE_DATA" ]]; then
+        # 先验签再看字段：签名覆盖的正是下面要读的这份内容。
+        lw_verify_latest_signature "$PROBE_DATA" "$PROBE_URL"
         LINUXWAVE_VERSION="$(printf '%s\n' "$PROBE_DATA" | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
         LATEST_BRANCH="$(printf '%s\n' "$PROBE_DATA" | sed -n 's/^branch[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        EXPECTED_UPDATE_COMMANDS_SHA256="$(printf '%s\n' "$PROBE_DATA" | sed -n 's/^update_commands_sha256[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
     fi
 fi
 
@@ -890,6 +1002,10 @@ if [[ "$UPDATE_COMMANDS_OK" != "true" ]]; then
         "🌊 什么都没装。请检查网络或代理后重新运行安装器。"
     exit 1
 fi
+
+# 哈希对不上说明「即将被 bash 执行的东西」不是发布时那一份。
+# 实验期只警告；LINUXWAVE_STRICT_HASHES=1 时才失败。
+lw_check_integrity "update_commands.sh" "$UPDATE_COMMANDS_TMP" "$EXPECTED_UPDATE_COMMANDS_SHA256"
 
 # 即将被 bash 执行的东西，先确认它至少是合法 shell。
 if ! /bin/bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
