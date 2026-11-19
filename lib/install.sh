@@ -11,7 +11,9 @@
 # 装个新 bash，然后发现这个安装器根本不是给他用的。macOS 上该用的是 MacWave。
 if [[ "$(uname -s 2>/dev/null)" != "Linux" ]]; then
     echo "🌊 Error: this installer is for Linux; this system is $(uname -s 2>/dev/null)." >&2
+    echo "🌊 错误：本安装器只用于 Linux；当前系统是 $(uname -s 2>/dev/null)。" >&2
     echo "🌊 On macOS use MacWave instead: https://macwave.org" >&2
+    echo "🌊 macOS 上请改用 MacWave：https://macwave.org" >&2
     exit 1
 fi
 
@@ -24,11 +26,14 @@ fi
 # 才炸在 [[ 上，报错还看不出真正原因。
 if [ -z "${BASH_VERSION:-}" ]; then
     echo "🌊 Error: run the installer with bash, not sh." >&2
+    echo "🌊 错误：请用 bash 运行安装器，而不是 sh。" >&2
     exit 1
 fi
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
     echo "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION." >&2
+    echo "🌊 错误：LinuxWave 需要 bash 4.4 或更高版本；当前是 $BASH_VERSION。" >&2
     echo "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash" >&2
+    echo "🌊 请按上一行安装新版本 bash。macOS 上不需要——那个平台用 MacWave。" >&2
     exit 1
 fi
 
@@ -281,6 +286,7 @@ mw_domain() {
     case "$value" in
         *' '*|*$'\t'*|*$'\n'*|*'"'*|*"'"*|*'`'*|*'$'*|*'\'*)
             echo -e "${RED_BOLD}🌊 Error: $name contains a forbidden character (space, quote, backtick, \$ or \\\\): $value${RESET}" >&2
+            echo -e "${RED_BOLD}🌊 错误：$name 含有禁止字符（空格、引号、反引号、\$ 或 \\）：$value${RESET}" >&2
             exit 1 ;;
     esac
 
@@ -288,6 +294,7 @@ mw_domain() {
     rest="${value#*://}"
     if [[ "$scheme" == "$value" || -z "$rest" ]]; then
         echo -e "${RED_BOLD}🌊 Error: $name must include a scheme (https:// or file://): $value${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 错误：$name 必须带协议头（https:// 或 file://）：$value${RESET}" >&2
         exit 1
     fi
 
@@ -309,10 +316,12 @@ mw_domain() {
             127.0.0.1|localhost|::1) printf '%s\n' "$value"; return 0 ;;
         esac
         echo -e "${RED_BOLD}🌊 Error: $name: plain HTTP is only allowed for loopback mirrors: $value${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 错误：$name：明文 HTTP 只允许本机回环镜像：$value${RESET}" >&2
         exit 1
     fi
 
     echo -e "${RED_BOLD}🌊 Error: $name has an unsupported scheme '$scheme': $value${RESET}" >&2
+    echo -e "${RED_BOLD}🌊 错误：$name 的协议头不受支持（'$scheme'）：$value${RESET}" >&2
     exit 1
 }
 
@@ -533,46 +542,54 @@ validate_custom_dir() {
     local dir="$1"
 
     if [[ -z "$dir" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Empty path is not allowed.${RESET}" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: Empty path is not allowed.${RESET}" \
+            "${RED_BOLD}🌊 错误：路径不能为空。${RESET}"
         return 1
     fi
 
     if [[ "$dir" == *".."* ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Path traversal ('..') is not allowed.${RESET}" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: Path traversal ('..') is not allowed.${RESET}" \
+            "${RED_BOLD}🌊 错误：路径中不允许出现 '..'。${RESET}"
         return 1
     fi
 
     if [[ "$dir" == *$'\n'* ]] || [[ "$dir" == *$'\r'* ]] || [[ "$dir" == *$'\t'* ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Invalid control characters in path.${RESET}" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: Invalid control characters in path.${RESET}" \
+            "${RED_BOLD}🌊 错误：路径中包含非法控制字符。${RESET}"
         return 1
     fi
 
     if LC_ALL=C grep -q '[^a-zA-Z0-9/_.~ -]' <<< "$dir"; then
-        echo -e "${RED_BOLD}🌊 Error: Path contains non-ASCII or invalid characters.${RESET}" >&2
-        echo -e "${RED_BOLD}🌊 Only ASCII letters, digits, '/', '-', '_', '.', '~', and spaces are allowed.${RESET}" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: Path contains non-ASCII or invalid characters.${RESET}" \
+            "${RED_BOLD}🌊 错误：路径包含非 ASCII 字符或非法字符。${RESET}"
+        lw_say_err "${RED_BOLD}🌊 Only ASCII letters, digits, '/', '-', '_', '.', '~', and spaces are allowed.${RESET}" \
+            "${RED_BOLD}🌊 只允许 ASCII 字母、数字以及 '/' '-' '_' '.' '~' 和空格。${RESET}"
         return 1
     fi
 
     local expanded="${dir/#\~/$HOME}"
 
     if [[ "$expanded" != /* ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Please use an absolute path (starting with / or ~).${RESET}" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: Please use an absolute path (starting with / or ~).${RESET}" \
+            "${RED_BOLD}🌊 错误：请使用绝对路径（以 / 或 ~ 开头）。${RESET}"
         return 1
     fi
 
     if [[ "$expanded" == *"//"* ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Path contains consecutive slashes.${RESET}" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: Path contains consecutive slashes.${RESET}" \
+            "${RED_BOLD}🌊 错误：路径中包含连续的斜杠。${RESET}"
         return 1
     fi
 
     if [[ "$expanded" == "/" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Cannot install to root directory.${RESET}" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: Cannot install to root directory.${RESET}" \
+            "${RED_BOLD}🌊 错误：不能安装到根目录。${RESET}"
         return 1
     fi
 
     # 下面三条是这个函数最要紧的部分。
     #
-    # 装到系统目录时会 `sudo chown -R root:root "$BASE_DIR"`（非共享）或交给
+    # 装到系统目录时会 `lw_privileged chown -R root:root "$BASE_DIR"`（非共享）或交给
     # `$SHARED_USER`（共享安装），而拒绝协议时的回滚是 `rm -rf "$BASE_DIR"`。
     # 如果 BASE_DIR 是 /usr/local 这种「别的软件的家」，这两件事分别是**把整个
     # 系统目录接管过来**和**删掉它** —— 与 MacWave 4.3.0 修掉的是同一类问题。
@@ -580,10 +597,15 @@ validate_custom_dir() {
     # 1) 这些目录本身绝不能被当作安装根目录。它们的子目录可以（/opt/linuxwave、
     #    /usr/local/linuxwave），正因为如此才要按「完全相等」判，不能用前缀。
     local _forbidden
-    for _forbidden in /bin /sbin /usr /usr/bin /usr/sbin /usr/lib /usr/lib64                      /usr/libexec /usr/local /usr/share /opt /etc /var /tmp                      /boot /dev /proc /sys /run /srv /mnt /media /root /home                      /lib /lib64; do
+    for _forbidden in /bin /sbin /usr /usr/bin /usr/sbin \
+                     /usr/lib /usr/lib64 /usr/libexec /usr/local /usr/share \
+                     /opt /etc /var /tmp /boot /dev /proc /sys /run \
+                     /srv /mnt /media /root /home /lib /lib64; do
         if [[ "$expanded" == "$_forbidden" ]]; then
-            echo -e "${RED_BOLD}🌊 Error: '$expanded' is a system directory, not an install directory.${RESET}" >&2
-            echo "🌊 Pick a directory of its own, for example ${_forbidden}/linuxwave" >&2
+            lw_say_err "${RED_BOLD}🌊 Error: '$expanded' is a system directory, not an install directory.${RESET}" \
+                "${RED_BOLD}🌊 错误：'$expanded' 是系统目录，不能当作安装目录。${RESET}"
+            lw_say_err "🌊 Pick a directory of its own, for example ${_forbidden}/linuxwave" \
+                "🌊 请用一个专属目录，例如 ${_forbidden}/linuxwave"
             return 1
         fi
     done
@@ -591,8 +613,9 @@ validate_custom_dir() {
     # 2) 家目录本身同理。装进去会把 LinuxWave 的文件撒得到处都是，回滚时还会
     #    rm -rf 整个家目录。
     if [[ "$expanded" == "$HOME" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Cannot install directly into your home directory.${RESET}" >&2
-        echo "🌊 Use a subdirectory such as ~/linuxwave" >&2
+        lw_say_err "${RED_BOLD}🌊 Error: Cannot install directly into your home directory.${RESET}" \
+            "${RED_BOLD}🌊 错误：不能直接装到家目录里。${RESET}"
+        lw_say_err "🌊 Use a subdirectory such as ~/linuxwave" "🌊 请用一个子目录，例如 ~/linuxwave"
         return 1
     fi
 
@@ -600,9 +623,11 @@ validate_custom_dir() {
     #    判据是 lib/wave.py：只有安装树有它，所以重装与升级仍然放行。
     if [[ -d "$expanded" && ! -f "$expanded/lib/wave.py" ]]; then
         if [[ -n "$(ls -A "$expanded" 2>/dev/null)" ]]; then
-            echo -e "${RED_BOLD}🌊 Error: '$expanded' already exists and is not empty.${RESET}" >&2
-            echo "🌊 Installing here would take ownership of files LinuxWave did not create;" >&2
-            echo "🌊 pick a new or empty directory instead." >&2
+            lw_say_err "${RED_BOLD}🌊 Error: '$expanded' already exists and is not empty.${RESET}" \
+                "${RED_BOLD}🌊 错误：'$expanded' 已存在且非空。${RESET}"
+            lw_say_err "🌊 Installing here would take ownership of files LinuxWave did not create;" \
+                "🌊 装在这里会把 LinuxWave 没创建过的文件一并接管；"
+            lw_say_err "🌊 pick a new or empty directory instead." "🌊 请改用一个新的或空的目录。"
             return 1
         fi
     fi
@@ -616,34 +641,50 @@ validate_custom_dir() {
 # ==========================================
 
 print_shared_install_notes() {
-    echo ""
-    echo -e "${YELLOW}🌊 Shared install (Linuxbrew style)${RESET}"
-    echo "🌊 Install directory : $SHARED_BASE_DIR"
-    echo "🌊 Config directory  : $SHARED_CONFIG_DIR  (system-level, shared by every user)"
-    echo "🌊 Owner             : $SHARED_USER"
-    echo ""
-    echo -e "${YELLOW}🌊 Make sure these are ready before continuing:${RESET}"
-    echo "   1. sudo - needed once, to create $SHARED_HOME and write $SHARED_CONFIG_DIR"
-    echo "   2. patchelf - dependency libraries cannot be relocated without it:"
-    echo "        Debian/Ubuntu : sudo apt install patchelf"
-    echo "        Fedora/RHEL   : sudo dnf install patchelf"
-    echo "        Arch          : sudo pacman -S patchelf"
-    echo "   3. Python 3.14 or above - required by LinuxWave and by .conda packages"
-    echo ""
-    echo -e "${YELLOW}🌊 4. One thing you must do afterwards: log out and back in.${RESET}"
-    echo -e "${YELLOW}🌊    Packages are installed through the '$SHARED_USER' group, and '$CURRENT_USER'${RESET}"
-    echo -e "${YELLOW}🌊    is added to it by this install - but a group only takes effect in a new${RESET}"
-    echo -e "${YELLOW}🌊    login session. Until you re-login the tree is still unwritable and 'wave'${RESET}"
-    echo -e "${YELLOW}🌊    will say so. Nothing is broken; just log out and back in (or run${RESET}"
-    echo -e "${YELLOW}🌊    'newgrp $SHARED_USER' in this shell).${RESET}"
-    echo ""
-    echo "🌊 The '$SHARED_USER' account is created automatically if missing."
-    echo "🌊 Every user on this machine will be able to run 'wave'."
-    echo "🌊 Installs are shared through that group, so they need neither sudo nor a full"
-    echo "🌊 path:"
-    echo "     wave install <package>"
-    echo "🌊 More users: sudo usermod -aG $SHARED_USER <user>   (they re-login as well)"
-    echo ""
+    lw_say ""
+    lw_say "${YELLOW}🌊 Shared install (Linuxbrew style)${RESET}" \
+        "${YELLOW}🌊 共享安装（Linuxbrew 式）${RESET}"
+    lw_say "🌊 Install directory : $SHARED_BASE_DIR" "🌊 安装目录：$SHARED_BASE_DIR"
+    lw_say "🌊 Config directory  : $SHARED_CONFIG_DIR  (system-level, shared by every user)" \
+        "🌊 配置目录：$SHARED_CONFIG_DIR（系统级，全机共用）"
+    lw_say "🌊 Owner             : $SHARED_USER" "🌊 归属用户：$SHARED_USER"
+    lw_say ""
+    lw_say "${YELLOW}🌊 Make sure these are ready before continuing:${RESET}" \
+        "${YELLOW}🌊 继续之前请确认这几件事：${RESET}"
+    lw_say "   1. sudo - needed once, to create $SHARED_HOME and write $SHARED_CONFIG_DIR" \
+        "   1. sudo —— 建 $SHARED_HOME 与写 $SHARED_CONFIG_DIR 时各需要一次"
+    lw_say "   2. patchelf - dependency libraries cannot be relocated without it:" \
+        "   2. patchelf —— 没有它无法重定位依赖库："
+    lw_say "        Debian/Ubuntu : sudo apt install patchelf" "        Debian/Ubuntu：sudo apt install patchelf"
+    lw_say "        Fedora/RHEL   : sudo dnf install patchelf" "        Fedora/RHEL  ：sudo dnf install patchelf"
+    lw_say "        Arch          : sudo pacman -S patchelf" "        Arch         ：sudo pacman -S patchelf"
+    lw_say "   3. Python 3.14 or above - required by LinuxWave and by .conda packages" \
+        "   3. Python 3.14 或更高 —— LinuxWave 与 .conda 包都需要"
+    lw_say ""
+    lw_say "${YELLOW}🌊 4. One thing you must do afterwards: log out and back in.${RESET}" \
+        "${YELLOW}🌊 4. 装完之后必须做一件事：注销再登录。${RESET}"
+    lw_say "${YELLOW}🌊    Packages are installed through the '$SHARED_USER' group, and '$CURRENT_USER'${RESET}" \
+        "${YELLOW}🌊    装包是通过 '$SHARED_USER' 组完成的，本次安装已把 '$CURRENT_USER'${RESET}"
+    lw_say "${YELLOW}🌊    is added to it by this install - but a group only takes effect in a new${RESET}" \
+        "${YELLOW}🌊    加进该组 —— 但组身份只在下一次登录会话里生效。${RESET}"
+    lw_say "${YELLOW}🌊    login session. Until you re-login the tree is still unwritable and 'wave'${RESET}" \
+        "${YELLOW}🌊    在重新登录之前，安装树对你仍是不可写的，'wave' 会如实告诉你。${RESET}"
+    lw_say "${YELLOW}🌊    will say so. Nothing is broken; just log out and back in (or run${RESET}" \
+        "${YELLOW}🌊    什么都没坏：注销重登即可，也可以在当前 shell 里运行${RESET}"
+    lw_say "${YELLOW}🌊    'newgrp $SHARED_USER' in this shell).${RESET}" \
+        "${YELLOW}🌊    'newgrp $SHARED_USER'。${RESET}"
+    lw_say ""
+    lw_say "🌊 The '$SHARED_USER' account is created automatically if missing." \
+        "🌊 缺少 '$SHARED_USER' 账号时会自动创建。"
+    lw_say "🌊 Every user on this machine will be able to run 'wave'." \
+        "🌊 本机所有用户都能运行 'wave'。"
+    lw_say "🌊 Installs are shared through that group, so they need neither sudo nor a full" \
+        "🌊 装包通过该组共享，所以既不需要 sudo，也不需要写全路径："
+    lw_say "🌊 path:"
+    lw_say "     wave install <package>"
+    lw_say "🌊 More users: sudo usermod -aG $SHARED_USER <user>   (they re-login as well)" \
+        "🌊 再开一个用户：sudo usermod -aG $SHARED_USER <用户名>（同样要重新登录）"
+    lw_say ""
 }
 
 # ==========================================
@@ -984,6 +1025,18 @@ else
     NEED_SUDO=true
 fi
 
+lw_privileged() {
+    # 提权执行一条**会改动系统**的命令。--dry-run 下只打印：试运行承诺「不建目录、
+    # 不写配置」，但建账号、改属主、开组写位这些操作如果直接调 sudo，试运行就会
+    # 在系统里留下一个真的 linuxwave 账号。所有写操作都走这里。
+    # 只读探针（sudo -n true、sudo test -f、sudo grep）不走这里 —— 它们不改东西。
+    if [[ "$CLI_DRY_RUN" == "true" ]]; then
+        lw_say "${YELLOW}    sudo $*${RESET}"
+        return 0
+    fi
+    mw_sudo "$@"
+}
+
 run_cmd() {
     # 试运行只把命令打出来：建目录、写配置、删旧文件都经由这里。
     if [[ "${CLI_DRY_RUN:-false}" == "true" ]]; then
@@ -1022,11 +1075,11 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         echo "🌊 User '$SHARED_USER' already exists."
     else
         echo "🌊 Creating user '$SHARED_USER'..."
-        sudo useradd -m -d "$SHARED_HOME" -s /bin/bash "$SHARED_USER"
+        lw_privileged useradd -m -d "$SHARED_HOME" -s /bin/bash "$SHARED_USER"
     fi
 
-    sudo mkdir -p "$BASE_DIR"
-    sudo chown "$SHARED_USER:$SHARED_USER" "$SHARED_HOME" "$BASE_DIR"
+    lw_privileged mkdir -p "$BASE_DIR"
+    lw_privileged chown "$SHARED_USER:$SHARED_USER" "$SHARED_HOME" "$BASE_DIR"
 fi
 
 # ==========================================
@@ -1245,15 +1298,15 @@ EOF
 
 if [[ "$NEED_SUDO" == "true" ]]; then
     if [[ "$SHARED_INSTALL" == "true" ]]; then
-        sudo chown -R "$SHARED_USER:$SHARED_USER" "$BASE_DIR"
+        lw_privileged chown -R "$SHARED_USER:$SHARED_USER" "$BASE_DIR"
     else
-        sudo chown -R "$CURRENT_USER": "$BASE_DIR"
+        lw_privileged chown -R "$CURRENT_USER": "$BASE_DIR"
     fi
 fi
 
 # 系统级安装的配置一律 root:root 644：全体用户可读，但只有 root 能改
 if [[ "$NEED_SUDO" == "true" ]]; then
-    sudo chown -R root:root "$CONFIG_DIR"
+    lw_privileged chown -R root:root "$CONFIG_DIR"
 fi
 run_cmd chmod 755 "$CONFIG_DIR"
 run_cmd chmod 644 "$CONFIG_FILE"
@@ -1713,10 +1766,10 @@ write_launcher "$BASE_DIR" "$PYTHON_BIN"
 
 if [[ "$NEED_SUDO" == "true" ]]; then
     if [[ "$SHARED_INSTALL" == "true" ]]; then
-        sudo chown -R "$SHARED_USER:$SHARED_USER" "$BASE_DIR"
+        lw_privileged chown -R "$SHARED_USER:$SHARED_USER" "$BASE_DIR"
     else
-        sudo chown -R root:root "$BASE_DIR"
-        sudo chmod -R u+rwX,go+rX,go-w "$BASE_DIR"
+        lw_privileged chown -R root:root "$BASE_DIR"
+        lw_privileged chmod -R u+rwX,go+rX,go-w "$BASE_DIR"
         echo ""
         echo "🌊 Ownership: $BASE_DIR -> root:root, mode 755"
         echo "🌊 Changing packages (install / upgrade / uninstall) needs sudo,"
@@ -1730,15 +1783,15 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     # useradd -m 建出的家目录默认是 750，其他用户连进入都不行；
     # a+rX 里大写的 X 只给目录和原本可执行的文件加 x，不会误改普通文件。
     echo "🌊 Opening $SHARED_HOME and $BASE_DIR to all users..."
-    sudo chmod 755 "$SHARED_HOME"
-    sudo chmod -R a+rX "$BASE_DIR"
+    lw_privileged chmod 755 "$SHARED_HOME"
+    lw_privileged chmod -R a+rX "$BASE_DIR"
 
     # Linuxbrew 式共享写：整棵树交给 '$SHARED_USER' 组，调用者入组。
     # 只给读 + 执行是不够的——组员连 downloads/tmp 都建不出来，装包必然失败，
     # 所以这里把组写位打开。代价是组员能改动整棵树，包括 lib/wave 本体
     # （见 .templates/SPECIAL/INSTALL_BY_INTERNET.md 末尾对这一点说明）。
     echo "🌊 Setting up the '$SHARED_USER' group for shared installs..."
-    sudo groupadd -f "$SHARED_USER"
+    lw_privileged groupadd -f "$SHARED_USER"
 
     RELOGIN_NEEDED=false
     # 这两个判断不能混用（实测过 `id` 的两种语义）：
@@ -1752,7 +1805,7 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         && ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
         # 加组失败不该让整个安装失败：树本身已经装好、也仍然能用，
         # 用户只是暂时还得按提示用 sudo 装包。失败要说清楚，不能吞掉。
-        if sudo usermod -aG "$SHARED_USER" "$CURRENT_USER"; then
+        if lw_privileged usermod -aG "$SHARED_USER" "$CURRENT_USER"; then
             RELOGIN_NEEDED=true
         else
             echo -e "${YELLOW}🌊 Could not add '$CURRENT_USER' to '$SHARED_USER' automatically.${RESET}"
@@ -1760,11 +1813,11 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         fi
     fi
 
-    sudo chgrp -R "$SHARED_USER" "$BASE_DIR"
-    sudo chmod -R g+w "$BASE_DIR"
+    lw_privileged chgrp -R "$SHARED_USER" "$BASE_DIR"
+    lw_privileged chmod -R g+w "$BASE_DIR"
     # setgid 必须加在目录上：否则组员新建的文件会落回他自己的主组，
     # 下一个组员就写不进去了。
-    sudo find "$BASE_DIR" -type d -exec chmod g+s {} +
+    lw_privileged find "$BASE_DIR" -type d -exec chmod g+s {} +
 
     # 会话里还没有这个组的身份 -> 也要提示（加过组但一直没重登就是这种）。
     # 权限位本身是立即生效的，只有「你个人的组身份」要等新登录会话。
@@ -1808,14 +1861,14 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         echo "🌊 LinuxWave is already in $SHARED_RC."
     elif sudo test -f "$SHARED_RC"; then
         echo "🌊 Adding LinuxWave to PATH in $SHARED_RC..."
-        printf '\n# LinuxWave\n%s\n' "$PATH_LINE" | sudo tee -a "$SHARED_RC" > /dev/null
-        sudo chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
-    elif printf '# LinuxWave\n%s\n' "$PATH_LINE" | sudo tee "$SHARED_RC" > /dev/null; then
+        printf '\n# LinuxWave\n%s\n' "$PATH_LINE" | lw_privileged tee -a "$SHARED_RC" > /dev/null
+        lw_privileged chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
+    elif printf '# LinuxWave\n%s\n' "$PATH_LINE" | lw_privileged tee "$SHARED_RC" > /dev/null; then
         # 账号预存、或 /etc/skel 里没有 .bashrc 时文件不存在。
         # 建出来，否则这个账号反而跑不了 wave，而安装却自称已完成。
         echo "🌊 Created $SHARED_RC with LinuxWave in PATH."
-        sudo chmod 644 "$SHARED_RC"
-        sudo chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
+        lw_privileged chmod 644 "$SHARED_RC"
+        lw_privileged chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
     else
         echo -e "${YELLOW}🌊 Warning: could not write $SHARED_RC.${RESET}"
         echo "🌊 '$SHARED_USER' can add it manually with:"
@@ -1936,7 +1989,7 @@ else
         run_cmd rm -rf "$CONFIG_DIR"
         remove_lw_path_entries "$RC_FILE"
         if [[ "$SHARED_INSTALL" == "true" ]] && sudo test -f "$SHARED_HOME/.bashrc"; then
-            sudo python3 - "$SHARED_HOME/.bashrc" "$PATH_LINE" << 'PYEOF'
+            lw_privileged python3 - "$SHARED_HOME/.bashrc" "$PATH_LINE" << 'PYEOF'
 import sys
 from pathlib import Path
 
@@ -1963,38 +2016,52 @@ fi
 # ==========================================
 
 echo ""
-echo "🌊 Installation complete!"
-echo "🌊 LinuxWave installed to: $DISPLAY_DIR"
-echo "🌊 Architecture: $ARCH"
+lw_say "🌊 Installation complete!" "🌊 安装完成！"
+lw_say "🌊 LinuxWave installed to: $DISPLAY_DIR" "🌊 LinuxWave 已安装到：$DISPLAY_DIR"
+lw_say "🌊 Architecture: $ARCH" "🌊 架构：$ARCH"
 echo ""
 
 if [[ "$SHARED_INSTALL" == "true" ]]; then
-    echo "🌊 Shared install ready."
-    echo "🌊 Config   : $CONFIG_DIR  (system-level, every user resolves it)"
-    echo "🌊 Owner    : $SHARED_USER:$SHARED_USER  (shared write via the '$SHARED_USER' group)"
-    echo "🌊 Other users can enable 'wave' with:"
-    echo -e "${YELLOW}    echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc${RESET}"
+    lw_say "🌊 Shared install ready." "🌊 共享安装已就绪。"
+    lw_say "🌊 Config   : $CONFIG_DIR  (system-level, every user resolves it)" \
+        "🌊 配置目录：$CONFIG_DIR（系统级，所有用户都解析到它）"
+    lw_say "🌊 Owner    : $SHARED_USER:$SHARED_USER  (shared write via the '$SHARED_USER' group)" \
+        "🌊 属主    ：$SHARED_USER:$SHARED_USER（通过 '$SHARED_USER' 组共享写）"
+    lw_say "🌊 Other users can enable 'wave' with:" "🌊 其他用户这样启用 'wave'："
+    lw_say "${YELLOW}    echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc${RESET}"
     if [[ "$RELOGIN_NEEDED" == "true" ]]; then
-        echo -e "${YELLOW}🌊 '$CURRENT_USER' is now in the '$SHARED_USER' group, but this shell does${RESET}"
-        echo -e "${YELLOW}🌊 not have it yet: log out and back in (or run 'newgrp $SHARED_USER') before${RESET}"
-        echo -e "${YELLOW}🌊 installing packages. A group only takes effect in a new login session -${RESET}"
-        echo -e "${YELLOW}🌊 until then the tree is still unwritable, and 'wave' will say so.${RESET}"
-        echo -e "${YELLOW}🌊 If it is still unwritable after a re-login, the user manager started at${RESET}"
-        echo -e "${YELLOW}🌊 your first login is holding the old credentials: run${RESET}"
-        echo -e "${YELLOW}     systemctl --user exit${RESET}"
-        echo -e "${YELLOW}🌊 then log in again (a reboot does the same).${RESET}"
+        lw_say "${YELLOW}🌊 '$CURRENT_USER' is now in the '$SHARED_USER' group, but this shell does${RESET}" \
+            "${YELLOW}🌊 '$CURRENT_USER' 已在 '$SHARED_USER' 组里，但当前这个 shell 还没有该身份：${RESET}"
+        lw_say "${YELLOW}🌊 not have it yet: log out and back in (or run 'newgrp $SHARED_USER') before${RESET}" \
+            "${YELLOW}🌊 装包之前请注销重登（或运行 'newgrp $SHARED_USER'）。${RESET}"
+        lw_say "${YELLOW}🌊 installing packages. A group only takes effect in a new login session -${RESET}" \
+            "${YELLOW}🌊 组身份只在下一次登录会话里生效 —— 在那之前安装树对你仍不可写，${RESET}"
+        lw_say "${YELLOW}🌊 until then the tree is still unwritable, and 'wave' will say so.${RESET}" \
+            "${YELLOW}🌊 'wave' 会如实告诉你这一点。${RESET}"
+        lw_say "${YELLOW}🌊 If it is still unwritable after a re-login, the user manager started at${RESET}" \
+            "${YELLOW}🌊 如果重登之后仍不可写，说明第一次登录时启动的 user manager 还握着旧凭据：${RESET}"
+        lw_say "${YELLOW}🌊 your first login is holding the old credentials: run${RESET}" \
+            "${YELLOW}🌊 请运行${RESET}"
+        lw_say "${YELLOW}     systemctl --user exit${RESET}"
+        lw_say "${YELLOW}🌊 then log in again (a reboot does the same).${RESET}" \
+            "${YELLOW}🌊 然后再登录一次（重启等效）。${RESET}"
     else
-        echo "🌊 '$CURRENT_USER' already has the '$SHARED_USER' group; nothing to re-login for."
+        lw_say "🌊 '$CURRENT_USER' already has the '$SHARED_USER' group; nothing to re-login for." \
+            "🌊 '$CURRENT_USER' 已在 '$SHARED_USER' 组里，不需要为了它重新登录。"
     fi
-    echo "🌊 Installs go through that group, so they need no sudo and no full path:"
-    echo "     wave install <package>"
-    echo "🌊 To let more users install:"
-    echo "     sudo usermod -aG $SHARED_USER <user>   (they re-login as well)"
-    echo "🌊 'wave selfupdate' still needs sudo: it rewrites $CONFIG_DIR, which is root-owned."
+    lw_say "🌊 Installs go through that group, so they need no sudo and no full path:" \
+        "🌊 装包通过该组完成，所以既不需要 sudo，也不需要写全路径："
+    lw_say "     wave install <package>"
+    lw_say "🌊 To let more users install:" "🌊 想让更多用户也能装包："
+    lw_say "     sudo usermod -aG $SHARED_USER <user>   (they re-login as well)" \
+        "     sudo usermod -aG $SHARED_USER <用户名>（同样要重新登录）"
+    lw_say "🌊 'wave selfupdate' still needs sudo: it rewrites $CONFIG_DIR, which is root-owned." \
+        "🌊 'wave selfupdate' 仍然需要 sudo：它要重写 $CONFIG_DIR，那里属 root。"
     echo ""
 fi
 RC_DISPLAY=$(home_to_tilde "$RC_FILE")
-echo "🌊 To use 'wave' immediately in this terminal, run:"
-echo -e "${YELLOW}    source $RC_DISPLAY${RESET}"
-echo "🌊 Or simply open a new terminal window."
+lw_say "🌊 To use 'wave' immediately in this terminal, run:" \
+    "🌊 想在当前终端立刻用上 'wave'，请运行："
+lw_say "${YELLOW}    source $RC_DISPLAY${RESET}"
+lw_say "🌊 Or simply open a new terminal window." "🌊 或者直接开一个新终端窗口。"
 echo ""

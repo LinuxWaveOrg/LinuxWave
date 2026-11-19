@@ -61,6 +61,7 @@ mw_domain() {
     case "$value" in
         *' '*|*$'\t'*|*$'\n'*|*'"'*|*"'"*|*'`'*|*'$'*|*'\'*)
             echo -e "${RED_BOLD}🌊 Error: $name contains a forbidden character (space, quote, backtick, \$ or \\\\): $value${RESET}" >&2
+            echo -e "${RED_BOLD}🌊 错误：$name 含有禁止字符（空格、引号、反引号、\$ 或 \\）：$value${RESET}" >&2
             exit 1 ;;
     esac
 
@@ -68,6 +69,7 @@ mw_domain() {
     rest="${value#*://}"
     if [[ "$scheme" == "$value" || -z "$rest" ]]; then
         echo -e "${RED_BOLD}🌊 Error: $name must include a scheme (https:// or file://): $value${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 错误：$name 必须带协议头（https:// 或 file://）：$value${RESET}" >&2
         exit 1
     fi
 
@@ -89,10 +91,12 @@ mw_domain() {
             127.0.0.1|localhost|::1) printf '%s\n' "$value"; return 0 ;;
         esac
         echo -e "${RED_BOLD}🌊 Error: $name: plain HTTP is only allowed for loopback mirrors: $value${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 错误：$name：明文 HTTP 只允许本机回环镜像：$value${RESET}" >&2
         exit 1
     fi
 
     echo -e "${RED_BOLD}🌊 Error: $name has an unsupported scheme '$scheme': $value${RESET}" >&2
+    echo -e "${RED_BOLD}🌊 错误：$name 的协议头不受支持（'$scheme'）：$value${RESET}" >&2
     exit 1
 }
 
