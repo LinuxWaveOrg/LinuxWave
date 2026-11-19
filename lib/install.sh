@@ -424,6 +424,7 @@ CONFIGDATA_URL="$SELFUPDATE_URL"   # 版本数据与自更新数据同源，见�
 RED_BOLD='\033[1;31m'
 GREEN='\033[32m'
 YELLOW='\033[33m'
+SKY_BLUE='\033[38;5;74m'
 RESET='\033[0m'
 
 # ==========================================
@@ -481,7 +482,7 @@ lw_say_err() {
 lw_apply_presentation() {
     [[ "$_PRESENTATION_APPLIED" == "true" ]] && return 0
     if lw_raw; then
-        RED_BOLD=""; GREEN=""; YELLOW=""; RESET=""
+        RED_BOLD=""; GREEN=""; YELLOW=""; SKY_BLUE=""; RESET=""
         exec > >(lw_raw_filter) 2>&1
     fi
     _PRESENTATION_APPLIED=true
@@ -908,6 +909,20 @@ fi
 # 显示欢迎信息
 # ==========================================
 
+# WAVE 艺术字。与语言无关，两种语言都打 —— 它只是装饰，不值得为它写两份。
+#
+# --raw 时整段跳过：那是给日志和 grep 看的输出，六行全是块字符，只会把真正的
+# 内容顶出屏幕、把日志撑满。装饰不参与「装得成不成」这件事，去掉它不影响任何断言。
+if ! lw_raw; then
+    echo ""
+    printf '%b\n' "${SKY_BLUE}██╗    ██╗ █████╗ ██╗   ██╗███████╗${RESET}"
+    printf '%b\n' "${SKY_BLUE}██║    ██║██╔══██╗██║   ██║██╔════╝${RESET}"
+    printf '%b\n' "${SKY_BLUE}██║ █╗ ██║███████║██║   ██║█████╗  ${RESET}"
+    printf '%b\n' "${SKY_BLUE}██║███╗██║██╔══██║╚██╗ ██╔╝██╔══╝  ${RESET}"
+    printf '%b\n' "${SKY_BLUE}╚███╔███╔╝██║  ██║ ╚████╔╝ ███████╗${RESET}"
+    printf '%b\n' "${SKY_BLUE} ╚══╝╚══╝ ╚═╝  ╚═╝  ╚═══╝  ╚══════╝${RESET}"
+    echo ""
+fi
 lw_say "🌊 Welcome to LinuxWave $LINUXWAVE_VERSION!" "🌊 欢迎使用 LinuxWave $LINUXWAVE_VERSION！"
 
 # 用了镜像就明说一句。装完遇到问题，第一件事是确认自己连的到底是谁 —— 而镜像地址里
