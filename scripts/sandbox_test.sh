@@ -878,14 +878,66 @@ else
     echo -e "${YELLOW}🌊 Set LINUXWAVE_CONFIGDATA=<path> to test the real one.${RESET}"
 fi
 
-# 只改两行 URL，其余与真实安装器逐字节一致
+# 4.0 起客户端改为「探针 + 按版本冻结的更新命令」。夹具必须自带这两样，
+# 而且**不能**用上游那份 update_commands.sh —— 它会去 GitHub 取
+# lib/selfupdate.sh，测试就联网了。所以这里一律覆盖成本地版本：
+#
+#   linuxwavedata/latest.toml                → 0.0.0 / HEAD
+#   linuxwavedata/0.0.0/update_commands.sh   → 直接从本地镜像按清单落盘
+TEST_VERSION="0.0.0"
+mkdir -p "$SANDBOX_DIR/mirror/configdata/linuxwavedata/$TEST_VERSION"
+
+{
+    echo 'version = "0.0.0"'
+    echo 'release_date = "2026-01-01"'
+    echo 'build_number = "000A0000"'
+    echo 'branch = "HEAD"'
+} > "$SANDBOX_DIR/mirror/configdata/linuxwavedata/latest.toml"
+
+{
+    echo '#!/bin/bash'
+    echo '# 测试夹具：从本地镜像按清单落盘，对应真实环境里那份按版本冻结的更新命令。'
+    echo 'set -u'
+    echo ': "${LINUXWAVE_INSTALL_DIR:?}"'
+    echo ': "${LINUXWAVE_CORE_URL:?}"'
+    echo 'fail=0'
+    echo 'while IFS= read -r rel; do'
+    echo '    [[ -z "$rel" ]] && continue'
+    echo '    mkdir -p "$LINUXWAVE_INSTALL_DIR/$(dirname "$rel")" || exit 1'
+    echo '    if ! curl -fsSL --max-time 60 -o "$LINUXWAVE_INSTALL_DIR/$rel" "$LINUXWAVE_CORE_URL/$rel"; then'
+    echo '        echo "🌊 Error: cannot fetch $rel" >&2'
+    echo '        fail=1'
+    echo '    fi'
+    echo '    case "$rel" in *.sh) chmod +x "$LINUXWAVE_INSTALL_DIR/$rel" ;; esac'
+    echo 'done <<LIST'
+    for d in lib pkg surfboard; do
+        for f in "$REPO_DIR/$d"/*; do
+            [[ -f "$f" ]] || continue
+            base="$(basename "$f")"
+            [[ "$base" == "install.sh" || "$base" == "uninstall.sh" ]] && continue
+            echo "$d/$base"
+        done
+    done
+    echo 'LIST'
+    echo ''
+    echo '[[ "$fail" -eq 0 ]] || exit 1'
+} > "$SANDBOX_DIR/mirror/configdata/linuxwavedata/$TEST_VERSION/update_commands.sh"
+chmod +x "$SANDBOX_DIR/mirror/configdata/linuxwavedata/$TEST_VERSION/update_commands.sh"
+
+# 版本号两处必须一致：客户端先读探针，回落时读 versiondata；测试里两份都写 0.0.0
+sed -i.bak -e 's/^version: .*/version: "0.0.0"/' -e 's/^branch: .*/branch: "HEAD"/' \
+    "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version" 2>/dev/null || true
+rm -f "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version.bak"
+
+# 只改 URL 三行，其余与真实安装器逐字节一致
 sed -e "s|^BASE_URL=.*|BASE_URL=\"file://$SANDBOX_DIR/mirror/base\"|" \
+    -e "s|^CORE_URL=.*|CORE_URL=\"file://$SANDBOX_DIR/mirror/base\"|" \
     -e "s|^CONFIGDATA_URL=.*|CONFIGDATA_URL=\"file://$SANDBOX_DIR/mirror/configdata\"|" \
     "$REPO_DIR/lib/install.sh" > "$SANDBOX_DIR/install-offline.sh"
 cp "$REPO_DIR/lib/uninstall.sh" "$SANDBOX_DIR/source-uninstall.sh"
 
-if [[ "$(diff <(sed -e 's|^BASE_URL=.*|X|' -e 's|^CONFIGDATA_URL=.*|Y|' "$REPO_DIR/lib/install.sh") \
-               <(sed -e 's|^BASE_URL=.*|X|' -e 's|^CONFIGDATA_URL=.*|Y|' "$SANDBOX_DIR/install-offline.sh") \
+if [[ "$(diff <(sed -e 's|^BASE_URL=.*|X|' -e 's|^CORE_URL=.*|C|' -e 's|^CONFIGDATA_URL=.*|Y|' "$REPO_DIR/lib/install.sh") \
+               <(sed -e 's|^BASE_URL=.*|X|' -e 's|^CORE_URL=.*|C|' -e 's|^CONFIGDATA_URL=.*|Y|' "$SANDBOX_DIR/install-offline.sh") \
           | wc -l)" != "0" ]]; then
     echo -e "${RED_BOLD}🌊 Error: the offline installer differs from lib/install.sh beyond the URLs.${RESET}"
     exit 1

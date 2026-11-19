@@ -278,20 +278,49 @@ lw_apply_presentation() {
 }
 
 # ==========================================
-# 版本号与代码分支（从 configdata 读取，不写死在脚本里）
+# 版本号与代码分支（读自更新探针，不写死在脚本里）
 # ==========================================
 #
-# latest_version 里的 version 是这次要安装的版本，branch 是配套的代码分支：
-# 两者一起读，保证「下载的代码」和「写进 VERSION.json 的版本号」对应同一个版本。
+# 4.0 起自更新数据是两级结构：
+#
+#   linuxwavedata/latest.toml                哪个版本是最新的（每次发版都变）
+#   linuxwavedata/<版本>/update_commands.sh  那个版本「下载什么、放到哪」（按版本冻结）
+#
+# 拆开的理由：装了旧版本的用户仍在运行，他们那份更新说明不能因为发了新版就变样。
+#
+# 迁移期回落到 3.x 的 versiondata/latest_version —— 镜像上两份可以并存，
+# 谁也不会被打断。
 
-LATEST_VERSION_DATA="$(curl -fsSL --max-time 30 "$CONFIGDATA_URL/versiondata/latest_version" 2>/dev/null)"
+PROBE_URL="$CONFIGDATA_URL/linuxwavedata/latest.toml"
+PROBE_DATA=""
+LINUXWAVE_VERSION=""
+LATEST_BRANCH=""
 
-LINUXWAVE_VERSION="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
-LATEST_BRANCH="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+if [[ "$CLI_SKIP_PROBE" == "true" ]]; then
+    # --skip-probe：不碰探针。此时版本号与分支只能靠环境变量给，否则后面的下载
+    # 没有目标。
+    LINUXWAVE_VERSION="${LINUXWAVE_VERSION:-}"
+    LATEST_BRANCH="${LINUXWAVE_BRANCH:-HEAD}"
+else
+    PROBE_DATA="$(curl -fsSL --max-time 30 "$PROBE_URL" 2>/dev/null || true)"
+    if [[ -n "$PROBE_DATA" ]]; then
+        LINUXWAVE_VERSION="$(printf '%s\n' "$PROBE_DATA" | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        LATEST_BRANCH="$(printf '%s\n' "$PROBE_DATA" | sed -n 's/^branch[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+    fi
+fi
 
 if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: Cannot read the latest version from configdata.${RESET}" >&2
-    echo -e "${RED_BOLD}🌊 Check your network or proxy, then run the installer again.${RESET}" >&2
+    # 3.x 回落：versiondata/latest_version
+    LATEST_VERSION_DATA="$(curl -fsSL --max-time 30 "$CONFIGDATA_URL/versiondata/latest_version" 2>/dev/null || true)"
+    LINUXWAVE_VERSION="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+    LATEST_BRANCH="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+fi
+
+if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
+    lw_say_err "${RED_BOLD}🌊 Error: Cannot read the latest version from the self-update probe.${RESET}" \
+        "${RED_BOLD}🌊 错误：读不到自更新探针里的版本号。${RESET}"
+    lw_say_err "🌊 Check your network or proxy, then run the installer again." \
+        "🌊 请检查网络或代理后重新运行安装器。"
     exit 1
 fi
 
@@ -816,56 +845,58 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
 fi
 
 # ==========================================
-# 文件清单（configdata/versiondata/files_info）
+# 更新命令（linuxwavedata/<版本>/update_commands.sh）
 # ==========================================
 #
-# 要下载哪些文件不写死在本脚本里，而是去 configdata 分支读一份清单，
-# 这样新增文件只要改那份清单，不必再同步修改安装脚本与自更新脚本。
-# 清单内容**只表示仓库里的路径**，写法：
+# 要下载哪些文件、放到哪里，4.0 起由一份**按版本冻结**的脚本回答，客户端只负责
+# 取回来执行：
+#   - 脚本自己知道这一版该下哪些文件，所以能只列变动的那些（没碰过的文件不必重下）；
+#   - 目录结构变更的迁移也写在同一个脚本里，不必再维护第二套机制；
+#   - 客户端不再需要「缩进树」这种自定义格式的解析器。
 #
-#     /                      单独一个 / 表示安装根（等价于 BASE_DIR）
-#         lib/               以 / 结尾 → 目录，只创建不下载
-#             wave.py        其它 → 文件
-#         pkg/linker.py      也可以行内直接写完整路径，代替缩进
-#             # 以 # 开头的是注释，空行忽略
-#
-# 缩进每层 4 个空格，Tab 与 4 个空格等价，两种可以混用。
-# 每个文件都从 "$BASE_URL/<仓库路径>" 下载，落到 "$BASE_DIR" 下的同名位置。
-# PATH 上的入口 lib/wave 不在这份清单里：它由 write_launcher 生成（内容随解释器位置变）。
-#
-# 这一步刻意放在「建目录 / 写配置 / 清旧版」之前：连不上 configdata 就直接退出，
+# 这一步刻意放在「建目录 / 写配置 / 清旧版」之前：连不上就直接退出，
 # 不会留下一个配置已写好、文件却一个都没下的半成品安装。
 
-FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
-FILES_INFO_TMP="$(mktemp)"
-FILES_INFO_ATTEMPTS=3
+UPDATE_COMMANDS_URL="$CONFIGDATA_URL/linuxwavedata/$LINUXWAVE_VERSION/update_commands.sh"
+UPDATE_COMMANDS_TMP="$(mktemp)"
+UPDATE_COMMANDS_ATTEMPTS=3
 
-# 每个文件的重试次数。实测网络（尤其是 raw.githubusercontent）经常
-# 在传输中途被重置，而这里只要有一个文件失败，整轮安装就前功尽弃——
-# 不加这一层，用户就得手工重跑很多遍。
-DOWNLOAD_ATTEMPTS=5
-
-cleanup_files_info() {
-    rm -f "$FILES_INFO_TMP"
+# 每个文件的重试次数由更新脚本自己管；这里只管「把说明取回来」这一件事。
+cleanup_update_commands() {
+    rm -f "$UPDATE_COMMANDS_TMP"
 }
-trap cleanup_files_info EXIT
+trap cleanup_update_commands EXIT
 
-echo "🌊 Fetching the file list..."
+lw_say "🌊 Fetching the update commands..." "🌊 正在获取更新命令……"
 
-FILES_INFO_OK=false
-for attempt in $(seq 1 "$FILES_INFO_ATTEMPTS"); do
-    if curl -fsSL --max-time 60 -o "$FILES_INFO_TMP" "$FILES_INFO_URL"; then
-        FILES_INFO_OK=true
+UPDATE_COMMANDS_OK=false
+for attempt in $(seq 1 "$UPDATE_COMMANDS_ATTEMPTS"); do
+    if curl -fsSL --max-time 60 -o "$UPDATE_COMMANDS_TMP" "$UPDATE_COMMANDS_URL"; then
+        UPDATE_COMMANDS_OK=true
         break
     fi
-    if [[ "$attempt" -lt "$FILES_INFO_ATTEMPTS" ]]; then
-        echo -e "${YELLOW}🌊 Retrying the file list ($((attempt + 1))/$FILES_INFO_ATTEMPTS)...${RESET}"
+    if [[ "$attempt" -lt "$UPDATE_COMMANDS_ATTEMPTS" ]]; then
+        lw_say "${YELLOW}🌊 Retrying the update commands ($((attempt + 1))/$UPDATE_COMMANDS_ATTEMPTS)...${RESET}" \
+            "${YELLOW}🌊 正在重试获取更新命令（$((attempt + 1))/$UPDATE_COMMANDS_ATTEMPTS）……${RESET}"
     fi
 done
 
-if [[ "$FILES_INFO_OK" != "true" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: Cannot fetch versiondata/files_info from the configdata branch.${RESET}"
-    echo -e "${RED_BOLD}🌊 Nothing was installed. Check your network or proxy, then run the installer again.${RESET}"
+if [[ "$UPDATE_COMMANDS_OK" != "true" ]]; then
+    lw_say_err "${RED_BOLD}🌊 Error: Cannot fetch the update commands for $LINUXWAVE_VERSION.${RESET}" \
+        "${RED_BOLD}🌊 错误：取不到 $LINUXWAVE_VERSION 的更新命令。${RESET}"
+    lw_say_err "${RED_BOLD}🌊   $(mw_redact "$UPDATE_COMMANDS_URL")${RESET}" \
+        "${RED_BOLD}🌊   $(mw_redact "$UPDATE_COMMANDS_URL")${RESET}"
+    lw_say_err "🌊 Nothing was installed. Check your network or proxy, then run the installer again." \
+        "🌊 什么都没装。请检查网络或代理后重新运行安装器。"
+    exit 1
+fi
+
+# 即将被 bash 执行的东西，先确认它至少是合法 shell。
+if ! /bin/bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
+    lw_say_err "${RED_BOLD}🌊 Error: the update commands for $LINUXWAVE_VERSION are not valid shell.${RESET}" \
+        "${RED_BOLD}🌊 错误：$LINUXWAVE_VERSION 的更新命令不是合法 shell。${RESET}"
+    lw_say_err "🌊 Nothing was installed. Please report this to the administrator." \
+        "🌊 什么都没装。请把这件事报给维护者。"
     exit 1
 fi
 
@@ -1079,107 +1110,36 @@ else
 fi
 
 # ==========================================
-# 解析文件清单
+# 执行更新命令
 # ==========================================
-# 清单已在上面取回（连不上就直接退出了，没动过任何东西），这里只做解析。
+#
+# 环境变量是这个脚本与更新脚本之间的合同，字段含义见 scripts/build_update_commands.py
+# 的文件头。CURRENT_VERSION 留空只表示「不知道装的是哪版」，不等于全量安装 ——
+# 走增量还是全量由更新脚本自己按安装树判断。
 
-parse_files_info() {
-    # 把缩进树解析成 "<仓库路径>\t<本地相对路径>\t<是否需要 +x>"，一行一个文件
-    python3 - "$1" <<'PY'
-import sys
+export LINUXWAVE_INSTALL_DIR="$BASE_DIR"
+export LINUXWAVE_LANG="$LW_LANG"
+export LINUXWAVE_CORE_URL="$CORE_URL"
+export LINUXWAVE_BRANCH="$BRANCH"
+export LINUXWAVE_TARGET_VERSION="$LINUXWAVE_VERSION"
+export LINUXWAVE_CURRENT_VERSION=""
+export LINUXWAVE_FILE_TIMEOUT=180
+LINUXWAVE_NEED_SUDO="$([ "$NEED_SUDO" = "true" ] && echo 1 || echo "")"
+LINUXWAVE_SILENT="$([ "$CLI_CI" = "true" ] && echo 1 || echo "")"
+LINUXWAVE_RAW="$([ "$CLI_RAW" = "true" ] && echo 1 || echo "")"
+LINUXWAVE_DRY_RUN="$([ "$CLI_DRY_RUN" = "true" ] && echo 1 || echo "")"
+export LINUXWAVE_NEED_SUDO LINUXWAVE_SILENT LINUXWAVE_RAW LINUXWAVE_DRY_RUN
 
-stack = []   # [(缩进宽度, 目录名)]：当前所在目录的祖先链
-lines = []
-
-for raw in open(sys.argv[1], encoding="utf-8"):
-    line = raw.rstrip("\n")
-    if not line.strip() or line.lstrip().startswith("#"):
-        continue
-
-    # 缩进按 4 个空格算，Tab 等价于 4 个空格（两者可以混用）
-    expanded = line.expandtabs(4)
-    indent = len(expanded) - len(expanded.lstrip(" "))
-    name = line.strip()
-
-    while stack and stack[-1][0] >= indent:   # 缩进回退：弹掉不比当前行浅的祖先
-        stack.pop()
-
-    if name == "/":                 # 单独一个 /：安装根，等价于 BASE_DIR
-        stack = []
-        continue
-
-    if name.endswith("/"):          # 以 / 结尾 → 目录：只记层次，不下载
-        stack.append((indent, name.rstrip("/")))
-        continue
-
-    if "/" in name:                 # 行内直接写完整路径（可代替缩进）
-        repo_path = name.strip("/")
-    else:
-        repo_path = "/".join([directory for _, directory in stack] + [name])
-
-    # lib/wave.py 按原名落盘；PATH 上的入口 lib/wave 由后面的 write_launcher 生成
-    # （它要按私有 venv 与解释器路径决定怎么启动，不能直接复制脚本本体）。
-    local_path, executable = repo_path, int(repo_path.endswith(".sh"))
-
-    lines.append(f"{repo_path}\t{local_path}\t{executable}")
-
-print("\n".join(lines))
-PY
-}
-
-FILE_ENTRIES="$(parse_files_info "$FILES_INFO_TMP")"
-
-if [[ -z "$FILE_ENTRIES" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: The file list is empty, nothing to download.${RESET}"
+if [[ "$CLI_DRY_RUN" == "true" ]]; then
+    lw_say "${YELLOW}🌊 Dry run: the update commands for $LINUXWAVE_VERSION would run now.${RESET}" \
+        "${YELLOW}🌊 试运行：$LINUXWAVE_VERSION 的更新命令本该在此执行，实际未执行。${RESET}"
+elif ! /bin/bash "$UPDATE_COMMANDS_TMP"; then
+    lw_say_err "${RED_BOLD}🌊 Error: the update commands for $LINUXWAVE_VERSION failed.${RESET}" \
+        "${RED_BOLD}🌊 错误：$LINUXWAVE_VERSION 的更新命令执行失败。${RESET}"
+    lw_say_err "🌊 Nothing was recorded as installed. Fix the cause above, then run the installer again." \
+        "🌊 没有记录任何安装结果。请按上面的提示排除原因后重新运行安装器。"
     exit 1
 fi
-
-FILE_COUNT=$(printf '%s\n' "$FILE_ENTRIES" | wc -l | tr -d ' ')
-echo "🌊 Downloading $FILE_COUNT file(s) from branch: $BRANCH"
-echo ""
-
-# ==========================================
-# 下载文件
-# ==========================================
-
-while IFS=$'\t' read -r repo_path local_path executable; do
-    if [[ -z "$repo_path" ]]; then
-        continue
-    fi
-
-    run_cmd mkdir -p "$(dirname "$BASE_DIR/$local_path")"
-
-    file_ok=false
-    for attempt in $(seq 1 "$DOWNLOAD_ATTEMPTS"); do
-        if [[ "$attempt" -eq 1 ]]; then
-            # --silent 只省交互，过程仍要留痕；逐文件进度才在 silent 下压掉
-            if [[ "$CLI_CI" != "true" ]]; then
-                echo "🌊 Downloading $repo_path..."
-            fi
-        else
-            # 重试必须始终可见：它解释了这次安装为什么变慢
-            echo -e "${YELLOW}🌊 Retrying $repo_path ($attempt/$DOWNLOAD_ATTEMPTS)...${RESET}"
-        fi
-        # 放在 if 条件里：失败不会被 set -e 直接带走（ERR 陷阱也不触发），
-        # 由这里自己决定重试还是放弃。
-        if run_cmd curl -fsSL --connect-timeout 20 --max-time 180 \
-               -o "$BASE_DIR/$local_path" "$BASE_URL/$repo_path"; then
-            file_ok=true
-            break
-        fi
-        sleep "$attempt"
-    done
-
-    if [[ "$file_ok" != "true" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Cannot download $repo_path after $DOWNLOAD_ATTEMPTS attempts.${RESET}" >&2
-        # 交给 ERR 陷阱：它会打印「未完成 + 残留路径 + 重跑安全」的指引
-        false
-    fi
-
-    if [[ "$executable" == "1" ]]; then
-        run_cmd chmod +x "$BASE_DIR/$local_path"
-    fi
-done <<< "$FILE_ENTRIES"
 
 # ==========================================
 # Python 运行环境（自带解释器 + 私有 venv + 启动器）
