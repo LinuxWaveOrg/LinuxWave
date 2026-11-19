@@ -14,6 +14,16 @@ set -eE
 set -u
 set -o pipefail
 
+# 旗标默认值必须在这里先定下来：`set -u` 之下，未定义的变量一读就中止，而
+# 写盘预检（CLI_DRY_RUN / CLI_SKIP_PROBE）与自更新探针都在参数解析之前就要读它们。
+# 真正的解析在「命令行参数（批量 / 脚本化安装）」一节。
+CLI_CI=false
+CLI_DRY_RUN=false
+CLI_PRINT_USAGE=false
+CLI_SKIP_PROBE=false
+CLI_DIR_OPTION=""
+CLI_CUSTOM_DIR=""
+
 # ==========================================
 # 平台闸门：LinuxWave 只装 Linux
 # ==========================================
@@ -711,12 +721,8 @@ print_shared_install_notes() {
 # 命令行参数（批量 / 脚本化安装）
 # ==========================================
 
-CLI_CI=false
-CLI_DRY_RUN=false
-CLI_PRINT_USAGE=false
-CLI_SKIP_PROBE=false
-CLI_DIR_OPTION=""
-CLI_CUSTOM_DIR=""
+# 默认值不在这里定 —— 见文件开头的说明：`set -u` 之下，它们必须在任何读取之前
+# 就有值，而写盘预检与探针都在解析之前跑。
 
 usage() {
     if [[ "$LW_LANG" == "zh" ]]; then
