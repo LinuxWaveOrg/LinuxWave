@@ -43,7 +43,8 @@ if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
     export HOME="$SYS_ROOT${HOME}"
     export LINUXWAVE_TEST_ROOT="$SYS_ROOT"
     mkdir -p "$HOME"
-    echo "🌊 Test root: $SYS_ROOT"
+    # 不带 🌊：这行在呈现层（--raw 的过滤器）装好之前就打，带了也过滤不掉。
+    echo "Test root: $SYS_ROOT"
 fi
 
 SYSTEM_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"

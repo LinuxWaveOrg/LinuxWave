@@ -81,7 +81,8 @@ if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
     esac
     export LINUXWAVE_TEST_ROOT="$SYS_ROOT"
     mkdir -p "$HOME"
-    echo "🌊 Test root: $SYS_ROOT"
+    # 不带 🌊：这行在呈现层（--raw 的过滤器）装好之前就打，带了也过滤不掉。
+    echo "Test root: $SYS_ROOT"
 fi
 
 # -E（errtrace）让下面那个 ERR 陷阱能看见 run_cmd 等**函数内部**的失败：

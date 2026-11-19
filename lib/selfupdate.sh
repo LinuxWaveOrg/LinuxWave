@@ -211,7 +211,8 @@ if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
     esac
     export LINUXWAVE_TEST_ROOT="$SYS_ROOT"
     mkdir -p "$HOME"
-    echo "🌊 Test root: $SYS_ROOT"
+    # 不带 🌊：这行在呈现层（--raw 的过滤器）装好之前就打，带了也过滤不掉。
+    echo "Test root: $SYS_ROOT"
 fi
 
 # 配置目录：系统级优先，其次用户级（与 lib/configpaths.py 的规则一致）
