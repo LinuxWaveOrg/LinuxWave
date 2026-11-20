@@ -1,0 +1,31 @@
+.TH WAVE-INFO 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-info \- Show author, description, homepage and the installed / available versions.
+.SH SYNOPSIS
+.B wave info <package> [\-\-json|\-\-yaml|\-\-toml|\-\-raw]
+.SH DESCRIPTION
+Show author, description, homepage and the installed / available
+versions.
+.SH OPTIONS
+.TP
+.B \-\-json
+Print as JSON
+.TP
+.B \-\-yaml
+Print as YAML
+.TP
+.B \-\-toml
+Print as TOML
+.TP
+.B \-\-raw
+Print as stored
+
+.SH EXAMPLES
+.nf
+wave info jq
+wave info jq --json
+wave info jq --raw
+.fi
+.SH SEE ALSO
+wave(1)

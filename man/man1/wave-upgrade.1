@@ -1,0 +1,59 @@
+.TH WAVE-UPGRADE 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-upgrade \- Upgrade a package to its latest version; with --all, every installed package. Old versions are kept — -X, --remove-old-versions removes them in the same run.
+.SH SYNOPSIS
+.B wave upgrade <package> | wave upgrade \-\-all
+.SH DESCRIPTION
+Upgrade a package to its latest version; with --all, every installed
+package. Old versions are kept — -X, --remove-old-versions removes them
+in the same run.
+.SH OPTIONS
+.TP
+.B \-a, \-\-all
+Upgrade every installed package that has a newer version
+.TP
+.B \-X, \-\-remove\-old\-versions
+Remove the older versions as part of the upgrade
+.TP
+.B \-C, \-\-continue
+Resume an interrupted download
+.TP
+.B \-\-proxy <string>
+HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)
+.TP
+.B \-\-skip\-ssl
+Skip SSL certificate verification (insecure)
+.TP
+.B \-\-limit\-rate <string>
+Limit download speed (e.g. 200K, 1M, 5M; a bare number means bytes)
+.TP
+.B \-\-max\-time <string>
+Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+number means seconds)
+.TP
+.B \-\-connect\-timeout <string>
+Maximum time for the handshake
+.TP
+.B \-\-content\-time <string>
+Maximum time to receive data
+.TP
+.B \-F, \-\-force
+Install anyway when the running macOS is older than the package declares
+.TP
+.B \-\-raw
+Plain output for logs and scripts: no emoji, no colours, ASCII progress
+bar
+.TP
+.B \-v, \-\-verbose
+Verbose mode
+
+.SH EXAMPLES
+.nf
+wave upgrade jq
+wave upgrade jq -X
+wave upgrade --all
+wave upgrade jq --remove-old-versions --max-time=2min
+.fi
+.SH SEE ALSO
+wave(1)

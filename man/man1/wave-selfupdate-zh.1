@@ -1,0 +1,33 @@
+.TH WAVE-SELFUPDATE-ZH 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH 名称
+wave-selfupdate-zh \- 把 LinuxWave 自身更新到自更新仓库里发布的版本。
+.SH 用法
+.B wave selfupdate [flags]
+.SH 说明
+把 LinuxWave 自身更新到自更新仓库里发布的版本。
+.SH 选项
+.TP
+.B \-\-max\-time <string>
+单次请求最大时长（40s、1min、1min20s、2h；不输入单位默认 s）
+.TP
+.B \-\-connect\-timeout <string>
+握手最大时长
+.TP
+.B \-\-content\-time <string>
+接收数据的最大时长
+.TP
+.B \-\-install\-python\-from\-source
+从上游地址取自带的 Python，而不是 LinuxWave 自己的仓库
+.TP
+.B \-\-dry\-run
+只打印会更新到什么、会做什么，不做任何改动（不下载、不询问协议）
+
+.SH 示例
+.nf
+wave selfupdate
+wave selfupdate --max-time=2min
+wave selfupdate --dry-run
+.fi
+.SH 另见
+wave-zh(1)

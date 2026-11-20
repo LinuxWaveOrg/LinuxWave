@@ -1,0 +1,37 @@
+.TH WAVE-SELFUPDATE 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-selfupdate \- Update LinuxWave itself to the version published in the self-update repository.
+.SH SYNOPSIS
+.B wave selfupdate [flags]
+.SH DESCRIPTION
+Update LinuxWave itself to the version published in the self-update
+repository.
+.SH OPTIONS
+.TP
+.B \-\-max\-time <string>
+Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+number means seconds)
+.TP
+.B \-\-connect\-timeout <string>
+Maximum time for the handshake
+.TP
+.B \-\-content\-time <string>
+Maximum time to receive data
+.TP
+.B \-\-install\-python\-from\-source
+Fetch the bundled Python from its upstream URL instead of LinuxWave's
+own repository
+.TP
+.B \-\-dry\-run
+Print what would be updated and change nothing (no download, no
+agreement prompt)
+
+.SH EXAMPLES
+.nf
+wave selfupdate
+wave selfupdate --max-time=2min
+wave selfupdate --dry-run
+.fi
+.SH SEE ALSO
+wave(1)

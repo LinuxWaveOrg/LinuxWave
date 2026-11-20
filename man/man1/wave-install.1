@@ -1,0 +1,54 @@
+.TH WAVE-INSTALL 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-install \- Install a package, or one specific version of it.
+.SH SYNOPSIS
+.B wave install <package>[@<version>] [flags]
+.SH DESCRIPTION
+Install a package, or one specific version of it.
+.SH OPTIONS
+.TP
+.B \-C, \-\-continue
+Resume an interrupted download
+.TP
+.B \-\-proxy <string>
+HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)
+.TP
+.B \-\-skip\-ssl
+Skip SSL certificate verification (insecure)
+.TP
+.B \-\-limit\-rate <string>
+Limit download speed (e.g. 200K, 1M, 5M; a bare number means bytes)
+.TP
+.B \-\-max\-time <string>
+Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+number means seconds)
+.TP
+.B \-\-connect\-timeout <string>
+Maximum time for the handshake
+.TP
+.B \-\-content\-time <string>
+Maximum time to receive data
+.TP
+.B \-\-no\-link
+Do not touch the unversioned link (the old name --unlink still works)
+.TP
+.B \-F, \-\-force
+Install anyway when the running macOS is older than the package declares
+.TP
+.B \-\-raw
+Plain output for logs and scripts: no emoji, no colours, ASCII progress
+bar
+.TP
+.B \-v, \-\-verbose
+Verbose mode
+
+.SH EXAMPLES
+.nf
+wave install jq
+wave install ffmpeg@6.1
+wave install jq --limit-rate 1M
+wave install jq --max-time=1min
+.fi
+.SH SEE ALSO
+wave(1)

@@ -1,0 +1,34 @@
+.TH WAVE-LATEST 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-latest \- Compare what you have with the newest version in the index; nothing is downloaded.
+.SH SYNOPSIS
+.B wave latest <package> | wave latest \-\-all
+.SH DESCRIPTION
+Compare what you have with the newest version in the index; nothing is
+downloaded.
+.SH OPTIONS
+.TP
+.B \-a, \-\-all
+Check every installed package
+.TP
+.B \-\-max\-time <string>
+Maximum total time for one request (40s, 1min)
+.TP
+.B \-\-connect\-timeout <string>
+Maximum time for the handshake
+.TP
+.B \-\-content\-time <string>
+Maximum time to receive data
+.TP
+.B \-v, \-\-verbose
+Print each request as it is made
+
+.SH EXAMPLES
+.nf
+wave latest jq
+wave latest --all
+wave latest -a --max-time=1min
+.fi
+.SH SEE ALSO
+wave(1)

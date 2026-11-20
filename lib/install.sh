@@ -1493,6 +1493,10 @@ CLI_DIR="$BASE_DIR/cli"
 CONFIG_CODE_DIR="$BASE_DIR/config"
 # 发布签名用的公钥。装进来之后 <base_dir>/Keys/*.pem 是验签的信任根。
 KEYS_DIR="$BASE_DIR/Keys"
+# 手册：man 页与 info 文件。由 scripts/build_docs.py 从帮助文本生成，
+# 装进安装树后由 shellenv 的 MANPATH 那一段接到系统 man 的搜索路径里。
+MAN_DIR="$BASE_DIR/man"
+INFO_DIR="$BASE_DIR/info"
 DEPS_DIR="$BASE_DIR/deps"
 DOWNLOAD_DIR="$BASE_DIR/downloads/tmp"
 
@@ -1565,6 +1569,8 @@ run_cmd mkdir -p "$NET_DIR"
 run_cmd mkdir -p "$CLI_DIR"
 run_cmd mkdir -p "$CONFIG_CODE_DIR"
 run_cmd mkdir -p "$KEYS_DIR"
+run_cmd mkdir -p "$MAN_DIR/man1"
+run_cmd mkdir -p "$INFO_DIR"
 run_cmd mkdir -p "$DEPS_DIR"
 run_cmd mkdir -p "$DOWNLOAD_DIR"
 run_cmd mkdir -p "$CONFIG_DIR"
@@ -1957,6 +1963,8 @@ entry="$lib_dir/wave.py"
 if [ "$#" -eq 1 ] && [ "$1" = "shellenv" ]; then
     printf 'case ":$PATH:" in\n  *":%s:"*) ;;\n  *) export PATH="%s:%s:%s${PATH:+:$PATH}" ;;\nesac\n' \
         "$root_dir/lib" "$root_dir/bin" "$root_dir/links" "$root_dir/lib"
+    printf 'case ":${MANPATH:-}:" in\n  *":%s:"*) ;;\n  *) export MANPATH="%s${MANPATH:+:$MANPATH}" ;;\nesac\n' \
+        "$root_dir/man" "$root_dir/man"
     exit 0
 fi
 

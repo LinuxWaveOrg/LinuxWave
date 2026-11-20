@@ -1,0 +1,173 @@
+.TH WAVE 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave \- a package manager for macOS software developers
+.SH SYNOPSIS
+.B wave
+\fIcommand\fR [\fIpackage\fR] [\fIflags\fR]
+.SH DESCRIPTION
+LinuxWave installs each package into its own versioned directory under
+the install root, keeps every version side by side, and maintains
+unversioned links so a package can be called with or without a version.
+Packages are fetched from a mirror or from LinuxWave's own bottle store;
+nothing is compiled on the user's machine.
+.SH COMMANDS
+.TP
+.B install
+Install a package, or one specific version of it.
+.TP
+.B upgrade
+Upgrade a package to its latest version; with --all, every installed
+package. Old versions are kept — -X, --remove-old-versions removes them
+in the same run.
+.TP
+.B uninstall
+Uninstall a package version. The unversioned link falls back to the
+highest remaining version, and goes away with the last one.
+.TP
+.B list
+List the packages you have installed, with their versions.
+.TP
+.B search
+Search the online package index.
+.TP
+.B info
+Show author, description, homepage and the installed / available
+versions.
+.TP
+.B selfupdate
+Update LinuxWave itself to the version published in the self-update
+repository.
+.TP
+.B link
+Create a versionless shortcut, or re-point it at another installed
+version. Installs and uninstalls keep it up to date afterwards.
+.TP
+.B unlink
+Remove the versionless shortcut. A later uninstall will not re-create
+it.
+.TP
+.B linkquery
+Show which version the versionless shortcut points at.
+.TP
+.B mirror
+Show the address each kind of data is fetched from, including the
+built-in defaults for anything not overridden by an environment
+variable.
+.TP
+.B latest
+Compare what you have with the newest version in the index; nothing is
+downloaded.
+.TP
+.B shellenv
+Print the shell code that prepends LinuxWave's directories to PATH. You
+eval it once from your shell profile; it does nothing on its own.
+.TP
+.B version
+Print the installed LinuxWave version.
+.TP
+.B manual
+Show the full manual — the same text that ships as man pages and info
+files — or just one command's section.
+
+.SH GLOBAL FLAGS
+.TP
+.B \-s, \-\-silent
+Print nothing at all; the exit code is the signal (beats -v; install /
+upgrade / uninstall / link / unlink / selfupdate)
+.TP
+.B \-S, \-\-show\-error
+With -s, still print the error when a command fails (without the 🌊, so
+scripts can parse it)
+.TP
+.B \-C, \-\-continue
+Resume an interrupted download
+.TP
+.B \-\-proxy <string>
+HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)
+.TP
+.B \-\-skip\-ssl
+Skip SSL certificate verification (insecure)
+.TP
+.B \-\-limit\-rate <string>
+Limit download speed (e.g. 200K, 1M, 5M; a bare number means bytes)
+.TP
+.B \-\-max\-time <string>
+Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+number means seconds)
+.TP
+.B \-\-connect\-timeout <string>
+Maximum time for the handshake
+.TP
+.B \-\-content\-time <string>
+Maximum time to receive data
+.TP
+.B \-\-ver <string>
+Install a specific version (install only; --ver=1.0 works too)
+.TP
+.B \-F, \-\-force
+Install anyway when the running macOS is older than the package declares
+.TP
+.B \-\-install\-python\-from\-source
+Fetch the bundled Python from its upstream URL instead of LinuxWave's
+own repository
+.TP
+.B LINUXWAVE_PIP_INDEX
+Env var. pip index for the Python deps; default pypi.org/simple
+.TP
+.B LINUXWAVE_CACERT
+Env var. PEM file with extra root certificates for corporate TLS
+inspection or a private-CA mirror (unset = system trust store)
+
+.SH EXAMPLES
+.nf
+wave install jq
+wave upgrade jq
+wave uninstall jq
+wave list
+wave search json
+wave info jq
+wave selfupdate
+wave link jq
+wave unlink jq
+wave linkquery jq
+wave mirror
+wave latest jq
+eval "$(~/.local/linuxwave/lib/wave shellenv)"
+wave version
+wave manual
+.fi
+.SH ENVIRONMENT
+.TP
+.B LINUXWAVE_API_DOMAIN
+package index prefix (default: the public mirror)
+.TP
+.B LINUXWAVE_BOTTLE_DOMAIN
+package payload prefix
+.TP
+.B LINUXWAVE_DEPS_DOMAIN
+dependency payload prefix
+.TP
+.B LINUXWAVE_CACERT
+PEM file with extra root certificates (corporate CA)
+.TP
+.B LINUXWAVE_PIP_INDEX
+pip index for the Python dependencies
+.TP
+.B LINUXWAVE_TEST
+treat this directory as the filesystem root (for tests)
+.SH FILES
+.TP
+.B ~/.config/linuxwave_config/config.json
+user-level install location
+.TP
+.B /opt/linuxwave_config/config.json
+system-level install location (takes priority)
+.TP
+.B <base_dir>/man/man1
+these man pages
+.TP
+.B <base_dir>/info
+the info manual (wave.info, wave-zh.info)
+.SH SEE ALSO
+wave-manual(1), info(1), wave(1)\&

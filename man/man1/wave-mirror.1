@@ -1,0 +1,43 @@
+.TH WAVE-MIRROR 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-mirror \- Show the address each kind of data is fetched from, including the built-in defaults for anything not overridden by an environment variable.
+.SH SYNOPSIS
+.B wave mirror [flags]
+.SH DESCRIPTION
+Show the address each kind of data is fetched from, including the
+built-in defaults for anything not overridden by an environment
+variable.
+.SH OPTIONS
+.TP
+.B \-\-json
+Print the configuration as JSON
+.TP
+.B \-\-yaml
+Print the configuration as YAML
+.TP
+.B \-\-toml
+Print the configuration as TOML
+.TP
+.B \-\-raw
+Print export lines
+.TP
+.B \-\-only\-set
+With --raw: export only the sources you overrode (the LINUXWAVE_*_DOMAIN
+variables), leaving the rest to the built-in defaults
+.TP
+.B \-\-show\-password
+Print the real password
+.TP
+.B \-\-hide\-user
+Hide the user name
+
+.SH EXAMPLES
+.nf
+wave mirror
+wave mirror --raw
+wave mirror --json
+wave mirror --show-password
+.fi
+.SH SEE ALSO
+wave(1)

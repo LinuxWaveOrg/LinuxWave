@@ -1,0 +1,16 @@
+.TH WAVE-SHELLENV 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-shellenv \- Print the shell code that prepends LinuxWave's directories to PATH. You eval it once from your shell profile; it does nothing on its own.
+.SH SYNOPSIS
+.B wave shellenv
+.SH DESCRIPTION
+Print the shell code that prepends LinuxWave's directories to PATH. You
+eval it once from your shell profile; it does nothing on its own.
+.SH EXAMPLES
+.nf
+eval "$(~/.local/linuxwave/lib/wave shellenv)"
+echo 'eval "$(~/.local/linuxwave/lib/wave shellenv)"' >> ~/.zprofile
+.fi
+.SH SEE ALSO
+wave(1)

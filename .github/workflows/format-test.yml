@@ -216,6 +216,11 @@ jobs:
         run: |
           bash scripts/markdown_test.sh
 
+      # 手册与来源不许走散：man/ 与 info/ 必须是最新生成的，中英成套
+      - name: Run docs test
+        run: |
+          bash scripts/docs_test.sh
+
       # shell 卫生：变量花括号、bash -n、函数名、bash 版本边界
       - name: Run shell lint
         run: |

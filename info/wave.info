@@ -1,0 +1,450 @@
+
+File: wave.info, Node: Top, Up: (dir)
+
+
+LinuxWave installs each package into its own versioned directory under
+the install root, keeps every version side by side, and maintains
+unversioned links so a package can be called with or without a version.
+Packages are fetched from a mirror or from LinuxWave's own bottle store;
+nothing is compiled on the user's machine.
+
+* Menu:
+
+* install::	Install a package, or one specific version of it.
+* upgrade::	Upgrade a package to its latest version; with --all, every
+        installed package. Old versions are kept — -X,
+        --remove-old-versions removes them in the same run.
+* uninstall::	Uninstall a package version. The unversioned link falls back
+        to the highest remaining version, and goes away with the
+        last one.
+* list::	List the packages you have installed, with their versions.
+* search::	Search the online package index.
+* info::	Show author, description, homepage and the installed /
+        available versions.
+* selfupdate::	Update LinuxWave itself to the version published in the
+        self-update repository.
+* link::	Create a versionless shortcut, or re-point it at another
+        installed version. Installs and uninstalls keep it up to
+        date afterwards.
+* unlink::	Remove the versionless shortcut. A later uninstall will not
+        re-create it.
+* linkquery::	Show which version the versionless shortcut points at.
+* mirror::	Show the address each kind of data is fetched from,
+        including the built-in defaults for anything not overridden
+        by an environment variable.
+* latest::	Compare what you have with the newest version in the index;
+        nothing is downloaded.
+* shellenv::	Print the shell code that prepends LinuxWave's directories
+        to PATH. You eval it once from your shell profile; it does
+        nothing on its own.
+* version::	Print the installed LinuxWave version.
+* manual::	Show the full manual — the same text that ships as man pages
+        and info files — or just one command's section.
+
+* GLOBAL FLAGS::
+
+  the complete manual。--zh to read the Chinese edition
+
+
+File: wave.info, Node: GLOBAL FLAGS, Up: Top
+
+
+  -s, --silent
+      Print nothing at all; the exit code is the signal (beats -v;
+      install / upgrade / uninstall / link / unlink / selfupdate)
+
+  -S, --show-error
+      With -s, still print the error when a command fails (without the
+      🌊, so scripts can parse it)
+
+  -C, --continue
+      Resume an interrupted download
+
+  --proxy <string>
+      HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)
+
+  --skip-ssl
+      Skip SSL certificate verification (insecure)
+
+  --limit-rate <string>
+      Limit download speed (e.g. 200K, 1M, 5M; a bare number means
+      bytes)
+
+  --max-time <string>
+      Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+      number means seconds)
+
+  --connect-timeout <string>
+      Maximum time for the handshake
+
+  --content-time <string>
+      Maximum time to receive data
+
+  --ver <string>
+      Install a specific version (install only; --ver=1.0 works too)
+
+  -F, --force
+      Install anyway when the running macOS is older than the package
+      declares
+
+  --install-python-from-source
+      Fetch the bundled Python from its upstream URL instead of
+      LinuxWave's own repository
+
+  LINUXWAVE_PIP_INDEX
+      Env var. pip index for the Python deps; default pypi.org/simple
+
+  LINUXWAVE_CACERT
+      Env var. PEM file with extra root certificates for corporate TLS
+      inspection or a private-CA mirror (unset = system trust store)
+
+
+
+File: wave.info, Node: install, Next: upgrade, Up: Top
+
+
+Install a package, or one specific version of it.
+
+  -C, --continue
+      Resume an interrupted download
+
+  --proxy <string>
+      HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)
+
+  --skip-ssl
+      Skip SSL certificate verification (insecure)
+
+  --limit-rate <string>
+      Limit download speed (e.g. 200K, 1M, 5M; a bare number means
+      bytes)
+
+  --max-time <string>
+      Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+      number means seconds)
+
+  --connect-timeout <string>
+      Maximum time for the handshake
+
+  --content-time <string>
+      Maximum time to receive data
+
+  --no-link
+      Do not touch the unversioned link (the old name --unlink still
+      works)
+
+  -F, --force
+      Install anyway when the running macOS is older than the package
+      declares
+
+  --raw
+      Plain output for logs and scripts: no emoji, no colours, ASCII
+      progress bar
+
+  -v, --verbose
+      Verbose mode
+
+Examples:
+
+     wave install jq
+     wave install ffmpeg@6.1
+     wave install jq --limit-rate 1M
+     wave install jq --max-time=1min
+
+
+File: wave.info, Node: upgrade, Next: uninstall, Prev: install, Up: Top
+
+
+Upgrade a package to its latest version; with --all, every installed
+package. Old versions are kept — -X, --remove-old-versions removes them
+in the same run.
+
+  -a, --all
+      Upgrade every installed package that has a newer version
+
+  -X, --remove-old-versions
+      Remove the older versions as part of the upgrade
+
+  -C, --continue
+      Resume an interrupted download
+
+  --proxy <string>
+      HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)
+
+  --skip-ssl
+      Skip SSL certificate verification (insecure)
+
+  --limit-rate <string>
+      Limit download speed (e.g. 200K, 1M, 5M; a bare number means
+      bytes)
+
+  --max-time <string>
+      Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+      number means seconds)
+
+  --connect-timeout <string>
+      Maximum time for the handshake
+
+  --content-time <string>
+      Maximum time to receive data
+
+  -F, --force
+      Install anyway when the running macOS is older than the package
+      declares
+
+  --raw
+      Plain output for logs and scripts: no emoji, no colours, ASCII
+      progress bar
+
+  -v, --verbose
+      Verbose mode
+
+Examples:
+
+     wave upgrade jq
+     wave upgrade jq -X
+     wave upgrade --all
+     wave upgrade jq --remove-old-versions --max-time=2min
+
+
+File: wave.info, Node: uninstall, Next: list, Prev: upgrade, Up: Top
+
+
+Uninstall a package version. The unversioned link falls back to the
+highest remaining version, and goes away with the last one.
+
+  --no-link
+      Do not touch the unversioned link (the old name --unlink still
+      works)
+
+Examples:
+
+     wave uninstall jq
+     wave uninstall ffmpeg@6.1
+
+
+File: wave.info, Node: list, Next: search, Prev: uninstall, Up: Top
+
+
+List the packages you have installed, with their versions.
+
+Examples:
+
+     wave list
+
+
+File: wave.info, Node: search, Next: info, Prev: list, Up: Top
+
+
+Search the online package index.
+
+Examples:
+
+     wave search json
+
+
+File: wave.info, Node: info, Next: selfupdate, Prev: search, Up: Top
+
+
+Show author, description, homepage and the installed / available
+versions.
+
+  --json
+      Print as JSON
+
+  --yaml
+      Print as YAML
+
+  --toml
+      Print as TOML
+
+  --raw
+      Print as stored
+
+Examples:
+
+     wave info jq
+     wave info jq --json
+     wave info jq --raw
+
+
+File: wave.info, Node: selfupdate, Next: link, Prev: info, Up: Top
+
+
+Update LinuxWave itself to the version published in the self-update
+repository.
+
+  --max-time <string>
+      Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+      number means seconds)
+
+  --connect-timeout <string>
+      Maximum time for the handshake
+
+  --content-time <string>
+      Maximum time to receive data
+
+  --install-python-from-source
+      Fetch the bundled Python from its upstream URL instead of
+      LinuxWave's own repository
+
+  --dry-run
+      Print what would be updated and change nothing (no download, no
+      agreement prompt)
+
+Examples:
+
+     wave selfupdate
+     wave selfupdate --max-time=2min
+     wave selfupdate --dry-run
+
+
+File: wave.info, Node: link, Next: unlink, Prev: selfupdate, Up: Top
+
+
+Create a versionless shortcut, or re-point it at another installed
+version. Installs and uninstalls keep it up to date afterwards.
+
+  --all, -a
+      Apply to every installed package
+
+Examples:
+
+     wave link jq
+     wave link ffmpeg@6.1
+     wave link --all
+
+
+File: wave.info, Node: unlink, Next: linkquery, Prev: link, Up: Top
+
+
+Remove the versionless shortcut. A later uninstall will not re-create
+it.
+
+  --all, -a
+      Apply to every installed package
+
+Examples:
+
+     wave unlink jq
+     wave unlink --all
+
+
+File: wave.info, Node: linkquery, Next: mirror, Prev: unlink, Up: Top
+
+
+Show which version the versionless shortcut points at.
+
+  --all, -a
+      Apply to every installed package
+
+Examples:
+
+     wave linkquery jq
+
+
+File: wave.info, Node: mirror, Next: latest, Prev: linkquery, Up: Top
+
+
+Show the address each kind of data is fetched from, including the
+built-in defaults for anything not overridden by an environment
+variable.
+
+  --json
+      Print the configuration as JSON
+
+  --yaml
+      Print the configuration as YAML
+
+  --toml
+      Print the configuration as TOML
+
+  --raw
+      Print export lines
+
+  --only-set
+      With --raw: export only the sources you overrode (the
+      LINUXWAVE_*_DOMAIN variables), leaving the rest to the built-in
+      defaults
+
+  --show-password
+      Print the real password
+
+  --hide-user
+      Hide the user name
+
+Examples:
+
+     wave mirror
+     wave mirror --raw
+     wave mirror --json
+     wave mirror --show-password
+
+
+File: wave.info, Node: latest, Next: shellenv, Prev: mirror, Up: Top
+
+
+Compare what you have with the newest version in the index; nothing is
+downloaded.
+
+  -a, --all
+      Check every installed package
+
+  --max-time <string>
+      Maximum total time for one request (40s, 1min)
+
+  --connect-timeout <string>
+      Maximum time for the handshake
+
+  --content-time <string>
+      Maximum time to receive data
+
+  -v, --verbose
+      Print each request as it is made
+
+Examples:
+
+     wave latest jq
+     wave latest --all
+     wave latest -a --max-time=1min
+
+
+File: wave.info, Node: shellenv, Next: version, Prev: latest, Up: Top
+
+
+Print the shell code that prepends LinuxWave's directories to PATH. You
+eval it once from your shell profile; it does nothing on its own.
+
+Examples:
+
+     eval "$(~/.local/linuxwave/lib/wave shellenv)"
+     echo 'eval "$(~/.local/linuxwave/lib/wave shellenv)"' >> ~/.zprofile
+
+
+File: wave.info, Node: version, Next: manual, Prev: shellenv, Up: Top
+
+
+Print the installed LinuxWave version.
+
+Examples:
+
+     wave version
+
+
+File: wave.info, Node: manual, Prev: version, Up: Top
+
+
+Show the full manual — the same text that ships as man pages and info
+files — or just one command's section.
+
+  --zh
+      Print the Chinese edition
+
+  --color
+      Colour headings and flags (plain text by default)
+
+Examples:
+
+     wave manual
+     wave manual install
+     wave manual --zh
+     wave manual install --color
