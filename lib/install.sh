@@ -21,20 +21,133 @@ CLI_CI=false
 CLI_DRY_RUN=false
 CLI_PRINT_USAGE=false
 CLI_SKIP_PROBE=false
+CLI_SKIP_PLATFORM_CHECK=false
 CLI_DIR_OPTION=""
 CLI_CUSTOM_DIR=""
+# ==========================================
+# 颜色定义
+# ==========================================
+
+RED_BOLD='\033[1;31m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+SKY_BLUE='\033[38;5;74m'
+RESET='\033[0m'
+
+# ==========================================
+# 输出层：双语与呈现
+# ==========================================
+# 所有面向用户的话都过 lw_say / lw_say_err，于是三件事只在这两个函数里做一次：
+#   1. 双语：lw_say "<English>" "<中文>"；只给一句时两种语言共用。
+#   2. --raw：去掉颜色与行首的 🌊，给日志与 grep 用（逐行过滤，见 lw_raw_filter）。
+#   3. --zh：说中文。默认英文 —— 终端不一定有中文 locale，反过来会让英文用户
+#      看到乱码。
+CLI_RAW=false
+LW_LANG="en"
+_PRESENTATION_APPLIED=false
+
+lw_raw() { [[ "${CLI_RAW:-false}" == "true" ]]; }
+
+# 逐行读 stdin，去掉行首的 🌊 与紧跟的一个空格。
+# 🌊 用 printf 的字节写：$'\U0001F30A' 这种写法要 bash 4.2+，这里不赌。
+lw_raw_filter() {
+    local line item
+    item="$(printf '\xf0\x9f\x8c\x8a')"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            "$item "*) line="${line#"$item "}" ;;
+            "$item"*) line="${line#"$item"}" ;;
+        esac
+        printf '%s\n' "$line"
+    done
+}
+
+lw_say() {
+    # 只给一句时两种语言都用它（`${2-$1}`）—— 空行、纯符号行、中英同文的命令行
+    # 都属于这种。注意是 `-` 不是 `:-`：显式传了空串（英文有下半句、中文已经说完）
+    # 必须打空行，不能回退到英文。
+    if [[ "$LW_LANG" == "zh" ]]; then
+        printf '%b\n' "${2-$1}"
+    else
+        printf '%b\n' "$1"
+    fi
+}
+
+lw_say_err() {
+    # 错误信息两边都打：英文给日志与工单，中文给用户。语言只决定先后。
+    if [[ "$LW_LANG" == "zh" ]]; then
+        printf '%b\n' "${2-$1}" >&2
+        [[ -n "${1:-}" && "${1:-}" != "${2:-}" ]] && printf '%b\n' "$1" >&2
+    else
+        printf '%b\n' "$1" >&2
+        [[ -n "${2:-}" && "${2:-}" != "${1:-}" ]] && printf '%b\n' "$2" >&2
+    fi
+}
+
+# --raw 要关颜色、改输出管道，而参数是在后面才解析的。所以解析完之后再调一次，
+# 把「还没开始说话之前」就已经定了的事补上。
+#
+# 也正因为如此，这里从**原始参数**里再认一次呈现类旗标：解析可能停在第一个未知
+# 选项上（那时 --raw 还没轮到），只靠解析结果的话，`--raw --bogus` 报出来的错
+# 仍然是带颜色和 🌊 的。从 CLI_ARGV 认一遍，才不会漏。
+lw_apply_presentation() {
+    [[ "$_PRESENTATION_APPLIED" == "true" ]] && return 0
+    local arg
+    for arg in ${CLI_ARGV[@]+"${CLI_ARGV[@]}"}; do
+        case "$arg" in
+            --raw|--RAW) CLI_RAW=true ;;
+            --zh|--ZH) LW_LANG="zh" ;;
+        esac
+    done
+    if lw_raw; then
+        RED_BOLD=""; GREEN=""; YELLOW=""; SKY_BLUE=""; RESET=""
+        exec > >(lw_raw_filter) 2>&1
+    fi
+    _PRESENTATION_APPLIED=true
+}
+
+
+# ==========================================
+# 最早的参数预扫（闸门专用）
+# ==========================================
+#
+# 下面两道闸门（平台、解释器）在参数解析之前就要说话，而它们该按 --zh / --raw 的
+# 样子说话。所以这里先从原始参数里认出呈现类旗标与 --skip-platform-check；正式解析
+# 仍在「命令行参数」一节 —— 两处认的是同一批旗标，重复这一次只是为了闸门不说错话。
+CLI_ARGV=("$@")
+for _lw_arg in ${CLI_ARGV[@]+"${CLI_ARGV[@]}"}; do
+    case "$_lw_arg" in
+        --raw|--RAW) CLI_RAW=true ;;
+        --zh|--ZH) LW_LANG="zh" ;;
+        --skip-platform-check|--SKIP-PLATFORM-CHECK) CLI_SKIP_PLATFORM_CHECK=true ;;
+    esac
+done
+unset _lw_arg
+lw_apply_presentation
 
 # ==========================================
 # 平台闸门：LinuxWave 只装 Linux
 # ==========================================
 # 先判平台再判 bash 版本：macOS 自带 bash 3.2，若先报「请升级 bash」，用户会去
 # 装个新 bash，然后发现这个安装器根本不是给他用的。macOS 上该用的是 MacWave。
-if [[ "$(uname -s 2>/dev/null)" != "Linux" ]]; then
-    echo "🌊 Error: this installer is for Linux; this system is $(uname -s 2>/dev/null)." >&2
-    echo "🌊 错误：本安装器只用于 Linux；当前系统是 $(uname -s 2>/dev/null)。" >&2
-    echo "🌊 On macOS use MacWave instead: https://macwave.org" >&2
-    echo "🌊 macOS 上请改用 MacWave：https://macwave.org" >&2
+#
+# --skip-platform-check 跳过这道闸门：拿它调试、或者在手上没有那台机器的时候
+# 演练一遍（通常配 --dry-run）。跳过时必须说一声 —— 后面的下载地址是按 Linux
+# 挑的，装出来能不能跑没人保证。
+if [[ "$CLI_SKIP_PLATFORM_CHECK" != "true" && "$(uname -s 2>/dev/null)" != "Linux" ]]; then
+    lw_say "🌊 Error: this installer is for Linux; this system is $(uname -s 2>/dev/null)." \
+        "🌊 错误：本安装器只用于 Linux；当前系统是 $(uname -s 2>/dev/null)。" >&2
+    lw_say "🌊 On macOS use MacWave instead: https://macwave.org" \
+        "🌊 macOS 上请改用 MacWave：https://macwave.org" >&2
     exit 1
+fi
+if [[ "$CLI_SKIP_PLATFORM_CHECK" == "true" ]]; then
+    lw_say_err "${YELLOW}🌊 Warning: --skip-platform-check — the platform check is skipped." \
+        "${YELLOW}🌊 警告：--skip-platform-check —— 已跳过平台检查。${RESET}"
+    lw_say_err "${YELLOW}🌊   This system is $(uname -s 2>/dev/null) $(uname -m 2>/dev/null);" \
+        "${YELLOW}🌊   当前系统是 $(uname -s 2>/dev/null) $(uname -m 2>/dev/null)；${RESET}"
+    lw_say_err "${YELLOW}🌊   what gets installed is untested here. Use it with --dry-run." \
+        "${YELLOW}🌊   装出来的东西在本机没有验证过，请配合 --dry-run 使用。${RESET}"
 fi
 
 # ==========================================
@@ -45,15 +158,17 @@ fi
 # `-z $BASH_VERSION` 那半句同时挡住 `sh install.sh` / dash：否则脚本会跑到一半
 # 才炸在 [[ 上，报错还看不出真正原因。
 if [ -z "${BASH_VERSION:-}" ]; then
-    echo "🌊 Error: run the installer with bash, not sh." >&2
-    echo "🌊 错误：请用 bash 运行安装器，而不是 sh。" >&2
+    lw_say "🌊 Error: run the installer with bash, not sh." \
+        "🌊 错误：请用 bash 运行安装器，而不是 sh。" >&2
     exit 1
 fi
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
-    echo "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION." >&2
-    echo "🌊 错误：LinuxWave 需要 bash 4.4 或更高版本；当前是 $BASH_VERSION。" >&2
-    echo "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash" >&2
-    echo "🌊 请按上一行安装新版本 bash。macOS 上不需要——那个平台用 MacWave。" >&2
+    lw_say "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION." \
+        "🌊 错误：LinuxWave 需要 bash 4.4 或更高版本；当前是 $BASH_VERSION。" >&2
+    lw_say "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash" \
+        "🌊 Debian/Ubuntu：sudo apt install bash   Fedora/RHEL：sudo dnf install bash" >&2
+    lw_say "🌊 Install it with the command above. macOS does not need this — use MacWave there." \
+        "🌊 请按上一行安装新版本 bash。macOS 上不需要——那个平台用 MacWave。" >&2
     exit 1
 fi
 
@@ -419,88 +534,6 @@ PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://p
 CONFIGDATA_URL="$SELFUPDATE_URL"   # 版本数据与自更新数据同源，见下方域名块
 
 # ==========================================
-# 颜色定义
-# ==========================================
-
-RED_BOLD='\033[1;31m'
-GREEN='\033[32m'
-YELLOW='\033[33m'
-SKY_BLUE='\033[38;5;74m'
-RESET='\033[0m'
-
-# ==========================================
-# 输出层：双语与呈现
-# ==========================================
-# 所有面向用户的话都过 lw_say / lw_say_err，于是三件事只在这两个函数里做一次：
-#   1. 双语：lw_say "<English>" "<中文>"；只给一句时两种语言共用。
-#   2. --raw：去掉颜色与行首的 🌊，给日志与 grep 用（逐行过滤，见 lw_raw_filter）。
-#   3. --zh：说中文。默认英文 —— 终端不一定有中文 locale，反过来会让英文用户
-#      看到乱码。
-CLI_RAW=false
-LW_LANG="en"
-_PRESENTATION_APPLIED=false
-
-lw_raw() { [[ "${CLI_RAW:-false}" == "true" ]]; }
-
-# 逐行读 stdin，去掉行首的 🌊 与紧跟的一个空格。
-# 🌊 用 printf 的字节写：$'\U0001F30A' 这种写法要 bash 4.2+，这里不赌。
-lw_raw_filter() {
-    local line item
-    item="$(printf '\xf0\x9f\x8c\x8a')"
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        case "$line" in
-            "$item "*) line="${line#"$item "}" ;;
-            "$item"*) line="${line#"$item"}" ;;
-        esac
-        printf '%s\n' "$line"
-    done
-}
-
-lw_say() {
-    # 只给一句时两种语言都用它（`${2-$1}`）—— 空行、纯符号行、中英同文的命令行
-    # 都属于这种。注意是 `-` 不是 `:-`：显式传了空串（英文有下半句、中文已经说完）
-    # 必须打空行，不能回退到英文。
-    if [[ "$LW_LANG" == "zh" ]]; then
-        printf '%b\n' "${2-$1}"
-    else
-        printf '%b\n' "$1"
-    fi
-}
-
-lw_say_err() {
-    # 错误信息两边都打：英文给日志与工单，中文给用户。语言只决定先后。
-    if [[ "$LW_LANG" == "zh" ]]; then
-        printf '%b\n' "${2-$1}" >&2
-        [[ -n "${1:-}" && "${1:-}" != "${2:-}" ]] && printf '%b\n' "$1" >&2
-    else
-        printf '%b\n' "$1" >&2
-        [[ -n "${2:-}" && "${2:-}" != "${1:-}" ]] && printf '%b\n' "$2" >&2
-    fi
-}
-
-# --raw 要关颜色、改输出管道，而参数是在后面才解析的。所以解析完之后再调一次，
-# 把「还没开始说话之前」就已经定了的事补上。
-#
-# 也正因为如此，这里从**原始参数**里再认一次呈现类旗标：解析可能停在第一个未知
-# 选项上（那时 --raw 还没轮到），只靠解析结果的话，`--raw --bogus` 报出来的错
-# 仍然是带颜色和 🌊 的。从 CLI_ARGV 认一遍，才不会漏。
-lw_apply_presentation() {
-    [[ "$_PRESENTATION_APPLIED" == "true" ]] && return 0
-    local arg
-    for arg in ${CLI_ARGV[@]+"${CLI_ARGV[@]}"}; do
-        case "$arg" in
-            --raw|--RAW) CLI_RAW=true ;;
-            --zh|--ZH) LW_LANG="zh" ;;
-        esac
-    done
-    if lw_raw; then
-        RED_BOLD=""; GREEN=""; YELLOW=""; SKY_BLUE=""; RESET=""
-        exec > >(lw_raw_filter) 2>&1
-    fi
-    _PRESENTATION_APPLIED=true
-}
-
-# ==========================================
 # 辅助函数：将路径中的 $HOME 替换为 ~
 # ==========================================
 
@@ -703,6 +736,9 @@ LinuxWave 安装器
       --zh               说中文（默认英文）
       --print-usage      打印本用法后继续执行（--help 则打印后停止）
       --skip-probe       不访问自更新探针（离线/自建镜像时用）
+      --skip-platform-check
+                         跳过平台检查（不是 Linux 也继续）。调试用，
+                         通常与 --dry-run 连用；装出来能不能跑本机不保证
       --dir-option=N     免菜单直接选第 N 项（1-5）
       --dir-option=DIR   直接用 DIR 作为安装目录（等同 --dir-option=5=DIR）
       --dir-option=N=DIR 选第 N 项；自定义项（5）用 DIR 作为安装目录
@@ -742,6 +778,9 @@ Options:
       --zh               Speak Chinese (English by default)
       --print-usage      Print this usage, then continue (--help stops instead)
       --skip-probe       Do not contact the self-update probe (offline mirrors)
+      --skip-platform-check
+                         Continue even if this is not Linux. For debugging,
+                         usually with --dry-run; the result is not tested here
       --dir-option=N     Pick menu entry N without prompting (1-5).
       --dir-option=DIR   Use DIR as the installation directory (shorthand for
                          --dir-option=5=DIR).
@@ -798,6 +837,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-probe|--SKIP-PROBE)
             CLI_SKIP_PROBE=true
+            ;;
+        --skip-platform-check|--SKIP-PLATFORM-CHECK)
+            # 预扫已经认过一次（闸门在解析之前），这里再认一次是为了让 `--help`
+            # 与用法里的这一项名副其实：解析路径与预扫路径必须收尾一致。
+            CLI_SKIP_PLATFORM_CHECK=true
             ;;
         --install-python-from-source)
             # 自带的解释器一律从数据里的上游地址取，不试我们自己托管的副本
