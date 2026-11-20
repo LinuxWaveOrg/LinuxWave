@@ -45,11 +45,13 @@ collect() {
 
 echo "========== 1. 时长解析 =========="
 
-collect < <(python3 - "$LIB_DIR" <<'PY'
+collect < <(python3 - "$REPO_DIR" <<'PY'
 import os
 import sys
 
-sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, f"{sys.argv[1]}/scripts")
+import components
+components.add_to_sys_path(sys.argv[1])
 import domains
 
 
@@ -94,8 +96,9 @@ collect < <(python3 - "$REPO_DIR" <<'PY'
 import os
 import sys
 
-for sub in ("lib", "pkg", "surfboard"):
-    sys.path.insert(0, f"{sys.argv[1]}/{sub}")
+sys.path.insert(0, f"{sys.argv[1]}/scripts")
+import components
+components.add_to_sys_path(sys.argv[1])
 
 import pkginstaller
 
@@ -136,12 +139,16 @@ FAKE_CFG="$(mktemp -d)"
 printf '{"base_dir": "%s"}\n' "$REPO_DIR" > "$FAKE_CFG/config.json"
 trap 'rm -f "$OUT_FILE"; rm -rf "$FAKE_CFG"' EXIT
 
+TIMEOUT_CMD=""
+command -v timeout >/dev/null 2>&1 && TIMEOUT_CMD="timeout 60"
+
 run_wave() {
-    ( cd "$REPO_DIR" && LW_REPO="$REPO_DIR" LW_CFG="$FAKE_CFG" timeout 60 python3 -c '
+    # 必须在仓库之外执行：configerror 的「git 检出」检测看的是当前工作目录。
+    ( cd "$(dirname "$FAKE_CFG")" && LW_REPO="$REPO_DIR" LW_CFG="$FAKE_CFG" ${TIMEOUT_CMD:-} python3 -c '
 import os, pathlib, sys
-sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "lib"))
-sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "net"))
-sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "config"))
+sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "scripts"))
+import components
+components.add_to_sys_path(os.environ["LW_REPO"])
 import configpaths
 fake = pathlib.Path(os.environ["LW_CFG"])
 configpaths.SYSTEM_CONFIG_DIR = fake
@@ -156,20 +163,20 @@ runpy.run_path(os.path.join(os.environ["LW_REPO"], "lib", "wave.py"), run_name="
 }
 
 code=$(run_wave install jq --max-time=abc)
-if [[ "$code" != "0" ]] && grep -q 'Cannot parse --max-time' "$OUT_FILE"; then
+if [[ "$code" != "0" ]] && grep -q 'cannot parse --max-time value' "$OUT_FILE"; then
     pass "畸形时长被拒绝（退出码 ${code}）"
 else
     fail "畸形时长没有被正确拒绝（退出码 ${code}）"
 fi
 
-if grep -q 'Use seconds or a unit' "$OUT_FILE"; then
+if grep -q 'Use a number of seconds or a suffix' "$OUT_FILE"; then
     pass "报错信息给出可用写法"
 else
     fail "报错信息没给出可用写法"
 fi
 
 code=$(run_wave install jq --max-time)
-if [[ "$code" != "0" ]] && grep -q 'Missing time after --max-time' "$OUT_FILE"; then
+if [[ "$code" != "0" ]] && grep -q 'needs a value, e.g. --max-time=' "$OUT_FILE"; then
     pass "缺值被拒绝（退出码 ${code}）"
 else
     fail "缺值没有被正确拒绝（退出码 ${code}）"
