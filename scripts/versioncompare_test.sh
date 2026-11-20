@@ -171,6 +171,27 @@ while read -r dir; do
 done < <(sed -e 's/#.*//' "$REPO_DIR/scripts/components.txt" | tr -d ' ' | grep -v '^$')
 COMPONENT_DIRS+=("$REPO_DIR/scripts")
 
+# 「只有一份实现」不只是「没留下旧文件」——**在别处又写一个版本比较函数**同样算
+# 分叉，而且更难发现：4.4 的 lib/selfupdate.py 就自己写过一份 `version_key`（只比
+# 数字段），于是 `4.4.0-beta1` 会被判成比 `4.4.0` 新 —— 与 lib/versioncompare.py
+# 的结论正相反，而两处各自看起来都对。
+# 只看**装进用户机器**的组件目录：scripts/ 里的工具是薄封装（直接转调
+# versioncompare），不构成第二份实现。
+SHIPPED_DIRS=()
+while read -r dir; do
+    [[ -n "$dir" ]] && SHIPPED_DIRS+=("$REPO_DIR/$dir")
+done < <(sed -e 's/#.*//' "$REPO_DIR/scripts/components.txt" | tr -d ' ' | grep -v '^$')
+REDEFINED=$(grep -rnE "^[[:space:]]*def (version_key|version_cmp|version_compare|parse_version_key)\b" \
+    "${SHIPPED_DIRS[@]}" 2>/dev/null | grep -v "/versioncompare\.py:")
+if [[ -n "$REDEFINED" ]]; then
+    FAILED=$((FAILED + 1))
+    echo "FAIL: 又有人自己写了一份版本比较（应当 import lib/versioncompare.py）："
+    echo "$REDEFINED" | sed 's/^/  /'
+else
+    PASSED=$((PASSED + 1))
+    echo "PASS: 没有别处重写的版本比较函数"
+fi
+
 STALE_HITS=$(grep -rn "^[[:space:]]*\(import\|from\) \(pkgversionparser\|depsversionparser\|versioncmp\)" \
     "${COMPONENT_DIRS[@]}" 2>/dev/null)
 if [[ -n "$STALE_HITS" ]]; then

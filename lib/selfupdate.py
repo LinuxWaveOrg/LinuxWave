@@ -27,6 +27,7 @@ import domains
 import silent
 import tls
 from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir, load_base_dir
+from versioncompare import compare, newer_release
 
 # -------------------- 同意记录 --------------------
 #
@@ -142,12 +143,16 @@ def run_script(environment, overall_timeout):
             pass
 
 
-def version_key(value):
-    # 只比较数字段（2.3 -> [2, 3, 0, 0]），避免依赖 packaging
-    parts = [int(part) for part in re.findall(r'\d+', str(value))]
-    while len(parts) < 4:
-        parts.append(0)
-    return parts
+def installed_build():
+    """本机的构建号（`324E1459` 这种）。4.4 之前的安装里没有这个字段，返回 None。"""
+    path = version_file()
+    if not path.exists():
+        return None
+    try:
+        record = json.loads(path.read_text())
+        return record.get("build_number") or record.get("build")
+    except (ValueError, OSError):
+        return None
 
 
 def version_file():
@@ -241,7 +246,7 @@ def agreement_needs_consent(current):
         return False
     if not current:
         return False
-    return version_key(current) <= version_key(AGREEMENT_INTRODUCED_IN)
+    return compare(current, AGREEMENT_INTRODUCED_IN) <= 0
 
 
 def record_agreement():
@@ -365,12 +370,20 @@ def handle_selfupdate(input_string=""):
     print(f"🌊 Latest version found: {latest}")
 
     current = installed_version()
-    if current and version_key(current) >= version_key(latest):
-        silent.say(f"{GREEN}🌊 LinuxWave is already up to date (current: {current}).{RESET}")
+    current_build = installed_build()
+    latest_build = data.get("build_number") or data.get("build") or ""
+
+    # 版本优先，版本相同再看构建号：同一版本重新发布（修洞后重建）时版本号不变，
+    # 只比版本号会让「已是最新」永久卡住，用户拿不到修复。
+    if current and not newer_release(latest, latest_build, current, current_build or ""):
+        where = f"build {current_build}" if current_build else "no build number"
+        silent.say(f"{GREEN}🌊 LinuxWave is already up to date (current: {current}, {where}).{RESET}")
         sys.exit(0)
 
     environment = dict(os.environ)
     environment["LINUXWAVE_UPDATE_VERSION"] = latest
+    if latest_build:
+        environment["LINUXWAVE_UPDATE_BUILD"] = latest_build
     if data.get("branch"):
         environment["LINUXWAVE_UPDATE_BRANCH"] = data["branch"]
 
@@ -412,7 +425,7 @@ def handle_selfupdate(input_string=""):
     # VERSION.json 是「装好了」的唯一凭据：selfupdate.sh 只在全部文件到位之后才写它。
     # 再确认一次，避免任何一层把失败当成成功。
     final = installed_version()
-    if not final or version_key(final) < version_key(latest):
+    if not final or compare(final, latest) < 0:
         print(f"{RED_BOLD}🌊 Error: The update did not complete (still on {final or 'unknown'}).{RESET}")
         sys.exit(1)
 

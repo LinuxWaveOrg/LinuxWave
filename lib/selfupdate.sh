@@ -1155,6 +1155,7 @@ config_cmd mkdir -p "$CONFIG_DIR"
 config_cmd tee "$VERSION_FILE" > /dev/null << EOF
 {
   "version": "$VERSION",
+$( [[ -n "${LINUXWAVE_UPDATE_BUILD:-}" ]] && printf '  "build_number": "%s",\n' "$LINUXWAVE_UPDATE_BUILD" )
   "components": {
     "installer": "$VERSION",
     "parser": "$VERSION"

@@ -1052,6 +1052,9 @@ else
         LINUXWAVE_VERSION="$(read_toml_string "$PROBE_DATA" version)"
         LATEST_BRANCH="$(read_toml_string "$PROBE_DATA" branch)"
         EXPECTED_UPDATE_COMMANDS_SHA256="$(read_toml_string "$PROBE_DATA" update_commands_sha256)"
+        # 构建号：同一版本重新发布时（修了个洞、重建一次）用它区分先后，
+        # 否则 `wave selfupdate` 只比版本号，会说「已是最新」而用户拿不到修复。
+        LINUXWAVE_BUILD_NUMBER="$(read_toml_string "$PROBE_DATA" build_number)"
     fi
 fi
 
@@ -1709,6 +1712,7 @@ if [[ "$CLI_DRY_RUN" != "true" ]]; then
     run_cmd tee "$VERSION_FILE" > /dev/null << EOF
 {
   "version": "$LINUXWAVE_VERSION",
+$( [[ -n "${LINUXWAVE_BUILD_NUMBER:-}" ]] && printf '  "build_number": "%s",\n' "$LINUXWAVE_BUILD_NUMBER" )
   "components": {
     "installer": "$LINUXWAVE_VERSION",
     "parser": "$LINUXWAVE_VERSION"
