@@ -29,7 +29,7 @@ RESET='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 PYTHON=${PYTHON:-python3}
-CHECKER="$REPO_DIR/lib/configpaths.py"
+CHECKER="$REPO_DIR/config/configpaths.py"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -132,7 +132,9 @@ echo "========== 3. 真实安装漏斗：拒绝且不留半成品 =========="
 
 BASE="$WORK/base"
 mkdir -p "$BASE"/{bin,links,deps,downloads/tmp}
-for dir in lib net pkg surfboard; do
+# 假安装树按 components.txt 铺（第二份手写清单漏过 config/，检查器于是缺席）
+source "$SCRIPT_DIR/components.sh"
+for dir in $(components); do
     [[ -d "$REPO_DIR/$dir" ]] || continue
     mkdir -p "$BASE/$dir"
     cp -R "$REPO_DIR/$dir"/*.py "$REPO_DIR/$dir"/*.sh "$BASE/$dir"/ 2>/dev/null
@@ -247,8 +249,8 @@ else
     fail "安装流程里少了调用点（tree 或 binary）"
 fi
 
-if grep -q 'assert_links_inside' "$REPO_DIR/lib/configpaths.py"; then
-    pass "规则实现在 lib/configpaths.py"
+if grep -q 'assert_links_inside' "$REPO_DIR/config/configpaths.py"; then
+    pass "规则实现在 config/configpaths.py"
 else
     fail "找不到 assert_links_inside"
 fi

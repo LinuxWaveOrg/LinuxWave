@@ -88,7 +88,7 @@ PROJECT_CONTEXT.md 本文件：项目结构与关键机制
 | `scripts/domains_test.sh` | **域名层回归（离线）**：默认值与 `domains.py` 一致、两份 shell 脚本的域名块**逐字相同**、16 个输入在 shell 与 Python 两侧给出同样结论（`http://localhost/x` 无端口、含空格、含反引号、IPv6 回环等历史分歧都在里面），以及**默认值以外不许出现写死的 GitHub 地址**——自更新里曾有一条 `BASE_URL` 绕过了域名块，配了镜像照样只走 GitHub |
 | `scripts/mirror_test.sh` | **`wave mirror` 回归（离线）**：五种输出、`--only-set` 只导出已覆盖项、密码永远六颗星、`--show-password` / `--hide-user` 的行为，以及地址里带凭据（`https://user:pass@host`）时的解析与脱敏 |
 | `scripts/help_test.sh` | **帮助排版回归（离线）**：`COMMANDS` 与 `COMMAND_HELP` 双向一致（缺一条 `wave X --help` 就会静默回落到总帮助）、每个命令的帮助都完整、已知命令不回落、不同长度的标签仍从同一列开始、总帮助里没有未解析的占位符 |
-| `scripts/check_domain_defaults.py` | 被 `domains_test.sh` 调用：从两份 shell 脚本里抽出域名默认值，与 `lib/domains.py` 的 `DEFAULTS` 逐项比对 |
+| `scripts/check_domain_defaults.py` | 被 `domains_test.sh` 调用：从两份 shell 脚本里抽出域名默认值，与 `net/domains.py` 的 `DEFAULTS` 逐项比对 |
 | `scripts/configpath_test.sh` | **配置目录解析回归**（离线）：把 `configpaths` 的两个候选目录换成临时目录，验证「系统级优先 / 用户级回落 / 系统级损坏或缺字段也回落 / 都没有则退 1」 |
 | `scripts/sandbox_test.sh` | **安装器 / 卸载器的端到端回归，跑在隔离命名空间里**。用 `unshare -rm` 把 `/etc`、`/home`、`/opt`、`/usr/local`、`/root`、`/var`、`/srv` 换成临时影子副本，宿主这几个目录一个字节都不会被写；取数改成 `file://` 本地镜像，因此**不需要网络**。断言覆盖：四个安装目录选项 → 配置落位（用户级 `~/.config` / 系统级 `/etc`）→ PATH 写入 → 参数校验（缺路径、越界、路径穿越、未知旗标）→ **协议询问在「安装完成」之前**、拒绝后安装树与配置与 rc 里的 PATH 全部回滚 → 中途失败时的指引且不误删 → 卸载确认语义（无终端必须拒绝、答 n 取消、答 y 删除、`--force` 无人值守）→ 卸载器自删且以 `/bin/bash -c` 运行时不误删解释器 → 共享安装（双端 rc、家目录权限、只剩安装树时的识别、`--remove-user` 的调用序列与失败不谎报）→ 复用 `link_test.sh` → 目录菜单无效输入不静默换目录、`--ci` 单独使用走默认项 → **单文件下载重试**（「短暂失败后自愈」与「持续失败后如实报错」两种，并断言自愈那次不会留下误导性的「未完成」）→ **共用安装树不可写**（用只读挂载真实复现，断言在联网取版本之前就失败、给出 `sudo` 全路径命令、且 `root:root` 的树不劝人去加入 `root` 组）→ **组共享写**（断言调用者被加进 `linuxwave` 组、树目录打开组写位、目录带 `setgid`、提示写明「要重新登录」、重复安装不再谎称刚入组、`usermod` 失败时安装仍成功并如实报告、组名反查判定正确）→ **`Ctrl-C`**（传输中，以及停在重试提示上两处，断言退出码 130、只给一行提示、且不谎报成下载失败）。当前共 **163 条断言**（`PASS` / `FAIL` / `SKIP` 三类，SKIP 用于「本机确实无法复现」的情形，例如缺 `script` 就没有 pty、`mount` 失败就无法造只读树）。要求非 root 运行；`sudo`/`loginctl`/`systemctl` 用替身（命名空间内本就是 uid 0，真调 loginctl 会去改宿主的 systemd 状态）。**已知限制**：发行版一般没装 `newuidmap`，命名空间里只映射调用者自己的 uid，所以选项 1（共享安装）改成复用已存在的 `linuxwave` 账号，`useradd` 那一行无法在这里复现；同理**映射不了别的 gid**，`linuxwave` 组的 gid 只能是 0（换成别的 gid，`chown`/`chgrp` 会因「未映射」报 `EINVAL`），所以「调用者尚未入组」这个前提改用 passwd 里 root 的主组字段表达，组名反查那一步（`group_name_for_gid`）直接单测、不硬凑一棵非 0 属组的树。另外，命名空间里 root 的会话本来就带 gid 0，而 `linuxwave` 组的 gid 也只能是 0，所以「会话里还没有该组、需要重新登录」这一分支在沙箱里**永远走不到**——那一支靠隔离实验单独验证 `id` 的两种语义（具名查库、不带参数看会话） |
 | `.github/workflows/format-test.yml` | 在 `ubuntu-latest` 上把 `lib/`、`pkg/`、`surfboard/` 部署到 `/tmp/linuxwave-test`，依次跑配置目录回归、依赖审计、格式回归、**校验值回归**（`checksum_test.sh`）、依赖链回归、链接回归、**selfupdate 回归**。`python-version` 走 `['3.14', '3.15']` 矩阵（`fail-fast: false`，一条挂了不取消另一条）：3.14 是环境下限（`.conda` 需要 `compression.zstd`），3.15 是上游最新正式版。`actions/python-versions` 里还没有 3.15.0 正式版（`setup-python` 报 `The version '3.15' ... was not found`），所以 3.15 那条线用 `astral-sh/setup-uv` 拉 python-build-standalone，再 `uv venv --seed` 建一个带 pip 的 venv 插到 `GITHUB_PATH` 最前（`setup-uv` 只把解释器登记给自己用，`PATH` 上的 `python3` 仍是 runner 自带那个）；每条线都断言 `sys.version_info[:2]` 与矩阵一致，免得 3.15 悄悄跑在 3.14 上还报绿。另外给工作流带上 `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`（`audit_deps.py` 走 `api.github.com` 的 tree API，未认证只有 60 次/小时）与 `PYTHONUNBUFFERED: "1"` |
@@ -257,7 +257,7 @@ git merge --no-ff feature/upgrade -m "Merge feature/upgrade: …"
 **从哪儿取字节**：默认先试我们自己托管的 `{python 域}/pythondata/<版本>/<文件名>`（文件名取上游
 地址末段，字节与上游同一份，所以校验值复用），取不到才回落到数据里写的上游地址——**自家存储只试
 一次**，不通就立刻回上游，不在那里重试；`--install-python-from-source` 连试都不试，直接走上游。
-这个路径形状的单一真相源是 `lib/domains.py` 的 `python_archive_url()`，两份 shell 脚本各手写一份，
+这个路径形状的单一真相源是 `net/domains.py` 的 `python_archive_url()`，两份 shell 脚本各手写一份，
 `scripts/python_source_test.sh` 会比对两边是否还一致，并真的跑一遍三条分支（有托管副本 / 没有 /
 加旗标）。数据文件形状：
 
@@ -295,7 +295,7 @@ amd64_url / amd64_sha256
 5. **递归**：依赖自身的 `deps` 会被继续安装（先装下层、再装自己）
 6. **动态库路径替换**：依赖包里的库不会自动被 `ld.so` 找到（预编译产物的 `DT_NEEDED` 只记库名、`RUNPATH` 又只指向构建机的路径，而安装目录可选，跨目录必然失败）。安装完成后由 `surfboard/transfer.sh` 用 `patchelf` 把 `RPATH`/`RUNPATH` 改写成指向依赖 `lib/` 的 `$ORIGIN` 相对路径。替换统一放在**全部产物就位之后**做（先逐个处理 `deps/*/*`，再处理软件包目录），因为依赖声明顺序与实际库依赖顺序未必一致——例如 `wget` 的 `deps` 里 `libidn2` 排在 `libunistring` 前面，而 `libidn2` 恰好引用 `libunistring`，提前替换会解析不到
 7. **网络**：所有请求 30 秒超时；下载超时或连接失败时询问是否重试
-8. **对外地址（4.0 起）**：七种用途各一个域，全部可由环境变量覆盖（`LINUXWAVE_API_DOMAIN`、`LINUXWAVE_BOTTLE_DOMAIN`、`LINUXWAVE_DEPS_DOMAIN`、`LINUXWAVE_CORE_DOMAIN`、`LINUXWAVE_PYTHON_DOMAIN`、`LINUXWAVE_SELFUPDATE_DOMAIN`、`LINUXWAVE_PKG_SOURCECODE_DOMAIN`）。Python 侧在 `lib/domains.py`，shell 侧两份脚本各抄一份 `lw_domain`——**三处必须给出同样结论**，`scripts/domains_test.sh` 用同一批输入做交叉验证。`wave mirror` 可随时查看当前生效值与来源；`--raw` 输出可直接粘进 shell 配置。
+8. **对外地址（4.0 起）**：七种用途各一个域，全部可由环境变量覆盖（`LINUXWAVE_API_DOMAIN`、`LINUXWAVE_BOTTLE_DOMAIN`、`LINUXWAVE_DEPS_DOMAIN`、`LINUXWAVE_CORE_DOMAIN`、`LINUXWAVE_PYTHON_DOMAIN`、`LINUXWAVE_SELFUPDATE_DOMAIN`、`LINUXWAVE_PKG_SOURCECODE_DOMAIN`）。Python 侧在 `net/domains.py`，shell 侧两份脚本各抄一份 `lw_domain`——**三处必须给出同样结论**，`scripts/domains_test.sh` 用同一批输入做交叉验证。`wave mirror` 可随时查看当前生效值与来源；`--raw` 输出可直接粘进 shell 配置。
    **规则**：除域名表里的默认值外，代码里不允许再出现写死的 `github.com`（有断言守着）。自更新里曾漏改一条 `BASE_URL`，结果配了镜像也只走 GitHub、离线必挂。
    **payload 命名（B 档）**已接线：`bottle` / `deps` 域名配了就走我们自己的存储，文件名按
    `<包名>@<版本>.<架构><扩展名>`（`payload_filename`）；URL 里的 `@` 会被编码成 `%40`，服务器解码即得原名。
@@ -379,7 +379,7 @@ macOS 的 SIP —— 所以清单只留系统库目录，**绝不放宽到 `/opt
 
 | 环节 | 位置 |
 | --- | --- |
-| 规则与豁免清单 | [`lib/configpaths.py`](./lib/configpaths.py) 的 `SYSTEM_LINK_PREFIXES` / `escaping_links()` / `assert_links_inside()` |
+| 规则与豁免清单 | [`config/configpaths.py`](./config/configpaths.py) 的 `SYSTEM_LINK_PREFIXES` / `escaping_links()` / `assert_links_inside()` |
 | 调用点 | [`surfboard/depsmanager.sh`](./surfboard/depsmanager.sh) 的 `lw_assert_no_escaping_links()`，`tree` 与 `binary` 两种形态都调 |
 | 回归 | [`scripts/linksafety_test.sh`](./scripts/linksafety_test.sh)：六种链接的判定、报错内容、真实漏斗拒绝且不留半成品、「合法产物不被误杀」 |
 

@@ -201,6 +201,8 @@ import sys
 
 repo = sys.argv[1]
 sys.path.insert(0, f"{repo}/lib")
+sys.path.insert(0, f"{repo}/net")
+sys.path.insert(0, f"{repo}/config")
 import domains
 
 version, filename = "3.14.9", "cpython-amd64.tar.gz"

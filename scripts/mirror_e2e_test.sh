@@ -46,7 +46,7 @@ VERSION="1.0"
 ARCH="amd64"
 UPSTREAM_FILENAME="demo.tar.gz"
 PAYLOAD="$(python3 -c "
-import sys; sys.path.insert(0, '$REPO_DIR/lib')
+import sys; sys.path.insert(0, '$REPO_DIR/lib'); sys.path.insert(0, '$REPO_DIR/net'); sys.path.insert(0, '$REPO_DIR/config')
 import domains
 print(domains.payload_filename('$PKG', '$VERSION', '$ARCH', '$UPSTREAM_FILENAME'))
 ")"
@@ -154,6 +154,8 @@ import sys
 
 repo, out, name, version, arch, upstream_filename = sys.argv[1:7]
 sys.path.insert(0, f"{repo}/lib")
+sys.path.insert(0, f"{repo}/net")
+sys.path.insert(0, f"{repo}/config")
 sys.path.insert(0, f"{repo}/pkg")
 sys.path.insert(0, f"{repo}/surfboard")
 
@@ -215,7 +217,7 @@ fi
 # ==========================================
 
 masked="$(python3 -c "
-import sys; sys.path.insert(0, '$REPO_DIR/lib')
+import sys; sys.path.insert(0, '$REPO_DIR/lib'); sys.path.insert(0, '$REPO_DIR/net'); sys.path.insert(0, '$REPO_DIR/config')
 import domains
 print(domains.redact_url('http://$USER_NAME:$PASSWORD@127.0.0.1:$PORT/bottle/$PKG/$PAYLOAD'))
 ")"
@@ -230,7 +232,7 @@ fi
 # ==========================================
 
 if LINUXWAVE_BOTTLE_DOMAIN="" python3 -c "
-import sys; sys.path.insert(0, '$REPO_DIR/lib')
+import sys; sys.path.insert(0, '$REPO_DIR/lib'); sys.path.insert(0, '$REPO_DIR/net'); sys.path.insert(0, '$REPO_DIR/config')
 import domains
 try:
     domains.resolve_payload('bottle', '$PKG', '$VERSION', '$ARCH', '$UPSTREAM_FILENAME', '', False)

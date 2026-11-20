@@ -18,7 +18,7 @@
 #
 #     4.4.0.dev1 < 4.4.0a1 < 4.4.0b1 < 4.4.0rc1 < 4.4.0 < 4.4.1
 #
-# `packaging` 已经是硬依赖（见 pyproject.toml 与 lib/configerror.py 的自检），
+# `packaging` 已经是硬依赖（见 pyproject.toml 与 config/configerror.py 的自检），
 # 所以这里直接用它，不再自造一套「差不多」的比较。
 #
 # 软件包还有一类历史写法（`procursus` / `linuxwaveteam` / `Xteam` 后缀），先在这里

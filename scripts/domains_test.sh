@@ -13,7 +13,7 @@ RESET='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-LIB_DIR="$REPO_DIR/lib"
+LIB_DIR="$REPO_DIR/net"
 
 FAILED=0
 SKIPPED=0
@@ -27,7 +27,7 @@ echo "========== 1. 默认地址形状 =========="
 # 一个都不设时拼出来的地址，是「不设环境变量就没有意外」的唯一依据。
 # 4.0 起索引 / core 仍是 3.x 的 raw 地址，但自更新数据与解释器换了布局
 # （linuxwavedata/latest.toml、pythondata/latest.toml），所以下面逐条写死预期值。
-if PYTHONPATH="$LIB_DIR" python3 - << 'PY'
+if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" python3 - << 'PY'
 import domains
 
 checks = [
@@ -68,7 +68,7 @@ fi
 echo
 echo "========== 2. 环境变量覆盖与规范化 =========="
 
-if PYTHONPATH="$LIB_DIR" LINUXWAVE_API_DOMAIN="https://mirror.example.com/linuxwave/" \
+if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" LINUXWAVE_API_DOMAIN="https://mirror.example.com/linuxwave/" \
      LINUXWAVE_SELFUPDATE_DOMAIN="https://mirror.example.com/su" python3 - << 'PY'
 import domains
 
@@ -92,7 +92,7 @@ fi
 
 # 不合法的值必须在拼地址之前就被拒绝（它们会进 URL，也会进错误信息）
 for bad in "ftp://x.example.com" "http://mirror.example.com" "no-scheme" "https://exa mple.com"; do
-    if PYTHONPATH="$LIB_DIR" LINUXWAVE_API_DOMAIN="$bad" python3 -c "import domains; domains.api_domain()" > /dev/null 2>&1; then
+    if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" LINUXWAVE_API_DOMAIN="$bad" python3 -c "import domains; domains.api_domain()" > /dev/null 2>&1; then
         fail "非法值被接受：$bad"
     else
         pass "非法值被拒绝：$bad"
@@ -130,7 +130,7 @@ while IFS= read -r case_value; do
         shell_verdict=accept
     fi
 
-    python_verdict="$(PYTHONPATH="$LIB_DIR" python3 - "$case_value" << 'PYV'
+    python_verdict="$(PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" python3 - "$case_value" << 'PYV'
 import contextlib, io, sys
 import domains
 try:
@@ -153,7 +153,7 @@ if [[ "$cross_ok" == "true" ]]; then
 fi
 
 # 本机回环允许明文 http（离线镜像、测试用）
-if PYTHONPATH="$LIB_DIR" LINUXWAVE_API_DOMAIN="http://127.0.0.1:8080/idx" \
+if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" LINUXWAVE_API_DOMAIN="http://127.0.0.1:8080/idx" \
      python3 -c "import domains; assert domains.api_domain() == 'http://127.0.0.1:8080/idx'"; then
     pass "回环地址允许明文 http"
 else
@@ -163,7 +163,7 @@ fi
 echo
 echo "========== 3. 默认从自己的存储取，只有 --install-from-source 才读 url =========="
 
-if PYTHONPATH="$LIB_DIR" \
+if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" \
    LINUXWAVE_BOTTLE_DOMAIN="https://github.com/LinuxWaveOrg/Bottle/releases/download" \
    LINUXWAVE_DEPS_DOMAIN="https://github.com/LinuxWaveOrg/Deps/releases/download" \
    python3 - << 'PY'
@@ -246,7 +246,7 @@ echo
 echo "========== 4. 缺数据必须报错，不能悄悄回落 =========="
 
 # 没有 file 字段 → 报错（否则不知道压缩格式）
-if PYTHONPATH="$LIB_DIR" python3 - << 'PY' > /dev/null 2>&1
+if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" python3 - << 'PY' > /dev/null 2>&1
 import domains
 domains.resolve_payload("bottle", "jq", "1.7.1", "arm64", upstream_filename="",
                         upstream_url="https://x/jq.tar.gz", from_source=False)
@@ -258,7 +258,7 @@ else
 fi
 
 # --install-from-source 但记录里没有 url → 报错
-if PYTHONPATH="$LIB_DIR" python3 - << 'PY' > /dev/null 2>&1
+if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" python3 - << 'PY' > /dev/null 2>&1
 import domains
 domains.resolve_payload("bottle", "jq", "1.7.1", "arm64", upstream_filename="jq.tar.gz",
                         upstream_url="", from_source=True)
@@ -270,7 +270,7 @@ else
 fi
 
 # --install-from-source 照样拒绝明文 http
-if PYTHONPATH="$LIB_DIR" python3 - << 'PY' > /dev/null 2>&1
+if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" python3 - << 'PY' > /dev/null 2>&1
 import domains
 domains.resolve_payload("bottle", "jq", "1.7.1", "arm64",
                         upstream_filename="", upstream_url="http://x/jq.tar.gz", from_source=True)
@@ -282,7 +282,7 @@ else
 fi
 
 # 默认值被清空时必须报错（防守性路径：正常使用不会走到，但代码里必须挡得住）
-if PYTHONPATH="$LIB_DIR" python3 - << 'PY' > /dev/null 2>&1
+if PYTHONPATH="$LIB_DIR:$REPO_DIR/lib" python3 - << 'PY' > /dev/null 2>&1
 import domains
 domains.DEFAULTS["bottle"] = ""
 domains.resolve_payload("bottle", "jq", "1.7.1", "arm64",
@@ -347,7 +347,7 @@ else
          <(extract_domain_block "$REPO_DIR/lib/selfupdate.sh") | head -20
 fi
 
-# 两边的默认值也必须与 lib/domains.py 对得上，
+# 两边的默认值也必须与 net/domains.py 对得上，
 # 否则 shell 和 Python 会指向不同的地方。
 if python3 "$REPO_DIR/scripts/check_domain_defaults.py"; then
     pass "shell 与 domains.py 的默认值一致"

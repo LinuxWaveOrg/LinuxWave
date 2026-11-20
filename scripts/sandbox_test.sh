@@ -516,6 +516,8 @@ scenario_write_permission() {
 import sys
 sys.path.insert(0, '/srv/ro-lw/linuxwave/surfboard')
 sys.path.insert(0, '/srv/ro-lw/linuxwave/lib')
+sys.path.insert(0, '/srv/ro-lw/linuxwave/net')
+sys.path.insert(0, '/srv/ro-lw/linuxwave/config')
 sys.path.insert(0, '/srv/ro-lw/linuxwave/pkg')
 import pkginstaller as P
 print(P.group_name_for_gid(0), P.group_name_for_gid($probe_gid))

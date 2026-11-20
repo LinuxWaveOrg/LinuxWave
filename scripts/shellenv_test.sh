@@ -38,6 +38,7 @@ py_out="$(PYTHONPATH="$REPO_DIR/lib:$REPO_DIR/pkg:$REPO_DIR/surfboard" \
     LINUXWAVE_CONFIG_DIR_OVERRIDE= \
     python3 - "$BASE" <<'PY' 2>&1
 import sys, pathlib
+sys.path.insert(0, "config")
 sys.path.insert(0, "lib")
 import shellenv
 sys.stdout.write(shellenv.render(pathlib.Path(sys.argv[1])))

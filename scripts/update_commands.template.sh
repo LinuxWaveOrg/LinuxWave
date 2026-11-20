@@ -273,6 +273,25 @@ main() {
     # 约束：以当前用户身份执行，需要管理员权限时自己 sudo，失败要 exit 非零，
     # 且必须幂等。
 
+    # 4.0.0：程序分层从 lib/ 摊平改成组件目录。新位置的文件已经由上面的
+    # install_fresh / install_delta 下好（`want` 会先 mkdir -p），这里清掉
+    # lib/ 下的旧副本。
+    #
+    # 这一条**不能省**：sys.path 的顺序是 cli → config → lib → net → pkg →
+    # surfboard（见 lib/wave.py），也就是 lib/ **排在 net/ 前面**。留着
+    # lib/domains.py，`import domains` 就永远命中旧那份，net/domains.py
+    # 成了摆设 —— 症状是「改了半天没生效」，而不是报错。
+    for stale in "$LINUXWAVE_INSTALL_DIR/lib/domains.py" \
+                 "$LINUXWAVE_INSTALL_DIR/lib/configpaths.py" \
+                 "$LINUXWAVE_INSTALL_DIR/lib/configerror.py" \
+                 "$LINUXWAVE_INSTALL_DIR/lib/help.py" \
+                 "$LINUXWAVE_INSTALL_DIR/lib/silent.py" \
+                 "$LINUXWAVE_INSTALL_DIR/lib/quiet.py"; do
+        if [ -f "$stale" ]; then
+            run rm -f "$stale" || exit 1
+        fi
+    done
+
     return 0
 }
 

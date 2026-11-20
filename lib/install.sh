@@ -188,7 +188,7 @@ if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
     # 物理路径：与下面比较用的 HOME（configpaths 已 resolve 过）要用同一种形式，
     # 否则符号链接一掺和，前缀判断就会失效。
     SYS_ROOT="$(cd "$_lw_root" && pwd -P)"
-    # 幂等：lib/configpaths.py 也会把 HOME 搬进测试根。从 wave.py 一路调用下来时
+    # 幂等：config/configpaths.py 也会把 HOME 搬进测试根。从 wave.py 一路调用下来时
     # HOME 已经被改过一次，这里再套一层就会变成 "<根><根>/home/<你>"，配置目录于是
     # 永远找不到。两边都取物理路径再比较，才不会被符号链接骗过去。
     _lw_home_real="$(cd "$HOME" 2>/dev/null && pwd -P)" || _lw_home_real="$HOME"
@@ -404,14 +404,14 @@ LW_RSA_PUB_PEM=''
 # 域名（4.0 起所有对外地址都可由环境变量覆盖）
 # ==========================================
 #
-# 与 lib/domains.py 是同一张表：一份给 Python、一份给 shell。install.sh 是
+# 与 net/domains.py 是同一张表：一份给 Python、一份给 shell。install.sh 是
 # `curl | bash` 直接执行的，没有本地文件可以 source，只能在这里重复一遍。
 #
 # 这一段必须与 lib/selfupdate.sh 逐字一致 —— scripts/domains_test.sh 有断言。
 
 lw_domain() {
     # lw_domain <变量名> <值>：校验协议、去掉末尾斜杠，然后打印规范化后的值。
-    # 规则必须与 lib/domains.py 的 _validate 完全一致 —— scripts/domains_test.sh
+    # 规则必须与 net/domains.py 的 _validate 完全一致 —— scripts/domains_test.sh
     # 会拿同一批输入分别喂给两边逐条比对。
     local name="$1"
     local value="$2"
@@ -517,7 +517,7 @@ lw_sudo() {
 }
 
 # ==========================================
-# 各地址（默认值必须与 lib/domains.py 的 DEFAULTS 逐字一致）
+# 各地址（默认值必须与 net/domains.py 的 DEFAULTS 逐字一致）
 # ==========================================
 #
 # scripts/check_domain_defaults.py 会逐条比对 shell 与 Python，改一处就要改另一处。
@@ -525,7 +525,7 @@ lw_sudo() {
 API_DOMAIN="$(lw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
 CORE_URL="$(lw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
 # 内置默认值，只用来判断「用户是不是在用镜像」（install.sh 的欢迎语据此提示一句）。
-# 必须与上一行的默认值、以及 lib/domains.py 的 DEFAULTS["core"] 一致 ——
+# 必须与上一行的默认值、以及 net/domains.py 的 DEFAULTS["core"] 一致 ——
 # scripts/check_domain_defaults.py 会比对这三处。
 CORE_DEFAULT_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave"
 SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
@@ -1693,7 +1693,7 @@ ensure_portable_python() {
         run_cmd mkdir -p "$base_dir/downloads/tmp" 2>/dev/null || true
         # 默认先试我们自己托管的 `pythondata/<版本>/<文件名>`（镜像直连，省一次境外下载）；
         # 没有就回落到数据里写的上游地址。--install-python-from-source 直接从上游取。
-        # 路径形状由 lib/domains.py 的 python_archive_url 定义，scripts/python_source_test.sh 会比对。
+        # 路径形状由 net/domains.py 的 python_archive_url 定义，scripts/python_source_test.sh 会比对。
         # 自家存储只试一次：它不通就该立刻回上游，而不是在这里重试三次。
         if [[ -z "${LINUXWAVE_PYTHON_FROM_SOURCE:-}" ]]; then
             if run_cmd curl -fsSL --connect-timeout 20 --max-time 600 -o "$archive" \

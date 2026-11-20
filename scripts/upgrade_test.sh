@@ -162,6 +162,8 @@ run_wave() {
     ( cd "$REPO_DIR" && LW_REPO="$REPO_DIR" LW_CFG="$FAKE_CFG" timeout 60 python3 -c '
 import os, pathlib, sys
 sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "lib"))
+sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "net"))
+sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "config"))
 import configpaths
 fake = pathlib.Path(os.environ["LW_CFG"])
 configpaths.SYSTEM_CONFIG_DIR = fake
