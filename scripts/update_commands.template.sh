@@ -288,11 +288,17 @@ main() {
                  "$LINUXWAVE_INSTALL_DIR/lib/silent.py" \
                  "$LINUXWAVE_INSTALL_DIR/lib/quiet.py" \
                  "$LINUXWAVE_INSTALL_DIR/lib/tls.py" \
-                 "$LINUXWAVE_INSTALL_DIR/lib/timeouts.py"; do
+                 "$LINUXWAVE_INSTALL_DIR/lib/timeouts.py" \
+                 "$LINUXWAVE_INSTALL_DIR/surfboard/depsversionparser.py"; do
         if [ -f "$stale" ]; then
             run rm -f "$stale" || exit 1
         fi
     done
+
+    # 4.4.0：依赖解析并入 surfboard/querier.py，depsversionparser.py 不再被
+    # import。不清掉也不算错（它只占一个文件的位置），但安装树里留一个没人用
+    # 的模块会让人以为「它在生效」，而且 `components.txt` 的清单比对会报多文件。
+    # 与上面同一条循环，只是注释按版本分开写，免得下一个人以为这条是 4.0 的。
 
     return 0
 }
