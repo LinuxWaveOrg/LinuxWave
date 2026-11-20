@@ -151,6 +151,21 @@ jobs:
         run: |
           bash scripts/help_test.sh
 
+      # 版本比较是安装与自更新的地基：预发布排序、社区后缀归一化、构建号
+      - name: Run version comparison test
+        run: |
+          bash scripts/versioncompare_test.sh
+
+      # 旗标清单与拆解原语（只在命令名写错时才走到，平时跑不到）
+      - name: Run flags test
+        run: |
+          bash scripts/flags_test.sh
+
+      # 「你是不是想敲……」：命令名与包名两类建议
+      - name: Run suggestion test
+        run: |
+          bash scripts/suggest_test.sh
+
       # --max-time 的时长解析与传导（畸形值必须报错，不能静默用默认值）
       - name: Run timeout test
         run: |
