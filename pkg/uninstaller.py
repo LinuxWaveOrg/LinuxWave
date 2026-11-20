@@ -20,6 +20,7 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
+import common
 from configpaths import assert_inside, assert_inside_entry, load_base_dir, require_safe_token
 
 
@@ -345,13 +346,12 @@ def select_versions(pkg_name, versions):
 def handle_uninstall(input_string):
     parts = input_string.split()
 
-    # 先剥出 flag：--unlink 表示“不动这个包不带版本号的链接”
-    flags = {word for word in parts[2:] if word.startswith("-")}
+    # 旗标白名单交给 cli/common.py：`--no-link`（旧名 --unlink）表示「不动这个包
+    # 不带版本号的链接」，其余旗标一律按「这条命令不认」报错 —— 以前是打一行
+    # 警告然后忽略，用户以为生效了，链接照样被改。
+    found = common.check_allowed(input_string, "uninstall")
     operands = [word for word in parts[2:] if not word.startswith("-")]
-    keep_link = "--unlink" in flags
-
-    for unknown in sorted(flags - {"--unlink"}):
-        print(f"{YELLOW}🌊 Warning: unknown flag '{unknown}' ignored.{RESET}")
+    keep_link = any(flag in common.flags.NO_LINK for flag in found)
 
     if not operands:
         print(f"{RED_BOLD}🌊 Error: Missing package name.{RESET}")

@@ -25,7 +25,9 @@
 # 白名单校验仍归各命令自己（pkginstaller.ALLOWED_FLAGS 等）：哪些旗标**能出现**
 # 是每条命令的事，而它们**是什么意思**是这里的事。
 
+import difflib
 import os
+import re
 import sys
 
 import flags
@@ -223,3 +225,100 @@ def apply_proxy(options):
     for name in PROXY_ENV_VARS:
         os.environ[name] = options.proxy
     return options.proxy
+
+
+# -------------------- 旗标白名单校验 --------------------
+#
+# 「这条命令认哪些旗标」的唯一判定处。各 handler 不再各写一遍词法循环与报错文案 ——
+# 以前 install 报 "Input contains illegal fields"，upgrade 报自己的那句，
+# uninstall 打一行警告就忽略（用户以为生效了，链接照样被改）。
+#
+# 白名单 = flags.GLOBAL（任何命令都收）+ 这条命令独有的那组。别名按规范名判断，
+# 所以 `--unlink` 与 `--no-link` 在 install/uninstall 上等价。
+#
+# 放在 common.py 而不是 flags.py：flags.py 是纯函数（不打印、不退出），
+# 这条要报错退出。
+
+RED = '\033[1;31m'
+RESET = '\033[0m'
+
+
+def allowed_for(command):
+    """这条命令接受的旗标名（含公共旗标）。"""
+    return flags.GLOBAL | flags.COMMAND_FLAGS.get(command, set())
+
+
+def _pointer(text, flag):
+    """把「you ran:」做成两行：命令行原样，下面用 ^ 指向出错的旗标。
+
+    与「未知命令」的呈现方式一致 —— 命令行长的时候（好几个旗标加限速加超时），
+    只靠整行变红看不出是哪一段出的问题。
+
+    位置必须按词边界找，不能用 str.find：`--ver` 会命中 `--verbose`，
+    `--connect-time` 若写成子串匹配也会先撞上前缀更长的写法。caret 只覆盖
+    旗标本身，不含 `=<值>`。
+    """
+    label = "you ran: "
+    if not flag or not text:
+        return label + text
+
+    offset = None
+    for match in re.finditer(re.escape(flag) + r"(?==|\s|$)", text):
+        start = match.start()
+        if start == 0 or text[start - 1].isspace():
+            offset = start
+            break
+    if offset is None:
+        return label + text
+
+    tail = text[offset + len(flag):]
+    shown = f"{text[:offset]}{RED}{flag}{RESET}{tail}"
+    carets = " " * (len(label) + offset) + "^" * len(flag)
+    return f"{RESET}{label}{shown}\n{RED}{carets}"
+
+
+def check_allowed(input_string, command, shown=None):
+    """校验旗标白名单；不在名单里的报错退出。返回拆出来的旗标名列表。
+
+    command: 报错时说的命令名（`illegal option X for wave <command>`）。
+    shown:   回显用的命令行。upgrade 内部会构造一条 `wave install placeholder …`
+             的探针来复用 install 的白名单，那条探针只该用于解析，不该给用户看。
+    """
+    found = flags.tokens(input_string.split(" "))
+    allowed = allowed_for(command)
+
+    for flag in found:
+        if flag in allowed or flags.ALIASES.get(flag, flag) in allowed:
+            continue
+
+        import silent
+        import steplog
+
+        # 静默模式：整段解释对脚本没用，给一行可匹配的即可。
+        # 但要分清两种「不接受」：拼错了，还是这条命令不认它。
+        if silent.is_silent():
+            description = flags.describe(flag)
+            if description:
+                silent.misplaced(flag, description)
+            else:
+                silent.unknown("flag", flag)
+            sys.exit(1)
+
+        text = (shown or input_string).strip()
+        description = flags.describe(flag)
+        hint = []
+        if description:
+            # 是 LinuxWave 的旗标、只是不属于这条命令：说明它属于谁就够了。
+            # 这时再猜拼写只会添乱 —— `--ver` 会被猜成 `--verbose`。
+            hint.append(description)
+        else:
+            # 真正的拼错：给一个候选。候选只从**这条命令的白名单**里取，
+            # 所以不会推荐一条这里不接受的长参数。
+            suggestion = difflib.get_close_matches(flag, sorted(allowed), n=1, cutoff=0.6)
+            if suggestion:
+                hint.append(f"Did you mean {suggestion[0]}?")
+        hint.append(f"`wave {command} --help` lists the flags this command accepts")
+        steplog.fail(f"illegal option {flag} for `wave {command}`",
+                     extra=_pointer(text, flag), hint=hint, usage=True)
+
+    return found

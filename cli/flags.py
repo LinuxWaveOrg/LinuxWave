@@ -46,7 +46,6 @@ GLOBAL = {
     "--max-time",
     "--connect-timeout",
     "--content-time",
-    "--ver",
     "--install-python-from-source",
     # 注意没有 --help / --version：那两条在分发之前就被拦下，
     # 不算「某条命令接受的旗标」，但仍然是合法输入，所以在 ALL 里单独补。
@@ -68,7 +67,7 @@ silent = {"-s", "--silent", "-S", "--show-error"}
 # 由 cli/silent.py 接管）；info / mirror 上另有含义（原样打印 / 只打值），
 # 各自由自己的模块解析。同一个名字出现在两组里不是笔误，是同一个旗标在不同命令
 # 下做不同的事 —— 就像 -a 在 upgrade 与 link 上都是「所有」。
-install = {"-F", "--force", "--raw"} | set(NO_LINK) | silent
+install = {"-F", "--force", "--raw", "--ver"} | set(NO_LINK) | silent
 uninstall = set(NO_LINK) | silent
 upgrade = {"-X", "--remove-old-version", "--remove-old-versions", "--rov",
            "-a", "--all", "-F", "--force", "--raw"} | silent
@@ -212,3 +211,4 @@ def unknown_flags(words):
             if flag not in ALL and flag not in seen:
                 seen.append(flag)
     return seen
+

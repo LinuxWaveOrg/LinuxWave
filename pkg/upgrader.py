@@ -15,6 +15,7 @@ import os
 import platform
 import sys
 
+import common
 import domains
 import silent
 import requests
@@ -127,31 +128,14 @@ def fetch_common_fields(package_name, arch):
 
 
 def apply_timeout(words):
-    """把 --max-time 写进环境变量。
+    """把公共旗标里的超时写进环境变量（后面取索引、取 @common 都按它来）。
 
-    只解析超时这一项：整份 `handle_download_args` 会去问 --skip-ssl，
-    而那一步在后面的 handle_install 里还会再问一次，没必要问两遍。
+    解析交给 cli/common.py：取值校验与「40s 是多少秒」的换算只有那一份实现。
+    只写环境变量而不重建整份 config —— --skip-ssl 的询问留给 handle_install，
+    那次才是真正要下载的时候。
     """
-    for index, word in enumerate(words):
-        raw = None
-        if word == "--max-time":
-            raw = words[index + 1] if index + 1 < len(words) else ""
-        elif word.startswith("--max-time="):
-            raw = word.split("=", 1)[1]
-        else:
-            continue
-
-        if raw == "":
-            print(f"{RED_BOLD}🌊 Error: Missing time after --max-time "
-                  f"(e.g. --max-time=2min, --max-time=40).{RESET}")
-            sys.exit(1)
-        try:
-            os.environ[domains.MAX_TIME_ENV] = str(domains.parse_duration(raw))
-        except ValueError:
-            print(f"{RED_BOLD}🌊 Error: Cannot parse --max-time '{raw}'.{RESET}")
-            print(f"{RED_BOLD}🌊 Use seconds or a unit: 40, 40s, 1min, 1min20s, 2h.{RESET}")
-            sys.exit(1)
-        return
+    options = common.parse(words)
+    os.environ[domains.MAX_TIME_ENV] = str(options.timeouts.total)
 
 
 # -------------------- 清理旧版本 --------------------

@@ -25,7 +25,9 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
+import common
 import domains
+import flags as flags_module
 import silent
 from configpaths import (
     VERSION_FILE,
@@ -102,17 +104,6 @@ except ImportError as error:
 
 # -------------------- 辅助函数 --------------------
 
-def _parse_rate_limit(rate_str):
-    rate_str = rate_str.upper().strip()
-    multipliers = {'K': 1024, 'M': 1024**2, 'G': 1024**3}
-    try:
-        if rate_str[-1] in multipliers:
-            return float(rate_str[:-1]) * multipliers[rate_str[-1]]
-        return float(rate_str)
-    except ValueError:
-        return None
-
-
 def _check_disk_space(path: Path, required_bytes: int = 10 * 1024 * 1024) -> bool:
     total, used, free = shutil.disk_usage(path)
     if free < required_bytes:
@@ -123,46 +114,14 @@ def _check_disk_space(path: Path, required_bytes: int = 10 * 1024 * 1024) -> boo
 
 # -------------------- 参数解析 --------------------
 
-ALLOWED_FLAGS = {
-    "-v", "-C",
-    "--verbose", "--skip-ssl", "--continue",
-    "--limit-rate", "--proxy", "--unlink", "--ver", "--max-time",
-    "--install-from-source"
-}
-
 def parse_flags(input_string):
+    """校验这条命令接受的旗标；不在白名单里的就报错退出。
 
-    # 截取所有 "-开头"（且 - 前是空格）至下一个空格的内容。
-    # 规则：
-    # 1. 单独的 "-" 表示参数结束，后续不统计。
-    # 2. "--" 开头保持不变；`--name=value` 归一化成 `--name`，值交给 flag_value 取。
-    # 3. "-" 开头（但不是 "--"）将其每个字母拆开，如 -abc = -a -b -c。
-    # 4. 参数必须在白名单内，否则报错。
-
-    flags = []
-    stop_parsing = False
-
-    for token in input_string.split(" "):
-        if stop_parsing:
-            break
-
-        if token == "-":
-            stop_parsing = True
-            continue
-
-        if token.startswith("--"):
-            flags.append(token.split("=", 1)[0])
-        elif token.startswith("-") and len(token) > 1:
-            for ch in token[1:]:
-                flags.append(f"-{ch}")
-
-    # 白名单校验
-    for flag in flags:
-        if flag not in ALLOWED_FLAGS:
-            print(f"{RED_BOLD}🌊 Error: Input contains illegal fields.{RESET}")
-            sys.exit(1)
-
-    return flags
+    白名单与报错文案的唯一判定处是 cli/flags.py 的 check_allowed()：
+    词法（`--name=value`、`-vC`、单独的 `-`）、别名（--unlink → --no-link）、
+    拼错建议与静默输出都在那里。upgrade 也复用它。
+    """
+    return common.check_allowed(input_string, "install")
 
 
 def flag_value(input_string, name):
@@ -197,21 +156,29 @@ def handle_download_args(input_string):
     """
     处理下载相关的参数逻辑。
     返回配置字典。
+
+    公共旗标的值全部来自 cli/common.py 的 parse() —— 它已经校验过代理协议、
+    限速与三档超时，并在不合法时报错退出。这里只做它不管的两件事：白名单校验
+    （哪些旗标这条命令认）与 --skip-ssl 的安全询问。
     """
-    flags = parse_flags(input_string)
+    found = parse_flags(input_string)
+    options = common.parse(input_string)
 
     config = {
+        # 命令行写了 --skip-ssl 不等于用户可以跳过校验，要问过才算数
         "skip_ssl_verify": False,
-        "verbose": False,
-        "resume": False,
-        "limit_rate": None,
-        "proxy": None,
-        "max_time": domains.timeout_from_env(),
-        "from_source": False,
+        "verbose": options.verbose,
+        "resume": options.resume,
+        "limit_rate": options.limit_rate,
+        # None 而不是空串：下游一律用 `if config["proxy"]` 判断
+        "proxy": options.proxy or None,
+        # Budget 而不是一个秒数：三档超时（连接 / 收数据 / 总额）各有各的默认值，
+        # 摊平成一个数就再也分不开了。requests 那一侧读 .request_timeout。
+        "max_time": options.timeouts.start(),
+        "from_source": "--install-from-source" in found,
     }
 
-    # 1. --skip-ssl 安全询问
-    if "--skip-ssl" in flags:
+    if "--skip-ssl" in found:
         silent.say('🌊 You selected --skip-ssl, this will skip SSL certificate verification, which may cause security risks. Are you sure?')
         # silent.ask 在静默模式下不读 stdin 直接返回 None —— 与「读不到答复」
         # 走同一条分支：不跳过 SSL 校验，缺省往安全的方向倒。
@@ -219,50 +186,8 @@ def handle_download_args(input_string):
         if confirm in ("Y", "y"):
             config["skip_ssl_verify"] = True
 
-    # 2. verbose 判定（静默优先于啰嗦：-s 与 -v 同时给时，-v 不生效）
-    if ("-v" in flags or "--verbose" in flags) and not silent.is_silent():
-        config["verbose"] = True
-
-    # 3. 断点续传开关
-    if "-C" in flags or "--continue" in flags:
-        config["resume"] = True
-
-    # 4. 限速
-    if "--limit-rate" in flags:
-        rate_str = flag_value(input_string, "--limit-rate")
-        if rate_str:
-            config["limit_rate"] = _parse_rate_limit(rate_str)
-
-    # 5. 单次请求超时
-    if "--max-time" in flags:
-        raw_timeout = flag_value(input_string, "--max-time")
-        if raw_timeout is None or raw_timeout == "":
-            print(f"{RED_BOLD}🌊 Error: Missing time after --max-time "
-                  f"(e.g. --max-time=2min, --max-time=40).{RESET}")
-            sys.exit(1)
-        try:
-            config["max_time"] = domains.parse_duration(raw_timeout)
-        except ValueError:
-            print(f"{RED_BOLD}🌊 Error: Cannot parse --max-time '{raw_timeout}'.{RESET}")
-            print(f"{RED_BOLD}🌊 Use seconds or a unit: 40, 40s, 1min, 1min20s, 2h.{RESET}")
-            sys.exit(1)
-        # 写进环境变量：依赖安装与子脚本读同一个值，不必层层传参
-        os.environ[domains.MAX_TIME_ENV] = str(config["max_time"])
-
-    # 6. 直接回上游取（绕过镜像）
-    if "--install-from-source" in flags:
-        config["from_source"] = True
-
-    # 7. 代理
-    if "--proxy" in flags:
-        proxy_value = flag_value(input_string, "--proxy")
-        if proxy_value is not None:
-            if not (proxy_value.startswith("http://") or
-                    proxy_value.startswith("https://") or
-                    proxy_value.startswith("socks5://")):
-                print('🌊 Proxy error, please check your network proxy settings, whether the input is correct, or contact your ISP.')
-                sys.exit(1)
-            config["proxy"] = proxy_value
+    # 子脚本（pip / surfboard 的 shell）读同一个值，不必层层传参
+    os.environ[domains.MAX_TIME_ENV] = str(options.timeouts.total)
 
     return config
 
@@ -298,10 +223,13 @@ def download_file(url, temp_path, config, input_string, display_name):
     download_success = False
     while not download_success:
         try:
-            # 30 秒无响应即超时，交给下面的重试询问处理，避免永久挂起
-            # config 可能来自更早的调用方（或测试里的最小字典），缺键时退回当前生效值
+            # 超时交给 net/timeouts.py 的 Budget：它把「握手 / 收数据 / 总额」
+            # 分三档，并保证总额用完时不再等一整个 content。
+            # config 可能来自更早的调用方（或测试里的最小字典），缺键时退回当前生效值。
+            budget = config.get("max_time")
             response = requests.get(
-                url, timeout=config.get("max_time") or domains.timeout_from_env(), **request_kwargs)
+                url, timeout=budget.request_timeout if budget else domains.timeout_from_env(),
+                **request_kwargs)
 
             if response.status_code == 416:
                 download_success = True
@@ -728,8 +656,8 @@ def handle_install(input_string):
     #     （必须放最后：先装的依赖可能引用后装的依赖，提前替换会解析不到）
     transfer_installed_artifacts(target_dir)
 
-    # 12. 把不带版本号的软链接指到刚装好的版本（--unlink 可跳过）
-    if "--unlink" not in input_string:
+    # 12. 把不带版本号的软链接指到刚装好的版本（--no-link / 旧名 --unlink 可跳过）
+    if not any(flag in flags_module.NO_LINK for flag in flags_module.tokens(input_string.split(" "))):
         try:
             from linker import link_package
             if link_package(bin_name, ParsePkgVersion):
