@@ -91,7 +91,9 @@ ILLEGAL_VERSIONS = ("not-a-version", "1.0.0-!!!", "..%2f..%2fetc%2fpasswd", "v1.
 ILLEGAL_FLAGS = ("--bogus", "-Z", "--no-such-flag", "-Q", "--definitely-not-a-flag")
 
 # 会按白名单校验旗标的命令；不在名单里的对未知旗标是静默忽略的（见 predict 的说明）。
-FLAG_VALIDATING_COMMANDS = {"install", "upgrade", "info", "mirror", "latest"}
+# uninstall 也在里面：4.0 起它走 common.check_allowed（严格校验），以前是静默忽略。
+# 实测确认过其它几条：list / link / unlink / shellenv 仍然忽略未知旗标。
+FLAG_VALIDATING_COMMANDS = {"install", "upgrade", "uninstall", "info", "mirror", "latest"}
 
 # 4.x 新增的参数。比例按代价定：离线的、只读的多跑，联网的、会改系统的少跑。
 # 归属以 docs/RELEASE-4.0.0.md ~ RELEASE-4.1.4.md 为准；`--connect-timeout` /
@@ -1535,6 +1537,19 @@ def phase_uninstall_cycle(wave, rng, installed_plans, checks):
             argv.append(silent_flag)
         label = f"uninstall {plan.token}"
         result = wave.run(argv)
+
+        bin_dir = wave.layout.base_dir / "bin" / f"{plan.bin_name}@{plan.version}"
+        link = wave.layout.base_dir / "links" / plan.bin_name
+
+        # 故意带了非法参数：这条命令必须**整个**被拒绝，而不是「忽略那个参数、
+        # 照样卸掉」。后者更难查 —— 用户以为命令没跑，其实东西已经没了。
+        if illegal:
+            expect(checks, result, 1, label,
+                   must_contain=(f"illegal option {illegal}",))
+            checks.check(f"{label}: 非法参数没有卸载任何东西", bin_dir.exists(), str(bin_dir))
+            checks.check(f"{label}: 非法参数没动不带版本号的链接", link.exists(), str(link))
+            continue
+
         if silent:
             expect(checks, result, 0, label)
             checks.check(f"{label}: 静默时没有任何输出",
@@ -1542,8 +1557,6 @@ def phase_uninstall_cycle(wave, rng, installed_plans, checks):
         else:
             expect(checks, result, 0, label, must_contain=("Successfully uninstalled",))
 
-        bin_dir = wave.layout.base_dir / "bin" / f"{plan.bin_name}@{plan.version}"
-        link = wave.layout.base_dir / "links" / plan.bin_name
         checks.check(f"{label}: 目录已删除", not bin_dir.exists(), str(bin_dir))
         checks.check(f"{label}: 不带版本号的链接已删除", not link.exists(), str(link))
 
