@@ -1,15 +1,17 @@
 #!/bin/bash
 
 # help_test.sh
-# 帮助文本的回归（离线）：排版引擎把「数空格」换成「按最宽标签对齐」之后，
-# 有两件事必须一直成立，否则 `wave X --help` 会静默地印错东西：
-#   1. COMMANDS 里的每个命令都有帮助条目，反之亦然
-#      （缺一条就回落到总帮助，用户看不出是配置漏了）
-#   2. 同一节里所有描述从同一列开始
-#   3. 真实输出里不带未解析的占位符 / 颜色转义残留
+# 帮助文本的回归（离线）。帮助现在完全由 cli/commands.py 这一张表生成，
+# 所以这里盯的是「表 → 输出」这段路：
+#   1. 每条命令的 summary / usage / desc / examples 都不是空的
+#   2. 每条命令的 `--help` 都能独立印出来，且不回落到总帮助
+#   3. 排版引擎按最宽标签对齐（数空格的做法一旦回来，长旗标就会错位）
+#   4. 总帮助里没有未解析的占位符 / 颜色转义残留
+#   5. lib/wave.py 的 COMMANDS 与 cli/commands.py 是同一批命令
+#      （漏一条的症状是「帮助里挂着、敲下去是 unknown command」）
 #
-# wave.py 在 import 时就会跑环境检查并要求已安装，所以这里不 import 它，
-# 只从源码里把 COMMANDS 的键读出来。
+# wave.py 在 import 时会跑环境检查并要求已安装，所以这里不 import 它，
+# 只用 AST 读它的 COMMANDS 字面量。
 
 set -e
 
@@ -19,17 +21,8 @@ RESET='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-# 允许指向别的 lib 目录，方便拿一份故意改坏的副本来验证这个测试本身有效。
-LIB_DIR="${1:-$REPO_DIR/lib}"
 
-if [[ ! -f "$LIB_DIR/help.py" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: help.py not found at $LIB_DIR/help.py${RESET}"
-    exit 1
-fi
-
-echo "========== help 表格与排版 =========="
-
-python3 - "$LIB_DIR" <<'PY'
+python3 - "$REPO_DIR" <<'PY'
 import ast
 import contextlib
 import io
@@ -37,8 +30,16 @@ import pathlib
 import re
 import sys
 
-lib_dir = pathlib.Path(sys.argv[1])
-sys.path.insert(0, str(lib_dir))
+repo = pathlib.Path(sys.argv[1])
+sys.path.insert(0, str(repo / "scripts"))
+import components
+
+components.add_to_sys_path(repo)
+
+import commands as commands_module  # noqa: E402
+import help as h  # noqa: E402
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 passed = 0
 failed = 0
@@ -58,11 +59,6 @@ def fail(text, detail=""):
         print(f"    {line}")
 
 
-import help as h  # noqa: E402
-
-ANSI = re.compile(r"\x1b\[[0-9;]*m")
-
-
 def render(func, *args):
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
@@ -70,51 +66,39 @@ def render(func, *args):
     return ANSI.sub("", buffer.getvalue())
 
 
-# ---------- 1. COMMANDS 与 COMMAND_HELP 必须一一对应 ----------
-# 直接解析 wave.py 的 COMMANDS 字面量，不执行它（import 需要已安装的配置）。
-tree = ast.parse((lib_dir / "wave.py").read_text())
-commands = None
-for node in ast.walk(tree):
-    if isinstance(node, ast.Assign) and any(
-        isinstance(target, ast.Name) and target.id == "COMMANDS" for target in node.targets
-    ):
-        commands = {key.value for key in node.value.keys}
-        break
+# ---------- 1. 每条的元数据都完整 ----------
+broken = []
+for command in commands_module.all():
+    for field in ("summary", "usage", "desc"):
+        if not getattr(command, field).strip():
+            broken.append(f"{command.name}: {field} 是空的")
+    if not command.examples:
+        broken.append(f"{command.name}: 没有示例")
 
-if commands is None:
-    fail("wave.py 里找不到 COMMANDS")
+if broken:
+    fail("命令元数据不完整", "\n".join(broken))
 else:
-    helped = set(h.COMMAND_HELP)
-    missing = sorted(commands - helped)
-    extra = sorted(helped - commands)
-    if missing or extra:
-        fail("COMMANDS 与 COMMAND_HELP 不一致",
-             (f"缺帮助: {missing}" if missing else "") +
-             ("\n" if missing and extra else "") +
-             (f"多出: {extra}" if extra else ""))
-    else:
-        pass_(f"每个命令都有帮助条目（{len(commands)} 个）")
+    pass_(f"每条命令的 summary/usage/desc/examples 都不空（{len(commands_module.all())} 条）")
 
 
 # ---------- 2. 每个命令的帮助都能独立印出来 ----------
 broken = []
-for command in sorted(h.COMMAND_HELP):
-    text = render(h.print_command_help, command)
-    entry = h.COMMAND_HELP[command]
-    if f"usage: {entry['usage']}" not in text:
-        broken.append(f"{command}: usage 行缺失")
-    elif "All commands: wave --help" not in text:
-        broken.append(f"{command}: 缺结尾提示")
+for command in commands_module.all():
+    text = render(h.print_command_help, command.name)
+    if f"usage: {command.usage}" not in text:
+        broken.append(f"{command.name}: usage 行缺失")
+    elif "wave --help" not in text:
+        broken.append(f"{command.name}: 缺结尾提示")
 
 if broken:
     fail("有命令的帮助输出不完整", "\n".join(broken))
 else:
-    pass_(f"{len(h.COMMAND_HELP)} 个命令的帮助都完整")
+    pass_(f"{len(commands_module.all())} 个命令的帮助都完整")
 
 
 # ---------- 3. 已知命令不会回落到总帮助 ----------
-fell_back = [command for command in sorted(h.COMMAND_HELP)
-             if "usage: wave <command>" in render(h.print_command_help, command)]
+fell_back = [command.name for command in commands_module.all()
+             if "usage: wave <command>" in render(h.print_command_help, command.name)]
 
 if fell_back:
     fail("这些命令 --help 回落到了总帮助", str(fell_back))
@@ -123,7 +107,6 @@ else:
 
 
 # ---------- 4. 同一节内描述列对齐 ----------
-# 用三行刻意长短不一的标签测引擎本身：短旗标、带 <值> 的旗标、命令名混排。
 rows = [
     (h._flag("--a"), "alpha"),
     (h._flag("--longer-flag", "<string>"), "beta"),
@@ -135,7 +118,6 @@ with contextlib.redirect_stdout(buffer):
     h._print_section("Synthetic", rows)
 lines = ANSI.sub("", buffer.getvalue()).splitlines()
 
-# 跳过空行和标题行，剩下的就是数据行
 data_lines = [line for line in lines if line.strip() and not line.strip().endswith(":")]
 columns = set()
 for line, desc in zip(data_lines, [row[1] for row in rows]):
@@ -167,6 +149,22 @@ if problems:
     fail("总帮助输出不干净", "\n".join(problems))
 else:
     pass_("总帮助没有未解析的占位符 / 行尾空白")
+
+
+# ---------- 6. 分发只有一条路：命令表 ----------
+# 4.0 起 wave.py 不再自带 COMMANDS 字典 / if-elif 链 —— 加命令只改
+# cli/commands.py。有人把链加回来时这里变红：那意味着又有了第二份清单，
+# 表里有、链上没有的命令会静默地变成 unknown。
+wave_text = (repo / "lib" / "wave.py").read_text(encoding="utf-8")
+problems = []
+if "commands_module.get(" not in wave_text:
+    problems.append("lib/wave.py 没有按命令表分发（commands_module.get）")
+if "elif module_name ==" in wave_text:
+    problems.append("lib/wave.py 里又出现了 if/elif 分发链")
+if problems:
+    fail("分发不是表驱动", "\n".join(problems))
+else:
+    pass_("分发只有一条路：cli/commands.py 这张表")
 
 
 print()
