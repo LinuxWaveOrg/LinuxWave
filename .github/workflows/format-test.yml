@@ -161,10 +161,15 @@ jobs:
         run: |
           bash scripts/payload_test.sh
 
-      # wave upgrade：四种等价写法、拒绝名单、帮助只宣传一种
+      # wave upgrade：四种等价写法、--all、拒绝名单、帮助只宣传一种
       - name: Run upgrade test
         run: |
           bash scripts/upgrade_test.sh
+
+      # wave info：四种机器可读输出（json / yaml / toml / raw）与互斥校验
+      - name: Run info format test
+        run: |
+          bash scripts/info_format_test.sh
 
       # 4.0 自更新布局：latest.toml 解析、按版本脚本的生成、两种布局的回落
       - name: Run self-update layout test
