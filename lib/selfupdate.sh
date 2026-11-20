@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # LinuxWave 🌊 Self Updater
-# Re-downloads every LinuxWave code file and refreshes VERSION.json in the
-# active config dir (/etc/linuxwave_config or ~/.config/linuxwave_config).
-# Invoked by `wave selfupdate` through the update_command field in
-# configdata/versiondata/latest_version, or directly:
+# Fetches linuxwavedata/<版本>/update_commands.sh and runs it, then refreshes
+# VERSION.json in the active config dir (/etc/linuxwave_config or
+# ~/.config/linuxwave_config).
+# Invoked by `wave selfupdate` through the self-update data
+# (linuxwavedata/latest.toml), or directly:
 #   bash lib/selfupdate.sh [branch]        (defaults to HEAD)
 
 set -e
@@ -179,13 +180,119 @@ YELLOW='\033[33m'
 RESET='\033[0m'
 
 # ==========================================
+# 实验性签名校验（4.0）
+# ==========================================
+#
+# 与 lib/install.sh 里那一段完全相同（两份脚本都是 curl | bash 执行的，没法
+# source，只能各带一份）；改一处就要改另一处。
+#
+# 4.0 只**警告**：验签能力要客户端版本铺开之后才能真正强制。
+#
+# 公钥从哪来：lw_trusted_pub() —— 优先 LINUXWAVE_RSA_PUB（PEM 路径），否则用
+# 脚本内嵌的那把（scripts/embed_rsa_pub.py 维护，测试会比对是否同步）。
+
+LW_RSA_PUB_TMP=""
+
+lw_sha256() {
+    openssl dgst -sha256 -r "$1" 2>/dev/null | awk '{print $1}'
+}
+
+lw_signature_note() {
+    # lw_signature_note <一行英文> <一行中文>：签名相关的提示一律黄字进 stderr
+    echo -e "${YELLOW}$1${RESET}" >&2
+    echo -e "${YELLOW}${2-$1}${RESET}" >&2
+}
+
+lw_trusted_pub() {
+    # 输出一个可读的 PEM 路径，给 openssl 用。两个来源：
+    #   1. LINUXWAVE_RSA_PUB（运维/测试自己指定）
+    #   2. 脚本内置的那一份
+    # 刻意**不读**安装树里的 Keys/*.pem：那份和 latest.toml 走同一条下载通道，
+    # 能换数据的人也能换公钥，拿它验等于自证。
+    # 两个都没有就输出空串，调用方据此整段跳过。
+    if [[ -n "${LINUXWAVE_RSA_PUB:-}" ]]; then
+        printf '%s' "$LINUXWAVE_RSA_PUB"
+        return 0
+    fi
+    [[ -n "$LW_RSA_PUB_PEM" ]] || return 0
+    if [[ -z "$LW_RSA_PUB_TMP" ]]; then
+        LW_RSA_PUB_TMP="$(mktemp -d 2>/dev/null)" || return 0
+        printf '%s\n' "$LW_RSA_PUB_PEM" > "$LW_RSA_PUB_TMP/linuxwave-rsa.pub.pem"
+        chmod 700 "$LW_RSA_PUB_TMP"
+        chmod 600 "$LW_RSA_PUB_TMP/linuxwave-rsa.pub.pem"
+    fi
+    printf '%s' "$LW_RSA_PUB_TMP/linuxwave-rsa.pub.pem"
+}
+
+lw_check_integrity() {
+    # lw_check_integrity <说明> <文件> <期望 sha256>
+    # 期望值为空 = 这一版没带哈希，直接放行。
+    local what="$1" file="$2" expect="$3" got
+    [[ -n "$expect" ]] || return 0
+    got="$(lw_sha256 "$file")"
+    [[ "$got" == "$expect" ]] && return 0
+    if [[ "${LINUXWAVE_STRICT_HASHES:-}" == "1" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: $what does not match the signed data.${RESET}" >&2
+        echo -e "${RED_BOLD}🌊   expected $expect${RESET}" >&2
+        echo -e "${RED_BOLD}🌊   got      ${got:-<unreadable>}${RESET}" >&2
+        exit 1
+    fi
+    lw_signature_note "🌊 Warning: $what does not match the signed data (continuing)" \
+        "🌊 警告：$what 与已签名数据不符（继续）"
+    echo -e "${YELLOW}🌊   expected $expect${RESET}" >&2
+    echo -e "${YELLOW}🌊   got      ${got:-<unreadable>}${RESET}" >&2
+    return 0
+}
+
+lw_verify_latest_signature() {
+    # lw_verify_latest_signature <latest.toml 的内容> <它的 URL>
+    # 没有公钥就跳过；有公钥但 .sig 404 也算「这一版没签名」（实验期常态）。
+    local data="$1" url="$2"
+    local pub
+    pub="$(lw_trusted_pub)"
+    [[ -n "$pub" ]] || return 0
+
+    local tmp sig status=0
+    tmp="$(mktemp)"
+    sig="$(mktemp)"
+    printf '%s\n' "$data" > "$tmp"
+    curl -fsSL --max-time 30 -o "$sig" "$url.sig" 2>/dev/null || status=$?
+    if [[ "$status" -ne 0 ]]; then
+        lw_signature_note "🌊 No signature for the self-update data (this release predates signing)." \
+            "🌊 这份自更新数据没有签名（早于签名制度，属正常情况）。"
+        rm -f "$tmp" "$sig"
+        return 0
+    fi
+
+    if openssl dgst -sha256 -verify "$pub" -signature "$sig" "$tmp" > /dev/null 2>&1; then
+        lw_signature_note "🌊 Self-update data: signature OK." "🌊 自更新数据：签名校验通过。"
+    elif [[ "${LINUXWAVE_STRICT_HASHES:-}" == "1" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: the self-update data is not signed by the trusted key.${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 错误：自更新数据不是由可信密钥签的。${RESET}" >&2
+        rm -f "$tmp" "$sig"
+        exit 1
+    else
+        lw_signature_note "🌊 Warning: the self-update data is not signed by the trusted key (continuing)" \
+            "🌊 警告：自更新数据的签名不对（继续）"
+    fi
+    rm -f "$tmp" "$sig"
+    return 0
+}
+
+# >>> RSA public key (managed by scripts/embed_rsa_pub.py) >>>
+LW_RSA_PUB_PEM=''
+# <<< RSA public key <<<
+
+# ==========================================
 # 目标仓库、分支与版本
 # ==========================================
 
 BRANCH="${LINUXWAVE_UPDATE_BRANCH:-${1:-HEAD}}"
 BASE_URL="$CORE_URL/$BRANCH"
-CONFIGDATA_URL="$SELFUPDATE_URL"   # 版本数据与自更新数据同源，见下方域名块
-VERSION_DATA_URL="$CONFIGDATA_URL/versiondata/latest_version"
+# 自更新探针：唯一入口文件。linuxwavedata/latest.toml 说「哪个版本是最新的」，
+# linuxwavedata/<版本>/update_commands.sh 说「那一版具体怎么装」。拆开的理由：
+# 装了旧版本的人仍在运行，他们那份更新说明不能因为发了新版就变样。
+VERSION_DATA_URL="$SELFUPDATE_URL/linuxwavedata/latest.toml"
 
 # -------------------- 测试根（隔离） --------------------
 # LINUXWAVE_TEST 指向一个目录时，把它当作 /：HOME 和所有系统路径都挂到它下面，
@@ -261,7 +368,13 @@ if [[ -z "$BASE_DIR" || ! -d "$BASE_DIR" ]]; then
     exit 1
 fi
 
+# 组件目录：清单在 scripts/components.txt（与 lib/wave.py 的 sys.path、
+# 测试沙箱的拷贝、安装清单共用同一份）。这里列出来是为了升级前清掉各目录的
+# __pycache__ —— 漏一个就会留着旧字节码，后面排查「改了代码没生效」非常费时间。
 LIB_DIR="$BASE_DIR/lib"
+NET_DIR="$BASE_DIR/net"
+CLI_DIR="$BASE_DIR/cli"
+CONFIG_CODE_DIR="$BASE_DIR/config"
 PKG_DIR="$BASE_DIR/pkg"
 SURFBOARD_DIR="$BASE_DIR/surfboard"
 
@@ -390,17 +503,33 @@ fi
 # 确定目标版本
 # ==========================================
 
+read_toml_string() {
+    # read_toml_string <文本> <键>：只认 `key = "value"`，`#` 开头是注释。
+    # 不引 TOML 解析器：latest.toml 的字段全是字符串，为此加一个依赖不值得。
+    # 值不带引号就当不存在 —— 半行残缺不该被当成版本号。
+    printf '%s\n' "$1" | sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n 1
+}
+
 VERSION="${LINUXWAVE_UPDATE_VERSION:-}"
 
-if [[ -z "$VERSION" ]]; then
-    # 直接调用 selfupdate.sh（不经 wave selfupdate）时才需要自己取版本号。
-    # 走同一个带重试的下载：这一步失败会让整轮更新提前结束，值得重试。
-    VERSION_DATA_TMP="$(mktemp)"
-    if fetch_to_file "$VERSION_DATA_URL" "$VERSION_DATA_TMP" 30 direct; then
-        VERSION=$(sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' "$VERSION_DATA_TMP" | head -n 1)
-    fi
-    rm -f "$VERSION_DATA_TMP" "$VERSION_DATA_TMP.linuxwave-part"
+# 探针**总是**要取一次：即使调用方已经给了版本号，验签与「update_commands 的哈希」
+# 都对着这份数据。只在没给版本号时才取，等于让 Python 那条路从来没校验过
+# update_commands_sha256 —— 实验期只是警告，但那是另一回事。
+VERSION_DATA_TMP="$(mktemp)"
+VERSION_DATA=""
+if fetch_to_file "$VERSION_DATA_URL" "$VERSION_DATA_TMP" "$META_TIMEOUT" direct; then
+    VERSION_DATA="$(cat "$VERSION_DATA_TMP")"
 fi
+rm -f "$VERSION_DATA_TMP" "$VERSION_DATA_TMP.linuxwave-part"
+
+if [[ -z "$VERSION" ]]; then
+    VERSION="$(read_toml_string "$VERSION_DATA" version)"
+fi
+PROBE_BRANCH="$(read_toml_string "$VERSION_DATA" branch)"
+
+# 实验性签名：钉住即将被 bash 执行的那个脚本（空 = 这一版没带哈希）
+EXPECTED_UPDATE_COMMANDS_SHA256="$(read_toml_string "$VERSION_DATA" update_commands_sha256)"
+lw_verify_latest_signature "$VERSION_DATA" "$VERSION_DATA_URL"
 
 if [[ -z "$VERSION" ]]; then
     echo -e "${RED_BOLD}🌊 Error: Cannot determine the target version.${RESET}"
@@ -409,16 +538,16 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
-# --dry-run：只报告将要做什么，不下载、不落盘。
-# 这是 update_commands.sh 与客户端之间的合同的一部分（见 scripts/build_update_commands.py
-# 的文件头：LINUXWAVE_DRY_RUN 1 = 只报告将要做什么）。
+# --dry-run：只报告将要做什么，不下载、不落盘。`wave selfupdate --dry-run`
+# 自己就把计划打完了（它不会执行本脚本）；这一段是给「直接 bash lib/selfupdate.sh」
+# 准备的，两边都停在下载之前。
 if [[ "${LINUXWAVE_DRY_RUN:-}" == "1" ]]; then
     echo "🌊 Dry run: nothing will be downloaded or written."
     echo "🌊 Target version : $VERSION"
-    echo "🌊 Branch         : ${LINUXWAVE_UPDATE_BRANCH:-<unchanged>}"
+    echo "🌊 Branch         : $BRANCH"
     echo "🌊 Install dir    : $BASE_DIR"
     echo "🌊 Config dir     : $CONFIG_DIR"
-    echo "🌊 Would refresh every file listed in configdata/versiondata/files_info,"
+    echo "🌊 Would fetch linuxwavedata/$VERSION/update_commands.sh and run it,"
     echo "🌊 regenerate lib/wave, install the Python dependencies, and rewrite"
     echo "🌊 $VERSION_FILE."
     exit 0
@@ -466,154 +595,81 @@ if [[ -n "$CURRENT_MAJOR" && -n "$TARGET_MAJOR" && "$CURRENT_MAJOR" != "$TARGET_
 fi
 
 # ==========================================
-# 版本目录结构变更迁移（configdata/updatedata/{版本号}）
+# 更新脚本（linuxwavedata/<版本>/update_commands.sh）
 # ==========================================
 #
-# configdata 仓库的 updatedata/{版本号}/dir_structure_change 只有**一个字符**：
-#     Y/y → 该版本改变了目录结构，执行同目录下的 transfer_commands 完成迁移
-#     N/n → 没有改变，跳过（文件不存在也按「没有改变」处理）
-# 目标版本号用这次要升级到的版本（上面刚确定的 $VERSION）。
-# 迁移可能把配置搬到用户级位置，所以执行完要重新解析一次配置目录。
-
-UPDATEDATA_URL="$CONFIGDATA_URL/updatedata/$VERSION"
-
-DIR_STRUCTURE_CHANGE="$(curl -fsSL --max-time "$META_TIMEOUT" "$UPDATEDATA_URL/dir_structure_change" 2>/dev/null | tr -d '[:space:]')" || DIR_STRUCTURE_CHANGE=""
-
-if [[ "$DIR_STRUCTURE_CHANGE" == "Y" || "$DIR_STRUCTURE_CHANGE" == "y" ]]; then
-    echo -e "${YELLOW}🌊 Directory structure changed in $VERSION, running migration...${RESET}"
-
-    TRANSFER_COMMANDS="$(curl -fsSL --max-time "$META_TIMEOUT" "$UPDATEDATA_URL/transfer_commands" 2>/dev/null)" || TRANSFER_COMMANDS=""
-    if [[ -z "$TRANSFER_COMMANDS" ]]; then
-        echo -e "${RED_BOLD}🌊 Error: Cannot fetch the migration script for $VERSION.${RESET}"
-        echo -e "${RED_BOLD}🌊 Nothing was updated. Check your network, then try again.${RESET}"
-        exit 1
-    fi
-
-    # 把当前安装的位置与配置目录告诉迁移脚本，由它自己判断该不该搬
-    export LINUXWAVE_INSTALL_DIR="$BASE_DIR"
-    export LINUXWAVE_CONFIG_DIR="$CONFIG_DIR"
-    export LINUXWAVE_TARGET_VERSION="$VERSION"
-
-    if ! bash -c "$TRANSFER_COMMANDS"; then
-        echo -e "${RED_BOLD}🌊 Error: The migration for $VERSION failed.${RESET}"
-        echo -e "${RED_BOLD}🌊 Nothing was updated. Fix the issue above, then try again.${RESET}"
-        exit 1
-    fi
-
-    resolve_config_dir    # 配置可能已经搬到用户级位置
-    echo ""
-fi
-
-# ==========================================
-# 文件清单（configdata/versiondata/files_info）
-# ==========================================
+# 要下载哪些文件、放到哪里，以前是客户端读一份 files_info 自己解析。现在改成
+# 由自更新数据提供一个脚本，客户端只负责取回来执行：
 #
-# 要更新哪些文件不再写死在本脚本里，而是去 configdata 分支读一份清单。
-# 清单内容**只表示仓库里的路径**，写法：
+#   - 脚本知道这一版该下哪些文件，所以能只列变动的那些；
+#   - 目录结构变更的迁移也写在同一个脚本里，不必再维护第二套机制；
+#   - 客户端不再需要「缩进树」这种自定义格式的解析器。
 #
-#     /                      单独一个 / 表示安装根（等价于 BASE_DIR）
-#         lib/               以 / 结尾 → 目录，只创建不下载
-#             wave.py        其它 → 文件
-#         pkg/linker.py      也可以行内直接写完整路径，代替缩进
-#             # 以 # 开头的是注释，空行忽略
-#
-# 缩进每层 4 个空格，Tab 与 4 个空格等价，两种可以混用。
-# 每个文件都从 "$BASE_URL/<仓库路径>" 下载，落到 "$BASE_DIR" 下的同名位置。
-# PATH 上的入口 lib/wave 不在这份清单里：它由 write_launcher 生成（内容随解释器位置变）。
-# 以后新增文件只要改 configdata 的这份清单，不用再动本脚本。
+# LINUXWAVE_CURRENT_VERSION 传的是本机已经装着的版本，脚本据此决定走增量还是全量。
 
-FILES_INFO_URL="$CONFIGDATA_URL/versiondata/files_info"
-FILES_INFO_TMP="$(mktemp)"
+UPDATE_COMMANDS_URL="$SELFUPDATE_URL/linuxwavedata/$VERSION/update_commands.sh"
+UPDATE_COMMANDS_TMP="$(mktemp)"
 
-cleanup_files_info() {
-    rm -f "$FILES_INFO_TMP" "$FILES_INFO_TMP.linuxwave-part"
+cleanup_update_commands() {
+    rm -f "$UPDATE_COMMANDS_TMP" "$UPDATE_COMMANDS_TMP.linuxwave-part"
 }
-trap cleanup_files_info EXIT
+trap cleanup_update_commands EXIT
 
-echo "🌊 Fetching the file list..."
+echo "🌊 Fetching the update commands..."
 
-if ! fetch_to_file "$FILES_INFO_URL" "$FILES_INFO_TMP" 60 direct; then
-    echo -e "${RED_BOLD}🌊 Error: Cannot fetch versiondata/files_info from the configdata branch.${RESET}"
+if ! fetch_to_file "$UPDATE_COMMANDS_URL" "$UPDATE_COMMANDS_TMP" "$FILE_TIMEOUT" direct; then
+    echo -e "${RED_BOLD}🌊 Error: Cannot fetch the update commands ($(lw_redact "$UPDATE_COMMANDS_URL")).${RESET}"
     echo -e "${RED_BOLD}🌊 Nothing was updated. Check your network or proxy, then try again.${RESET}"
     exit 1
 fi
 
-parse_files_info() {
-    # 把缩进树解析成 "<仓库路径>\t<本地相对路径>\t<是否需要 +x>"，一行一个文件
-    python3 - "$1" <<'PY'
-import sys
+# 哈希对不上说明「即将被 bash 执行的东西」不是发布时那一份。
+lw_check_integrity "update_commands.sh" "$UPDATE_COMMANDS_TMP" "$EXPECTED_UPDATE_COMMANDS_SHA256"
 
-stack = []   # [(缩进宽度, 目录名)]：当前所在目录的祖先链
-lines = []
-
-for raw in open(sys.argv[1], encoding="utf-8"):
-    line = raw.rstrip("\n")
-    if not line.strip() or line.lstrip().startswith("#"):
-        continue
-
-    # 缩进按 4 个空格算，Tab 等价于 4 个空格（两者可以混用）
-    expanded = line.expandtabs(4)
-    indent = len(expanded) - len(expanded.lstrip(" "))
-    name = line.strip()
-
-    while stack and stack[-1][0] >= indent:   # 缩进回退：弹掉不比当前行浅的祖先
-        stack.pop()
-
-    if name == "/":                 # 单独一个 /：安装根，等价于 BASE_DIR
-        stack = []
-        continue
-
-    if name.endswith("/"):          # 以 / 结尾 → 目录：只记层次，不下载
-        stack.append((indent, name.rstrip("/")))
-        continue
-
-    if "/" in name:                 # 行内直接写完整路径（可代替缩进）
-        repo_path = name.strip("/")
-    else:
-        repo_path = "/".join([directory for _, directory in stack] + [name])
-
-    # lib/wave.py 按原名落盘；PATH 上的入口 lib/wave 由后面的 write_launcher 生成
-    # （它要按私有 venv 与解释器路径决定怎么启动，不能直接复制脚本本体）。
-    local_path, executable = repo_path, int(repo_path.endswith(".sh"))
-
-    lines.append(f"{repo_path}\t{local_path}\t{executable}")
-
-print("\n".join(lines))
-PY
-}
-
-FILE_ENTRIES="$(parse_files_info "$FILES_INFO_TMP")"
-
-if [[ -z "$FILE_ENTRIES" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: The file list is empty, nothing to update.${RESET}"
+if ! /bin/bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
+    echo -e "${RED_BOLD}🌊 Error: the update commands for $VERSION are not valid shell.${RESET}"
+    echo -e "${RED_BOLD}🌊 Nothing was updated. Please report this to the administrator.${RESET}"
     exit 1
 fi
 
-FILE_COUNT=$(printf '%s\n' "$FILE_ENTRIES" | wc -l | tr -d ' ')
-echo "🌊 Updating $FILE_COUNT file(s) from branch: $BRANCH"
-echo ""
-
 # ==========================================
-# 按清单更新
+# 执行更新脚本
 # ==========================================
 
-while IFS=$'\t' read -r repo_path local_path executable; do
-    if [[ -z "$repo_path" ]]; then
-        continue
-    fi
+export LINUXWAVE_INSTALL_DIR="$BASE_DIR"
+export LINUXWAVE_CORE_URL="$CORE_URL"
+export LINUXWAVE_BRANCH="$BRANCH"
+export LINUXWAVE_CURRENT_VERSION="$CURRENT_VERSION"
+export LINUXWAVE_FILE_TIMEOUT="$FILE_TIMEOUT"
+LINUXWAVE_NEED_SUDO="$([ "$NEED_SUDO" = "true" ] && echo 1 || echo "")"
+export LINUXWAVE_NEED_SUDO
+# 这一版带了逐文件哈希才开校验；没带就不开，让更新脚本保持旧行为。
+if [[ -n "$EXPECTED_UPDATE_COMMANDS_SHA256" ]]; then
+    export LINUXWAVE_WANT_HASHES=1
+fi
 
-    echo "🌊 Updating $repo_path..."
-    if ! fetch_to_file "$BASE_URL/$repo_path" "$BASE_DIR/$local_path" "$FILE_TIMEOUT" run_cmd; then
-        echo -e "${RED_BOLD}🌊 Error: Cannot download $repo_path after $FETCH_ATTEMPTS attempts.${RESET}" >&2
-        echo -e "${RED_BOLD}🌊 Nothing was updated past this file; VERSION.json is unchanged.${RESET}" >&2
-        echo -e "${RED_BOLD}🌊 Run 'wave selfupdate' again when the network recovers.${RESET}" >&2
-        exit 1
-    fi
+echo "🌊 Running the update commands for $VERSION..."
 
-    if [[ "$executable" == "1" ]]; then
-        run_cmd chmod +x "$BASE_DIR/$local_path"
+if ! /bin/bash "$UPDATE_COMMANDS_TMP"; then
+    echo -e "${RED_BOLD}🌊 Error: the update commands for $VERSION failed.${RESET}" >&2
+    # VERSION.json 只在全部文件到位后才写，所以版本号还是旧的：
+    # 网络恢复后再跑一次 wave selfupdate 就会从这里继续。
+    echo -e "${RED_BOLD}🌊 Nothing was recorded as updated. Fix the cause above, then run wave selfupdate again.${RESET}" >&2
+    exit 1
+fi
+
+# ==========================================
+# 清理旧的字节码缓存
+# ==========================================
+
+for cache in "$LIB_DIR/__pycache__" "$NET_DIR/__pycache__" \
+             "$PKG_DIR/__pycache__" "$SURFBOARD_DIR/__pycache__" \
+             "$CLI_DIR/__pycache__" "$CONFIG_CODE_DIR/__pycache__"; do
+    if [[ -d "$cache" ]]; then
+        echo "🌊 Removing stale bytecode cache: ${cache#"$BASE_DIR"/}"
+        run_cmd rm -rf "$cache"
     fi
-done <<< "$FILE_ENTRIES"
+done
 
 # ==========================================
 # Python 运行环境（自带解释器 + 私有 venv + 启动器）
@@ -674,7 +730,7 @@ ensure_portable_python() {
     # 成功时把解释器路径打到 stdout，失败返回 1（调用方回退系统 python3）。
     local base_dir="$1"
     local arch="$2"
-    local data_url="$CONFIGDATA_URL/pythondata/latest_python"
+    local data_url="$PYTHON_DATA_URL/pythondata/latest_python"
     local data_file version url sha target current archive actual py
 
     [[ -n "$arch" ]] || return 1
@@ -953,17 +1009,6 @@ if [[ -d "$BASE_DIR/python" || -d "$VENV_DIR" ]]; then
 fi
 
 write_launcher "$BASE_DIR" "$PYTHON_BIN"
-
-# ==========================================
-# 清理旧的字节码缓存
-# ==========================================
-
-for cache in "$LIB_DIR/__pycache__" "$PKG_DIR/__pycache__" "$SURFBOARD_DIR/__pycache__"; do
-    if [[ -d "$cache" ]]; then
-        echo "🌊 Removing stale bytecode cache: ${cache#"$BASE_DIR"/}"
-        run_cmd rm -rf "$cache"
-    fi
-done
 
 # ==========================================
 # 写入新的版本号

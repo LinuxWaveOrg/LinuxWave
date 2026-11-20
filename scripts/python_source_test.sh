@@ -81,11 +81,12 @@ run_case() {
         mkdir -p "$store/pythondata/$VERSION"
     fi
     write_data "file://$WORK/upstream/python.tar.gz"
+    # 解释器的元数据（pythondata/latest_python）与归档在同一个域下，一起放进 store
+    cp "$DATA/latest_python" "$store/pythondata/latest_python"
 
     (
         set -u
         # 只注入被测函数需要的东西：颜色、日志、run_cmd、路径归一化与解释器探测
-        CONFIGDATA_URL="file://$WORK/configdata"
         PYTHON_DATA_URL="file://$store"
         run_cmd() { "$@"; }
         # 只有真存在才算「已装」——桩写得太宽松会让函数误判成已安装、直接跳过下载
@@ -156,10 +157,10 @@ for script in "$REPO_DIR/lib/install.sh" "$REPO_DIR/lib/selfupdate.sh"; do
     install="$WORK/install-flag-$name"
     mkdir -p "$install/downloads/tmp"
     write_data "file://$WORK/upstream/python.tar.gz"
+    cp "$DATA/latest_python" "$store_bad/pythondata/latest_python"
 
     out="$(
         set -u
-        CONFIGDATA_URL="file://$WORK/configdata"
         PYTHON_DATA_URL="file://$store_bad"
         run_cmd() { "$@"; }
         # 只有真存在才算「已装」——桩写得太宽松会让函数误判成已安装、直接跳过下载
@@ -232,8 +233,11 @@ import os
 import sys
 
 repo = sys.argv[1]
-for sub in ("lib", "pkg", "surfboard"):
-    sys.path.insert(0, f"{repo}/{sub}")
+# 组件目录的唯一来源是 scripts/components.txt（selfupdate.py 会 import cli/ 里的
+# silent 与 config/ 里的 configpaths，漏一组就是 ImportError 被吞掉、整段静默通过）
+sys.path.insert(0, f"{repo}/scripts")
+import components
+components.add_to_sys_path(repo)
 
 import selfupdate
 

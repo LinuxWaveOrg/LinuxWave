@@ -328,6 +328,7 @@ lw_trusted_pub() {
         printf '%s' "$LINUXWAVE_RSA_PUB"
         return 0
     fi
+    [[ -n "$LW_RSA_PUB_PEM" ]] || return 0
     if [[ -z "$LW_RSA_PUB_TMP" ]]; then
         LW_RSA_PUB_TMP="$(mktemp -d 2>/dev/null)" || return 0
         printf '%s\n' "$LW_RSA_PUB_PEM" > "$LW_RSA_PUB_TMP/linuxwave-rsa.pub.pem"
@@ -533,7 +534,6 @@ PYTHON_DATA_URL="$(lw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:
 PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
 
 # 数据仓库：版本号、代码分支与文件清单都从这里读
-CONFIGDATA_URL="$SELFUPDATE_URL"   # 版本数据与自更新数据同源，见下方域名块
 
 # ==========================================
 # 辅助函数：将路径中的 $HOME 替换为 ~
@@ -989,11 +989,8 @@ fi
 #   linuxwavedata/<版本>/update_commands.sh  那个版本「下载什么、放到哪」（按版本冻结）
 #
 # 拆开的理由：装了旧版本的用户仍在运行，他们那份更新说明不能因为发了新版就变样。
-#
-# 迁移期回落到 3.x 的 versiondata/latest_version —— 镜像上两份可以并存，
-# 谁也不会被打断。
 
-PROBE_URL="$CONFIGDATA_URL/linuxwavedata/latest.toml"
+PROBE_URL="$SELFUPDATE_URL/linuxwavedata/latest.toml"
 PROBE_DATA=""
 LINUXWAVE_VERSION=""
 LATEST_BRANCH=""
@@ -1013,13 +1010,6 @@ else
         LATEST_BRANCH="$(read_toml_string "$PROBE_DATA" branch)"
         EXPECTED_UPDATE_COMMANDS_SHA256="$(read_toml_string "$PROBE_DATA" update_commands_sha256)"
     fi
-fi
-
-if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
-    # 3.x 回落：versiondata/latest_version
-    LATEST_VERSION_DATA="$(curl -fsSL --max-time 30 "$CONFIGDATA_URL/versiondata/latest_version" 2>/dev/null || true)"
-    LINUXWAVE_VERSION="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
-    LATEST_BRANCH="$(printf '%s\n' "$LATEST_VERSION_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
 fi
 
 if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
@@ -1280,7 +1270,7 @@ fi
 # 这一步刻意放在「建目录 / 写配置 / 清旧版」之前：连不上就直接退出，
 # 不会留下一个配置已写好、文件却一个都没下的半成品安装。
 
-UPDATE_COMMANDS_URL="$CONFIGDATA_URL/linuxwavedata/$LINUXWAVE_VERSION/update_commands.sh"
+UPDATE_COMMANDS_URL="$SELFUPDATE_URL/linuxwavedata/$LINUXWAVE_VERSION/update_commands.sh"
 UPDATE_COMMANDS_TMP="$(mktemp)"
 UPDATE_COMMANDS_ATTEMPTS=3
 
@@ -1336,6 +1326,13 @@ LINKS_DIR="$BASE_DIR/links"
 REPO_DIR="$BASE_DIR/pkg"
 SURFBOARD_DIR="$BASE_DIR/surfboard"
 LIB_DIR="$BASE_DIR/lib"
+NET_DIR="$BASE_DIR/net"
+CLI_DIR="$BASE_DIR/cli"
+# 程序代码目录，与下面的 CONFIG_DIR（**配置文件**目录）不是一回事。
+# 两个名字只差一个词，变量名必须能一眼分开。
+CONFIG_CODE_DIR="$BASE_DIR/config"
+# 发布签名用的公钥。装进来之后 <base_dir>/Keys/*.pem 是验签的信任根。
+KEYS_DIR="$BASE_DIR/Keys"
 DEPS_DIR="$BASE_DIR/deps"
 DOWNLOAD_DIR="$BASE_DIR/downloads/tmp"
 
@@ -1409,54 +1406,14 @@ run_cmd mkdir -p "$LINKS_DIR"
 run_cmd mkdir -p "$REPO_DIR"
 run_cmd mkdir -p "$SURFBOARD_DIR"
 run_cmd mkdir -p "$LIB_DIR"
+run_cmd mkdir -p "$NET_DIR"
+run_cmd mkdir -p "$CLI_DIR"
+run_cmd mkdir -p "$CONFIG_CODE_DIR"
+run_cmd mkdir -p "$KEYS_DIR"
 run_cmd mkdir -p "$DEPS_DIR"
 run_cmd mkdir -p "$DOWNLOAD_DIR"
 run_cmd mkdir -p "$CONFIG_DIR"
 run_cmd chmod 755 "$CONFIG_DIR"
-
-# ==========================================
-# 版本目录结构变更迁移（configdata/updatedata/{版本号}）
-# ==========================================
-#
-# configdata 的 updatedata/{版本号}/dir_structure_change 只有**一个字符**：
-#     Y/y → 该版本改变了目录结构，执行同目录下的 transfer_commands 完成迁移
-#     N/n → 没有改变，跳过（文件不存在也按「没有改变」处理）
-# 目标版本号就是本脚本的 LINUXWAVE_VERSION（正在安装的这个版本）。
-# 迁移逻辑全部由 configdata 里的脚本提供，以后目录结构再变只改 configdata，
-# 不用再动这个脚本。
-
-UPDATEDATA_URL="$CONFIGDATA_URL/updatedata/$LINUXWAVE_VERSION"
-
-DIR_STRUCTURE_CHANGE="$(curl -fsSL --max-time 30 "$UPDATEDATA_URL/dir_structure_change" 2>/dev/null | tr -d '[:space:]')" || DIR_STRUCTURE_CHANGE=""
-
-if [[ "$DIR_STRUCTURE_CHANGE" == "Y" || "$DIR_STRUCTURE_CHANGE" == "y" ]]; then
-    lw_say "${YELLOW}🌊 Directory structure changed in $LINUXWAVE_VERSION, running migration...${RESET}" \
-        "${YELLOW}🌊 $LINUXWAVE_VERSION 改变了目录结构，正在执行迁移……${RESET}"
-
-    TRANSFER_COMMANDS="$(curl -fsSL --max-time 60 "$UPDATEDATA_URL/transfer_commands" 2>/dev/null)" || TRANSFER_COMMANDS=""
-    if [[ -z "$TRANSFER_COMMANDS" ]]; then
-        lw_say_err "${RED_BOLD}🌊 Error: Cannot fetch the migration script for $LINUXWAVE_VERSION.${RESET}" \
-            "${RED_BOLD}🌊 错误：取不到 $LINUXWAVE_VERSION 的迁移脚本。${RESET}"
-        lw_say_err "${RED_BOLD}🌊 Nothing was installed. Check your network, then run the installer again.${RESET}" \
-            "${RED_BOLD}🌊 什么都没装。请检查网络后重新运行安装器。${RESET}"
-        exit 1
-    fi
-
-    # 把本次安装的位置与配置目录告诉迁移脚本，由它自己判断该不该搬
-    export LINUXWAVE_INSTALL_DIR="$BASE_DIR"
-    export LINUXWAVE_CONFIG_DIR="$CONFIG_DIR"
-    export LINUXWAVE_TARGET_VERSION="$LINUXWAVE_VERSION"
-
-    if ! bash -c "$TRANSFER_COMMANDS"; then
-        lw_say_err "${RED_BOLD}🌊 Error: The migration for $LINUXWAVE_VERSION failed.${RESET}" \
-            "${RED_BOLD}🌊 错误：$LINUXWAVE_VERSION 的迁移失败。${RESET}"
-        lw_say_err "${RED_BOLD}🌊 Nothing was installed. Fix the issue above, then run the installer again.${RESET}" \
-            "${RED_BOLD}🌊 什么都没装。请按上面的提示排除原因后重新运行安装器。${RESET}"
-        exit 1
-    fi
-
-    echo ""
-fi
 
 # ==========================================
 # 写入配置文件
@@ -1468,15 +1425,10 @@ run_cmd tee "$CONFIG_FILE" > /dev/null << EOF
 }
 EOF
 
-run_cmd tee "$VERSION_FILE" > /dev/null << EOF
-{
-  "version": "$LINUXWAVE_VERSION",
-  "components": {
-    "installer": "$LINUXWAVE_VERSION",
-    "parser": "$LINUXWAVE_VERSION"
-  }
-}
-EOF
+# VERSION.json 故意**不**在这里写。它是「装好了」的凭据，必须等文件真的下完
+# （update_commands.sh 跑完）之后才落盘 —— 先写它、后下载，中途失败就会留下
+# 「版本号前进、文件还是旧的」这种最难查的状态：`wave selfupdate` 比完版本号
+# 就说已是最新，永远不会再修。
 
 # ==========================================
 # 安装过程中先把写权限交回调用者
@@ -1500,10 +1452,8 @@ if [[ "$NEED_SUDO" == "true" ]]; then
 fi
 run_cmd chmod 755 "$CONFIG_DIR"
 run_cmd chmod 644 "$CONFIG_FILE"
-run_cmd chmod 644 "$VERSION_FILE"
 
 lw_say "🌊 Configuration saved to $CONFIG_FILE" "🌊 配置已保存到 $CONFIG_FILE"
-lw_say "🌊 Version saved to $VERSION_FILE" "🌊 版本信息已保存到 $VERSION_FILE"
 
 # ==========================================
 # 删除旧版 repo.json
@@ -1560,17 +1510,23 @@ fi
 # 走增量还是全量由更新脚本自己按安装树判断。
 
 export LINUXWAVE_INSTALL_DIR="$BASE_DIR"
+# 语言一路传到底下的更新脚本，否则安装过程会中英混杂。
 export LINUXWAVE_LANG="$LW_LANG"
 export LINUXWAVE_CORE_URL="$CORE_URL"
 export LINUXWAVE_BRANCH="$BRANCH"
-export LINUXWAVE_TARGET_VERSION="$LINUXWAVE_VERSION"
+# 留空只是「我不知道你装的是哪版」，**不等于**全量安装 —— 走全量还是增量由
+# 更新脚本自己按安装树判断（lib/wave.py 在不在、清单里的文件齐不齐）。
 export LINUXWAVE_CURRENT_VERSION=""
 export LINUXWAVE_FILE_TIMEOUT=180
 LINUXWAVE_NEED_SUDO="$([ "$NEED_SUDO" = "true" ] && echo 1 || echo "")"
 LINUXWAVE_SILENT="$([ "$CLI_CI" = "true" ] && echo 1 || echo "")"
+# 更新脚本自己也在打印，靠这个变量把 --raw 传下去。
 LINUXWAVE_RAW="$([ "$CLI_RAW" = "true" ] && echo 1 || echo "")"
-LINUXWAVE_DRY_RUN="$([ "$CLI_DRY_RUN" = "true" ] && echo 1 || echo "")"
-export LINUXWAVE_NEED_SUDO LINUXWAVE_SILENT LINUXWAVE_RAW LINUXWAVE_DRY_RUN
+export LINUXWAVE_NEED_SUDO LINUXWAVE_SILENT LINUXWAVE_RAW
+# 这一版带了逐文件哈希才开校验；没带就不开，让更新脚本保持旧行为。
+if [[ -n "$EXPECTED_UPDATE_COMMANDS_SHA256" ]]; then
+    export LINUXWAVE_WANT_HASHES=1
+fi
 
 if [[ "$CLI_DRY_RUN" == "true" ]]; then
     lw_say "${YELLOW}🌊 Dry run: the update commands for $LINUXWAVE_VERSION would run now.${RESET}" \
@@ -1581,6 +1537,25 @@ elif ! /bin/bash "$UPDATE_COMMANDS_TMP"; then
     lw_say_err "🌊 Nothing was recorded as installed. Fix the cause above, then run the installer again." \
         "🌊 没有记录任何安装结果。请按上面的提示排除原因后重新运行安装器。"
     exit 1
+fi
+
+# ==========================================
+# 写入版本凭据（必须在文件全部到位之后）
+# ==========================================
+#
+# 顺序不能反：这份文件是客户端判断「装没装好、要不要再修」的唯一依据。
+if [[ "$CLI_DRY_RUN" != "true" ]]; then
+    run_cmd tee "$VERSION_FILE" > /dev/null << EOF
+{
+  "version": "$LINUXWAVE_VERSION",
+  "components": {
+    "installer": "$LINUXWAVE_VERSION",
+    "parser": "$LINUXWAVE_VERSION"
+  }
+}
+EOF
+    run_cmd chmod 644 "$VERSION_FILE"
+    lw_say "🌊 Version saved to $VERSION_FILE" "🌊 版本信息已保存到 $VERSION_FILE"
 fi
 
 # ==========================================
@@ -1664,7 +1639,7 @@ ensure_portable_python() {
     # 成功时把解释器路径打到 stdout，失败返回 1（调用方回退系统 python3）。
     local base_dir="$1"
     local arch="$2"
-    local data_url="$CONFIGDATA_URL/pythondata/latest_python"
+    local data_url="$PYTHON_DATA_URL/pythondata/latest_python"
     local data_file version url sha target current archive actual py
     local attempt
 

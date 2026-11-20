@@ -38,12 +38,10 @@ AGREEMENT_ID = "2026-11-19"
 AGREEMENT_FILE_NAME = "AGREEMENT.json"
 
 
-# 版本数据的位置由 domains 决定（LINUXWAVE_SELFUPDATE_DOMAIN 可整体换掉）。
-# 目前仍在 configdata 里，搬到独立的 Selfupdate 仓库后只需改 domains 的默认值。
-VERSION_DATA_URL = f"{domains.selfupdate_domain()}/versiondata/latest_version"
-
 # 4.0 起的两级结构：latest.toml 说「装哪个版本」，该版本的 update_commands.sh 说「怎么装」。
 # 前者每次发版都变，后者按版本冻结 —— 装了旧版本的人继续用他们那份说明，而旧版本仍在运行。
+#
+# 本层只回答「有没有新版」；下载与落盘由 lib/selfupdate.sh 取回那份脚本再执行。
 LATEST_TOML_URL = domains.selfupdate_latest_url()
 FETCH_TIMEOUT = domains.DEFAULT_TIMEOUT
 UPDATE_TIMEOUT = 1800
@@ -89,63 +87,48 @@ def parse_toml(text):
 
 
 def resolve_release():
-    """返回 (版本数据, 布局)，两个布局都没有时返回 (None, None)。
+    """返回版本数据；取不到或没有 version 字段时返回 None。
 
-    优先 4.0 的 linuxwavedata/latest.toml；取不到或字段不全才回落到 3.x 的
-    versiondata/latest_version（镜像上两份可以并存，迁移期谁也不会被打断）。
+    只有 4.0 的 linuxwavedata/latest.toml 一种布局 —— 3.x 的
+    versiondata/latest_version 与 files_info 一起退休了，回落会让「读到了什么」
+    变成两说。
     """
     text = fetch_url_text(LATEST_TOML_URL)
-    if text:
-        data = parse_toml(text)
-        if data.get("version"):
-            return data, "linuxwavedata"
-
-    text = fetch_url_text(VERSION_DATA_URL)
-    if text:
-        return parse_version_data(text), "legacy"
-
-    return None, None
-
-
-def fetch_version_data():
-    # 优先用标准库；本地 Python 缺根证书时改走 curl
-    try:
-        with urllib.request.urlopen(VERSION_DATA_URL, timeout=FETCH_TIMEOUT) as response:
-            return response.read().decode()
-    except (urllib.error.URLError, UnicodeDecodeError):
-        pass
-
-    result = subprocess.run(['curl', '-fsSL', '--max-time', str(FETCH_TIMEOUT), VERSION_DATA_URL],
-                            capture_output=True, text=True)
-    if result.returncode != 0:
+    if not text:
         return None
-    return result.stdout
+    data = parse_toml(text)
+    return data if data.get("version") else None
 
 
-def parse_version_data(text):
-    # 字段写法与 infosource 数据一致：`field: "value"`。
-    # update_command 是例外，它的值写在 <<< 和 >>> 之间，可以跨行。
-    fields = {}
+def run_script(environment, overall_timeout):
+    """执行 lib/selfupdate.sh。它负责取回 update_commands.sh 并跑它。
 
-    command_match = re.search(r'update_command:\s*<<<(.*?)>>>', text, re.DOTALL)
-    if command_match:
-        fields['update_command'] = command_match.group(1).strip()
-        text = text[:command_match.start()] + text[command_match.end():]
+    **必须从临时副本执行**：更新过程会覆盖 lib/selfupdate.sh 自己，而 bash 是
+    边读边执行的，被覆盖的正文会让运行中的脚本读到半截内容。复制一份再跑，
+    覆盖就发生在「已经读完的副本」之外，不影响本次执行。
+    """
+    source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "selfupdate.sh")
 
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        key, separator, value = line.partition(':')
-        key = key.strip()
-        if not separator or not key:
-            continue
-        value = value.strip()
-        if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
-            value = value[1:-1]
-        fields[key] = value
+    print("🌊 Preparing the update script for this version...")
 
-    return fields
+    try:
+        with open(source, encoding="utf-8") as stream:
+            text = stream.read()
+    except OSError:
+        print(f"{RED_BOLD}🌊 Error: Cannot read the update script.{RESET}")
+        print(f"{RED_BOLD}🌊 {source}{RESET}")
+        sys.exit(1)
+
+    handle, path = tempfile.mkstemp(prefix="linuxwave-selfupdate-", suffix=".sh")
+    try:
+        with os.fdopen(handle, "w") as stream:
+            stream.write(text)
+        return subprocess.run(['/bin/bash', path], env=environment, timeout=overall_timeout)
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 def version_key(value):
@@ -157,7 +140,7 @@ def version_key(value):
 
 
 def version_file():
-    # 配置目录可能在上一次升级里被迁移（见 configdata 的 updatedata/），
+    # 配置目录可能在上一次升级里被迁移（见 update_commands.sh 里的迁移步骤），
     # 所以每次都重新解析一遍，不要用模块级常量。
     config_dir = find_config_dir()
     if config_dir is not None:
@@ -211,11 +194,14 @@ def _apply_max_time(input_string):
     os.environ[domains.MAX_TIME_ENV] = str(seconds)
 
 
-def _apply_dry_run(input_string):
-    """把 --dry-run 写进环境，由 selfupdate.sh 执行「只报告、不落盘」。"""
-    if re.search(r"(^|\s)--dry-run(\s|$)", input_string or ""):
-        os.environ["LINUXWAVE_DRY_RUN"] = "1"
-        silent.say("🌊 Dry run: nothing will be downloaded or written.")
+def _wants_dry_run(input_string):
+    """`--dry-run`：本层自己把计划打完就退出，不执行 selfupdate.sh。
+
+    计划必须由**这一层**打：真正的下载发生在 update_commands.sh 里，而它是由
+    selfupdate.sh 执行的 —— 让脚本自己去判断「试运行」就等于让下载路径多一种
+    分支，迟早有一条会漏。
+    """
+    return bool(re.search(r"(^|\s)--dry-run(\s|$)", input_string or ""))
 
 
 def _apply_python_source(input_string):
@@ -231,7 +217,6 @@ def _apply_python_source(input_string):
 def handle_selfupdate(input_string=""):
     _apply_max_time(input_string)
     _apply_python_source(input_string)
-    _apply_dry_run(input_string)
 
     if find_config_dir() is None:
         print(f"{RED_BOLD}🌊 Error: LinuxWave is not installed. Run lib/install.sh first.{RESET}")
@@ -239,16 +224,12 @@ def handle_selfupdate(input_string=""):
 
     silent.say("🌊 Fetching the latest version...")
 
-    data, layout = resolve_release()
+    data = resolve_release()
     if data is None:
         print(f"{RED_BOLD}🌊 Error: Cannot reach the LinuxWave version data.{RESET}")
         print(f"{RED_BOLD}🌊 {LATEST_TOML_URL}{RESET}")
-        print(f"{RED_BOLD}🌊 {VERSION_DATA_URL}{RESET}")
         sys.exit(1)
-    latest = data.get("version", "")
-    if not latest:
-        print(f"{RED_BOLD}🌊 Error: The version data has no 'version' field.{RESET}")
-        sys.exit(1)
+    latest = data["version"]
 
     print(f"🌊 Latest version found: {latest}")
 
@@ -257,40 +238,22 @@ def handle_selfupdate(input_string=""):
         silent.say(f"{GREEN}🌊 LinuxWave is already up to date (current: {current}).{RESET}")
         sys.exit(0)
 
-    silent.say("🌊 Fetching the new version information")
-
     environment = dict(os.environ)
     environment["LINUXWAVE_UPDATE_VERSION"] = latest
     if data.get("branch"):
         environment["LINUXWAVE_UPDATE_BRANCH"] = data["branch"]
 
-    if layout == "linuxwavedata":
-        # 4.0 布局：该版本冻结的更新脚本自己完成下载与落盘。
-        # 客户端只负责把它取下来、按合同传环境变量、跑它。
-        script_url = domains.selfupdate_commands_url(latest)
-        script_text = fetch_url_text(script_url)
-        if not script_text:
-            print(f"{RED_BOLD}🌊 Error: Cannot fetch the update commands for {latest}.{RESET}")
-            print(f"{RED_BOLD}🌊 {script_url}{RESET}")
-            sys.exit(1)
-
-        # 合同里的变量（与 scripts/build_update_commands.py 的注释逐条对应）
-        environment["LINUXWAVE_INSTALL_DIR"] = str(load_base_dir())
-        environment["LINUXWAVE_CONFIG_DIR"] = str(find_config_dir() or "")
-        environment["LINUXWAVE_CORE_URL"] = domains.core_domain()
-        environment["LINUXWAVE_BRANCH"] = data.get("branch", "")
-        environment["LINUXWAVE_TARGET_VERSION"] = latest
-        environment["LINUXWAVE_CURRENT_VERSION"] = current or ""
-        environment["LINUXWAVE_FILE_TIMEOUT"] = str(FETCH_TIMEOUT)
-        # LINUXWAVE_SILENT 不在这里设：它由 lib/wave.py 在分发前写进环境（那里
-        # 是唯一决定静默的地方），environment 是 os.environ 的副本，自动带上。
-        environment["LINUXWAVE_NEED_SUDO"] = "0" if os.access(load_base_dir(), os.W_OK) else "1"
-        command = None
-    else:
-        command = data.get("update_command", "")
-        if not command:
-            print(f"{RED_BOLD}🌊 Error: The version data has no 'update_command' field.{RESET}")
-            sys.exit(1)
+    if _wants_dry_run(input_string):
+        silent.say("🌊 Dry run: nothing will be downloaded or written.")
+        silent.say(f"🌊 Latest version : {latest}")
+        silent.say(f"🌊 Current version: {current or '<none>'}")
+        silent.say(f"🌊 Branch         : {data.get('branch') or '<unchanged>'}")
+        silent.say(f"🌊 Install dir    : {load_base_dir()}")
+        silent.say(f"🌊 Config dir     : {find_config_dir()}")
+        silent.say("🌊 Would fetch linuxwavedata/<版本>/update_commands.sh and run it,")
+        silent.say("🌊 regenerate lib/wave, install the Python dependencies, and rewrite")
+        silent.say("🌊 VERSION.json.")
+        sys.exit(0)
 
     if current:
         silent.say(f"🌊 Updating LinuxWave from {current} to {latest}...")
@@ -298,32 +261,17 @@ def handle_selfupdate(input_string=""):
         silent.say(f"{YELLOW}🌊 No installed version found, updating to {latest}...{RESET}")
 
     try:
-        if command is None:
-            # 落到临时文件再跑：脚本内容来自网络，不能直接塞进 -c 的字符串里
-            with tempfile.NamedTemporaryFile('w', suffix='.sh', delete=False) as handle:
-                handle.write(script_text)
-                script_path = handle.name
-            try:
-                result = subprocess.run(['/bin/bash', script_path], env=environment,
-                                        timeout=UPDATE_TIMEOUT)
-            finally:
-                try:
-                    os.unlink(script_path)
-                except OSError:
-                    pass
-        else:
-            result = subprocess.run(['/bin/bash', '-c', command], env=environment,
-                                    timeout=UPDATE_TIMEOUT)
+        result = run_script(environment, UPDATE_TIMEOUT)
     except subprocess.TimeoutExpired:
-        print(f"{RED_BOLD}🌊 Error: The update command timed out.{RESET}")
+        print(f"{RED_BOLD}🌊 Error: The update timed out.{RESET}")
         sys.exit(1)
 
     if result.returncode != 0:
-        print(f"{RED_BOLD}🌊 Error: The update command failed (exit code {result.returncode}).{RESET}")
+        print(f"{RED_BOLD}🌊 Error: The update failed (exit code {result.returncode}).{RESET}")
         sys.exit(1)
 
-    # update_command 是 `bash -c "$(curl ...)"` 形式，curl 失败时 bash 仍然返回 0，
-    # 所以这里以 VERSION.json 的实际内容为准，避免误报成功
+    # VERSION.json 是「装好了」的唯一凭据：selfupdate.sh 只在全部文件到位之后才写它。
+    # 再确认一次，避免任何一层把失败当成成功。
     final = installed_version()
     if not final or version_key(final) < version_key(latest):
         print(f"{RED_BOLD}🌊 Error: The update did not complete (still on {final or 'unknown'}).{RESET}")
