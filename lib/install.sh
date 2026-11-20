@@ -49,6 +49,18 @@ LW_LANG="en"
 _PRESENTATION_APPLIED=false
 
 lw_raw() { [[ "${CLI_RAW:-false}" == "true" ]]; }
+lw_dry_run() { [[ "${CLI_DRY_RUN:-false}" == "true" ]]; }
+
+lw_plan() {
+    # lw_plan <English> <中文>：试运行时把「本来会发生什么」打出来。
+    # 不在试运行时一个字都不输出，调用点因此不必套 if。
+    lw_dry_run || return 0
+    if [[ "$LW_LANG" == "zh" ]]; then
+        printf '%b\n' "${2-$1}"
+    else
+        printf '%b\n' "$1"
+    fi
+}
 
 # 逐行读 stdin，去掉行首的 🌊 与紧跟的一个空格。
 # 🌊 用 printf 的字节写：$'\U0001F30A' 这种写法要 bash 4.2+，这里不赌。
@@ -552,7 +564,7 @@ CORE_URL="$(lw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://ra
 # 必须与上一行的默认值、以及 net/domains.py 的 DEFAULTS["core"] 一致 ——
 # scripts/check_domain_defaults.py 会比对这三处。
 CORE_DEFAULT_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave"
-SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/Selfupdate/main}")"
 PYTHON_DATA_URL="$(lw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 # pip 的索引：只影响「装 requests/packaging/urllib3/rich」这一次调用，不参与「从哪儿取文件」
 PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"

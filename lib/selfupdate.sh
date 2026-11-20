@@ -8,7 +8,99 @@
 # (linuxwavedata/latest.toml), or directly:
 #   bash lib/selfupdate.sh [branch]        (defaults to HEAD)
 
-set -e
+# 与 lib/install.sh / lib/uninstall.sh 同一套严格模式：
+#   -e        任一条命令失败就停（自更新失败时**必须**停在原版本，不能半新半旧）
+#   -E        ERR 陷阱继承进函数 —— 否则函数中途失败只剩一个光秃秃的退出码
+#   -u        读未定义变量即中止（所有可选环境变量都写成 ${VAR:-}）
+#   pipefail  管道中任一段失败都算失败
+set -eE
+set -u
+set -o pipefail
+
+# ==========================================
+# 输出层：双语与呈现
+# ==========================================
+# 与 lib/install.sh / lib/uninstall.sh 同一套。脚本被两种方式拉起：
+#   · selfupdate.py 通过环境变量传目标（那时没有参数）；
+#   · 人直接 `bash lib/selfupdate.sh [branch] [--zh] [--raw] [--dry-run]`。
+# 两种都过 lw_say / lw_say_err，于是双语、--raw、--zh 只在这一层做一次。
+RED_BOLD='\033[1;31m'
+YELLOW='\033[33m'
+RESET='\033[0m'
+
+CLI_RAW=false
+CLI_DRY_RUN=false
+LW_LANG="en"
+_PRESENTATION_APPLIED=false
+
+lw_raw() { [[ "${CLI_RAW:-false}" == "true" ]]; }
+
+lw_raw_filter() {
+    local line item
+    item="$(printf '\xf0\x9f\x8c\x8a')"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            "$item "*) line="${line#"$item "}" ;;
+            "$item"*) line="${line#"$item"}" ;;
+        esac
+        printf '%s\n' "$line"
+    done
+}
+
+lw_say() {
+    if [[ "$LW_LANG" == "zh" ]]; then
+        printf '%b\n' "${2-$1}"
+    else
+        printf '%b\n' "$1"
+    fi
+}
+
+lw_say_err() {
+    # 必须用 if 而不是 `[[ … ]] && printf`：本脚本是 set -e，条件为假时那条复合
+    # 命令返回 1，会被当成一次失败把自更新**静默**终止。
+    if [[ "$LW_LANG" == "zh" ]]; then
+        printf '%b\n' "${2-$1}" >&2
+        if [[ -n "${1:-}" && "${1:-}" != "${2:-}" ]]; then
+            printf '%b\n' "$1" >&2
+        fi
+    else
+        printf '%b\n' "$1" >&2
+        if [[ -n "${2:-}" && "${2:-}" != "${1:-}" ]]; then
+            printf '%b\n' "$2" >&2
+        fi
+    fi
+}
+
+lw_plan() {
+    lw_dry_run || return 0
+    if [[ "$LW_LANG" == "zh" ]]; then
+        printf '%b\n' "${2-$1}"
+    else
+        printf '%b\n' "$1"
+    fi
+}
+
+lw_dry_run() { [[ "${CLI_DRY_RUN:-false}" == "true" || "${LINUXWAVE_DRY_RUN:-}" == "1" ]]; }
+
+lw_apply_presentation() {
+    [[ "$_PRESENTATION_APPLIED" == "true" ]] && return 0
+    if lw_raw; then
+        RED_BOLD=""; YELLOW=""; RESET=""
+        exec > >(lw_raw_filter) 2>&1
+    fi
+    _PRESENTATION_APPLIED=true
+}
+
+# 参数预扫：下面两道闸门在正式解析之前就要说话，得先认 --zh / --raw。
+CLI_ARGV=("$@")
+for _lw_arg in ${CLI_ARGV[@]+"${CLI_ARGV[@]}"}; do
+    case "$_lw_arg" in
+        --raw|--RAW) CLI_RAW=true ;;
+        --zh|--ZH) LW_LANG="zh" ;;
+        --dry-run|--DRY-RUN) CLI_DRY_RUN=true ;;
+    esac
+done
+lw_apply_presentation
 
 # ==========================================
 # 平台闸门：LinuxWave 只装 Linux
@@ -165,7 +257,7 @@ CORE_URL="$(lw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://ra
 # 必须与上一行的默认值、以及 net/domains.py 的 DEFAULTS["core"] 一致 ——
 # scripts/check_domain_defaults.py 会比对这三处。
 CORE_DEFAULT_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave"
-SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/Selfupdate/main}")"
 PYTHON_DATA_URL="$(lw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 # pip 的索引：只影响「装 requests/packaging/urllib3/rich」这一次调用，不参与「从哪儿取文件」
 PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
@@ -211,7 +303,7 @@ lw_trusted_pub() {
     # 能换数据的人也能换公钥，拿它验等于自证。
     # 两个都没有就输出空串，调用方据此整段跳过。
     if [[ -n "${LINUXWAVE_RSA_PUB:-}" ]]; then
-        printf '%s' "$LINUXWAVE_RSA_PUB"
+        printf '%s' "${LINUXWAVE_RSA_PUB:-}"
         return 0
     fi
     [[ -n "$LW_RSA_PUB_PEM" ]] || return 0
@@ -287,7 +379,36 @@ LW_RSA_PUB_PEM=''
 # 目标仓库、分支与版本
 # ==========================================
 
-BRANCH="${LINUXWAVE_UPDATE_BRANCH:-${1:-HEAD}}"
+# 正式解析：`--zh / --raw / --dry-run` 之外的位置参数是代码分支。
+# selfupdate.py 拉起本脚本时一个参数都不传，目标通过 LINUXWAVE_UPDATE_* 传，
+# 所以这里只为人手工调用准备。
+BRANCH_ARG=""
+for _lw_arg in "$@"; do
+    case "$_lw_arg" in
+        --zh|--ZH) LW_LANG="zh" ;;
+        --raw|--RAW) CLI_RAW=true ;;
+        --dry-run|--DRY-RUN) CLI_DRY_RUN=true; export LINUXWAVE_DRY_RUN=1 ;;
+        -h|--help)
+            lw_say "LinuxWave self-updater — usage: bash lib/selfupdate.sh [branch] [--zh] [--raw] [--dry-run]" \
+                   "LinuxWave 自更新脚本 —— 用法：bash lib/selfupdate.sh [分支] [--zh] [--raw] [--dry-run]"
+            exit 0
+            ;;
+        -*)
+            lw_say_err "🌊 Error: unknown option '$_lw_arg'." "🌊 错误：未知选项 '$_lw_arg'。"
+            exit 1
+            ;;
+        *)
+            if [[ -n "$BRANCH_ARG" ]]; then
+                lw_say_err "🌊 Error: more than one branch given ('$BRANCH_ARG', '$_lw_arg')." \
+                           "🌊 错误：给了不止一个分支（'$BRANCH_ARG'、'$_lw_arg'）。"
+                exit 1
+            fi
+            BRANCH_ARG="$_lw_arg"
+            ;;
+    esac
+done
+
+BRANCH="${LINUXWAVE_UPDATE_BRANCH:-${BRANCH_ARG:-HEAD}}"
 BASE_URL="$CORE_URL/$BRANCH"
 # 自更新探针：唯一入口文件。linuxwavedata/latest.toml 说「哪个版本是最新的」，
 # linuxwavedata/<版本>/update_commands.sh 说「那一版具体怎么装」。拆开的理由：
@@ -300,7 +421,7 @@ VERSION_DATA_URL="$SELFUPDATE_URL/linuxwavedata/latest.toml"
 # 没设置时 SYS_ROOT 为空，下面 "$SYS_ROOT/etc/..." 就还是 "/etc/..."，行为不变。
 SYS_ROOT=""
 if [[ -n "${LINUXWAVE_TEST:-}" ]]; then
-    _lw_root="$LINUXWAVE_TEST"
+    _lw_root="${LINUXWAVE_TEST:-}"
     if [[ "$_lw_root" == "~"* ]]; then
         _lw_root="${HOME}${_lw_root#\~}"
     fi
@@ -354,7 +475,7 @@ resolve_config_dir() {
 
 resolve_config_dir
 
-echo "🌊 Updating from branch: $BRANCH"
+lw_say "🌊 Updating from branch: $BRANCH" "🌊 从分支更新：$BRANCH"
 echo ""
 
 # ==========================================
@@ -474,7 +595,7 @@ lw_seconds() {
 }
 
 if [[ -n "${LINUXWAVE_MAX_TIME:-}" ]]; then
-    if ! _user_timeout="$(lw_seconds "$LINUXWAVE_MAX_TIME")"; then
+    if ! _user_timeout="$(lw_seconds "${LINUXWAVE_MAX_TIME:-}")"; then
         echo -e "${RED_BOLD}🌊 Error: cannot parse --max-time value '$LINUXWAVE_MAX_TIME'.${RESET}" >&2
         echo -e "${RED_BOLD}🌊 Use a number of seconds or a suffix like 40s, 1min, 1min20s, 2h.${RESET}" >&2
         exit 1
@@ -487,7 +608,7 @@ fi
 
 CONNECT_TIMEOUT=""
 if [[ -n "${LINUXWAVE_CONNECT_TIMEOUT:-}" ]]; then
-    if ! CONNECT_TIMEOUT="$(lw_seconds "$LINUXWAVE_CONNECT_TIMEOUT")"; then
+    if ! CONNECT_TIMEOUT="$(lw_seconds "${LINUXWAVE_CONNECT_TIMEOUT:-}")"; then
         echo -e "${RED_BOLD}🌊 Error: cannot parse --connect-timeout value '$LINUXWAVE_CONNECT_TIMEOUT'.${RESET}" >&2
         echo -e "${RED_BOLD}🌊 Use a number of seconds or a suffix like 40s, 1min, 1min20s, 2h.${RESET}" >&2
         exit 1
@@ -496,7 +617,7 @@ fi
 
 CONTENT_TIME=""
 if [[ -n "${LINUXWAVE_CONTENT_TIME:-}" ]]; then
-    if ! CONTENT_TIME="$(lw_seconds "$LINUXWAVE_CONTENT_TIME")"; then
+    if ! CONTENT_TIME="$(lw_seconds "${LINUXWAVE_CONTENT_TIME:-}")"; then
         echo -e "${RED_BOLD}🌊 Error: cannot parse --content-time value '$LINUXWAVE_CONTENT_TIME'.${RESET}" >&2
         echo -e "${RED_BOLD}🌊 Use a number of seconds or a suffix like 40s, 1min, 1min20s, 2h.${RESET}" >&2
         exit 1
@@ -668,9 +789,11 @@ EXPECTED_UPDATE_COMMANDS_SHA256="$(read_toml_string "$VERSION_DATA" update_comma
 lw_verify_latest_signature "$VERSION_DATA" "$VERSION_DATA_URL"
 
 if [[ -z "$VERSION" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: Cannot determine the target version.${RESET}"
-    echo -e "${RED_BOLD}🌊 ${VERSION_DATA_URL}${RESET}"
-    echo -e "${RED_BOLD}🌊 Check your network or proxy, then run 'wave selfupdate' again.${RESET}"
+    lw_say_err "${RED_BOLD}🌊 Error: Cannot determine the target version.${RESET}" \
+               "${RED_BOLD}🌊 错误：拿不到目标版本号。${RESET}"
+    lw_say_err "${RED_BOLD}🌊 ${VERSION_DATA_URL}${RESET}" ""
+    lw_say_err "${RED_BOLD}🌊 Check your network or proxy, then run 'wave selfupdate' again.${RESET}" \
+               "${RED_BOLD}🌊 检查网络或代理，然后重跑 'wave selfupdate'。${RESET}"
     exit 1
 fi
 
@@ -678,14 +801,17 @@ fi
 # 自己就把计划打完了（它不会执行本脚本）；这一段是给「直接 bash lib/selfupdate.sh」
 # 准备的，两边都停在下载之前。
 if [[ "${LINUXWAVE_DRY_RUN:-}" == "1" ]]; then
-    echo "🌊 Dry run: nothing will be downloaded or written."
-    echo "🌊 Target version : $VERSION"
-    echo "🌊 Branch         : $BRANCH"
-    echo "🌊 Install dir    : $BASE_DIR"
-    echo "🌊 Config dir     : $CONFIG_DIR"
-    echo "🌊 Would fetch linuxwavedata/$VERSION/update_commands.sh and run it,"
-    echo "🌊 regenerate lib/wave, install the Python dependencies, and rewrite"
-    echo "🌊 $VERSION_FILE."
+    lw_say "🌊 Dry run: nothing will be downloaded or written." \
+           "🌊 试运行：不下载、不写盘。"
+    lw_say "🌊 Target version : $VERSION" "🌊 目标版本：$VERSION"
+    lw_say "🌊 Branch         : $BRANCH" "🌊 分支　　：$BRANCH"
+    lw_say "🌊 Install dir    : $BASE_DIR" "🌊 安装目录：$BASE_DIR"
+    lw_say "🌊 Config dir     : $CONFIG_DIR" "🌊 配置目录：$CONFIG_DIR"
+    lw_say "🌊 Would fetch linuxwavedata/$VERSION/update_commands.sh and run it," \
+           "🌊 将下载并执行 linuxwavedata/$VERSION/update_commands.sh，"
+    lw_say "🌊 regenerate lib/wave, install the Python dependencies, and rewrite" \
+           "🌊 重建 lib/wave、安装 Python 依赖，并重写"
+    lw_say "🌊 $VERSION_FILE." "🌊 $VERSION_FILE。"
     exit 0
 fi
 
@@ -1022,7 +1148,7 @@ if [ -x "$root_dir/python/current/bin/python3" ] && deps_ok "$root_dir/python/cu
 fi
 
 # 3. 安装时记录的解释器
-if [ -n "${LINUXWAVE_PYTHON:-}" ] && deps_ok "$LINUXWAVE_PYTHON"; then
+if [ -n "${LINUXWAVE_PYTHON:-}" ] && deps_ok "${LINUXWAVE_PYTHON:-}"; then
     exec "$LINUXWAVE_PYTHON" "$entry" "$@"
 fi
 
@@ -1031,7 +1157,8 @@ if command -v python3 >/dev/null 2>&1; then
     exec python3 "$entry" "$@"
 fi
 
-echo "🌊 Error: no usable Python 3 interpreter was found." >&2
+lw_say_err "🌊 Error: no usable Python 3 interpreter was found." \
+           "🌊 错误：找不到可用的 Python 3 解释器。"
 echo "🌊 Reinstall LinuxWave with lib/install.sh." >&2
 exit 1
 LAUNCHER
@@ -1155,7 +1282,7 @@ config_cmd mkdir -p "$CONFIG_DIR"
 config_cmd tee "$VERSION_FILE" > /dev/null << EOF
 {
   "version": "$VERSION",
-$( [[ -n "${LINUXWAVE_UPDATE_BUILD:-}" ]] && printf '  "build_number": "%s",\n' "$LINUXWAVE_UPDATE_BUILD" )
+$( [[ -n "${LINUXWAVE_UPDATE_BUILD:-}" ]] && printf '  "build_number": "%s",\n' "${LINUXWAVE_UPDATE_BUILD:-}" )
   "components": {
     "installer": "$VERSION",
     "parser": "$VERSION"
