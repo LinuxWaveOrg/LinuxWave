@@ -100,6 +100,8 @@ run_case() {
         normalize_portable_python() { :; }
         # selfupdate.sh 的下载走 fetch_to_file（自带重试）；这里给个等价桩
         fetch_to_file() { local url="$1" dest="$2" limit="$3"; run_cmd curl -fsSL --max-time "$limit" -o "$dest" "$url"; }
+        # install.sh 的下载走 lw_download（--raw 时打井号刻度）；非 raw 分支就是这个
+        lw_download() { local url="$1" dest="$2" limit="$3"; run_cmd curl -fsSL --max-time "$limit" -o "$dest" "$url"; }
         port_arch() { echo amd64; }
         # 输出层桩：安装器把进度信息过 lw_say_err（写 stderr，不污染 stdout 这个返回值通道）
         # 真实现两种语言都打（当前语言在前），这里照此给桩 —— 英文那行是测试的判据
@@ -174,6 +176,10 @@ for script in "$REPO_DIR/lib/install.sh" "$REPO_DIR/lib/selfupdate.sh"; do
         normalize_portable_python() { :; }
         # selfupdate.sh 的下载走 fetch_to_file（自带重试）；这里给个等价桩
         fetch_to_file() { local url="$1" dest="$2" limit="$3"; run_cmd curl -fsSL --max-time "$limit" -o "$dest" "$url"; }
+        lw_download() { local url="$1" dest="$2" limit="$3"; run_cmd curl -fsSL --max-time "$limit" -o "$dest" "$url"; }
+        # 输出层桩：这一支只关心「有没有去读坏掉的托管副本」，报错走这个桩
+        lw_say_err() { printf '%b\n' "$1" >&2; return 0; }
+        lw_say() { printf '%b\n' "${2-$1}"; }
         unset LINUXWAVE_TEST LINUXWAVE_SKIP_PORTABLE_PYTHON
         eval "$(sed -n '/^ensure_portable_python() {/,/^}$/p' "$script")"
         export LINUXWAVE_PYTHON_FROM_SOURCE=1

@@ -239,7 +239,8 @@ def apply_proxy(options):
 # 放在 common.py 而不是 flags.py：flags.py 是纯函数（不打印、不退出），
 # 这条要报错退出。
 
-RED = '\033[1;31m'
+# 普通红：与「未知命令」那块的配色一致（旗标与 ^ 用 31，不用加粗红）
+RED = '\033[31m'
 RESET = '\033[0m'
 
 

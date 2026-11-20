@@ -186,6 +186,16 @@ jobs:
         run: |
           bash scripts/depsync_test.sh
 
+      # 出错时的「下一步」：命令打错、包名打错、缺清单，三种话术不能混
+      - name: Run message test
+        run: |
+          bash scripts/message_test.sh
+
+      # --raw：无颜色无 emoji、进度条用井号、装饰全去掉（CI 与日志靠它）
+      - name: Run raw output test
+        run: |
+          bash scripts/raw_test.sh
+
       # --max-time 的时长解析与传导（畸形值必须报错，不能静默用默认值）
       - name: Run timeout test
         run: |

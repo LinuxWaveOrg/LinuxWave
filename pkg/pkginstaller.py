@@ -4,6 +4,7 @@
 
 import os
 import sys
+import contextlib
 import json
 import hashlib
 import shutil
@@ -254,6 +255,88 @@ def handle_download_args(input_string):
 
 # -------------------- 下载核心（含真正断点续传） -------------------
 
+class _RawProgress:
+    """`--raw` 的下载进度：纯 ASCII，每 10% 一行，没有颜色也没有光标移动。
+
+    为什么不用 rich：rich 靠 ANSI 光标控制原地重绘，输出重定向到文件时是一串
+    控制字符 —— 而这正是 `--raw` 要服务的场合（日志、diff、grep）。这里每行
+    自带完整状态，日志里逐行可读。
+    """
+
+    STEP = 10
+    WIDTH = 20
+
+    def __init__(self, label, total, done=0):
+        self._label = label
+        self._total = total
+        self._written = done
+        self._shown = 0
+        if not total:
+            # 服务器没给 content-length：只能报字节数，不能报百分比
+            print(f"{label}: downloading")
+            return
+        # 续传：已经落在盘上的那部分也算进度，否则从 0% 重新开始读着像重下了
+        percent = min(100, self._written * 100 // self._total)
+        self._shown = percent // self.STEP * self.STEP
+        if self._shown:
+            self._emit(self._shown)
+
+    def advance(self, size):
+        self._written += size
+        if not self._total:
+            return
+        percent = min(100, self._written * 100 // self._total)
+        while self._shown + self.STEP <= percent:
+            self._shown += self.STEP
+            self._emit(self._shown)
+
+    def finish(self):
+        if self._total and self._shown < 100:
+            self._shown = 100
+            self._emit(100)
+
+    def _emit(self, percent):
+        filled = percent * self.WIDTH // 100
+        bar = "#" * filled + "." * (self.WIDTH - filled)
+        print(f"{self._label}: {bar} {percent:3d}%")
+
+
+@contextlib.contextmanager
+def _progress(display_name, total, done=0):
+    """按 `--raw` / rich / 静默 选一种进度呈现，yield 一个 advance(size) 回调。
+
+    三种模式的生命周期各不相同（raw 要自己补满 100%、rich 要进 with），
+    放在一个地方才不会出现「某个分支忘了 finish」。
+    静默（-s / -sS）下什么都不打：它的每一次刷新都绕过 print 直接写终端。
+    """
+    if silent.is_raw():
+        bar = _RawProgress(display_name, total, done)
+        try:
+            yield bar.advance
+        finally:
+            bar.finish()
+        return
+
+    if RICH_AVAILABLE and not silent.is_silent():
+        console = Console()
+        progress_columns = [
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(bar_width=None),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            DownloadColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
+        ]
+        with Progress(*progress_columns, console=console) as progress:
+            task_id = progress.add_task(description=f"🌊 {display_name}", total=total or None)
+            if done:
+                progress.update(task_id, advance=done)
+            yield lambda size: progress.update(task_id, advance=size)
+        return
+
+    yield lambda size: None
+
+
 def download_file(url, temp_path, config, input_string, display_name):
     # SSL 策略只有一处：net/tls.py。--skip-ssl 已在 confirm_skip_ssl 里授权过，
     # LINUXWAVE_CACERT 也由它解析，所以这里不再自己传 verify= ——
@@ -313,58 +396,36 @@ def download_file(url, temp_path, config, input_string, display_name):
 
             limit_bps = config["limit_rate"]
 
-            # 静默（-s / -sS）下不要进度条：它的每一次刷新都直接写终端，
-            # 既不经过 print，也不该算进「只留错误」的那一份输出里。
-            if RICH_AVAILABLE and not silent.is_silent():
-                console = Console()
-                progress_columns = [
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(bar_width=None),
-                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                    DownloadColumn(),
-                    TextColumn("•"),
-                    TimeRemainingColumn(),
-                ]
-                with Progress(*progress_columns, console=console) as progress:
-                    task_id = progress.add_task(
-                        description=f"🌊 {display_name}",
-                        total=total_size or None
-                    )
-                    if existing_size > 0:
-                        progress.update(task_id, advance=existing_size)
+            plain_progress = not (RICH_AVAILABLE and not silent.is_silent()) and not silent.is_raw()
+            with _progress(display_name, total_size, existing_size) as advance:
+                token_bucket = 0.0
+                last_time = time.monotonic()
 
-                    token_bucket = 0.0
-                    last_time = time.monotonic()
-
-                    with open(temp_path, mode) as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                if limit_bps:
-                                    now = time.monotonic()
-                                    delta = now - last_time
-                                    token_bucket += delta * limit_bps
-                                    last_time = now
-                                    if token_bucket > 8192:
-                                        token_bucket = 8192
-                                    if token_bucket < len(chunk):
-                                        time.sleep((len(chunk) - token_bucket) / limit_bps)
-                                        now = time.monotonic()
-                                        delta = now - last_time
-                                        token_bucket += delta * limit_bps
-                                        last_time = now
-                                    token_bucket -= len(chunk)
-
-                                f.write(chunk)
-                                progress.update(task_id, advance=len(chunk))
-            else:
                 with open(temp_path, mode) as f:
                     for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            if config["verbose"]:
-                                silent.say(".", end="", flush=True)
-                if config["verbose"]:
-                    silent.say(" ")
+                        if not chunk:
+                            continue
+                        if limit_bps:
+                            now = time.monotonic()
+                            delta = now - last_time
+                            token_bucket += delta * limit_bps
+                            last_time = now
+                            if token_bucket > 8192:
+                                token_bucket = 8192
+                            if token_bucket < len(chunk):
+                                time.sleep((len(chunk) - token_bucket) / limit_bps)
+                                now = time.monotonic()
+                                delta = now - last_time
+                                token_bucket += delta * limit_bps
+                                last_time = now
+                            token_bucket -= len(chunk)
+
+                        f.write(chunk)
+                        advance(len(chunk))
+                        if plain_progress and config["verbose"]:
+                            silent.say(".", end="", flush=True)
+            if plain_progress and config["verbose"]:
+                silent.say(" ")
 
             download_success = True
             break
@@ -411,6 +472,90 @@ def download_file(url, temp_path, config, input_string, display_name):
     return temp_path
 
 
+# -------------------- 包名清单与 404 诊断 --------------------
+
+def fetch_package_names(arch, timeout=None):
+    """索引里的全部包名。列不出来（网络 / 镜像没有清单）时返回 None。
+
+    返回值区分的是**两类完全不同的问题**，报错要据此分开说：
+      None   → 名字清单都拿不到，是网络或镜像配置的事，别再猜包名
+      []     → 清单是空的，镜像还没生成 versions
+      [...]  → 有清单，于是能判断「这个名字在不在里面」
+    """
+    names_url = domains.index_list_url(arch)
+    try:
+        response = requests.get(names_url, timeout=timeout or domains.timeout_from_env(),
+                                headers=github_api_headers(names_url),
+                                **tls.request_kwargs())
+    except Exception as error:
+        steplog.detail(f"package list failed: {error}")
+        return None
+    if response.status_code != 200:
+        steplog.detail(f"package list HTTP {response.status_code}")
+        return None
+    return [name for name in domains.listing_names(response.text, dirs_only=True) if name]
+
+
+def _explain_missing_version_list(package_name, arch, api_url):
+    """`<包名>/versions` 404 时分清三件事，报错只报其中一件。
+
+    三种原因的话术完全不同，混成一句「读不到版本清单」会让用户去查镜像 ——
+    而绝大多数情况只是包名打错了：
+
+      名字清单拿不到      → 网络 / LINUXWAVE_API_DOMAIN / 镜像没生成清单
+      名字不在清单里      → 包名错（最常见）；给出近似名与几个同类示例
+      名字在、清单却 404  → 镜像缺这一份，数据问题
+    """
+    names = fetch_package_names(arch)
+
+    if names is None:
+        steplog.fail(
+            f"cannot reach the package list, so {package_name} cannot be checked",
+            request=api_url,
+            hint=["check LINUXWAVE_API_DOMAIN points at <mirror>/LinuxWave/infosource",
+                  "if every package fails this way, the mirror has no versions lists "
+                  "yet (see docs/MIRROR-SETUP.md)",
+                  "check the network and any --proxy setting, then retry"])
+
+    if not names:
+        steplog.fail(
+            f"the package list is empty, so {package_name} cannot be checked",
+            request=api_url,
+            hint=["the mirror has not generated its versions lists yet "
+                  "(see docs/MIRROR-SETUP.md)",
+                  "ask the administrator to re-run scripts/build_versions_index.py"])
+
+    folded = {name.casefold() for name in names}
+    if package_name.casefold() not in folded:
+        from suggest import closest_name, name_examples
+
+        close = closest_name(package_name, names)
+        examples, label = name_examples(package_name, names)
+        hint = []
+        if close:
+            # 建议先 `wave info`：它只读、不装任何东西，用户想核对版本也方便。
+            # 直接给 `wave upgrade` 是错的 —— 这里同时服务 install 与 upgrade 两条路。
+            hint.append(f"did you mean `{close}`?  try: wave info {close}")
+        # 这一句是整段提示的目的：把「名字错」与「网络 / 镜像挂了」分开。
+        # 用户看到「HTTP 404」时的第一反应是去查镜像，而那通常不是原因。
+        hint.append(f"the name was checked against all {len(names)} package name(s) "
+                    f"in the index, so this is not a network or mirror problem")
+        if examples:
+            hint.append(f"{label}: " + ", ".join(examples))
+        hint.append("list every match for part of a name: wave search <part of a name>")
+        steplog.fail(f"no package named '{package_name}' in the index", hint=hint)
+
+    # 名字确实存在，只是镜像没提供它的版本清单
+    steplog.fail(
+        f"the index has no version list for {package_name}",
+        request=api_url,
+        response="HTTP 404",
+        hint=["the package name is right; the mirror is missing this file",
+              "ask the administrator to re-run scripts/build_versions_index.py on the mirror",
+              "if every package is like this, the mirror has no versions lists yet "
+              "(see docs/MIRROR-SETUP.md)"])
+
+
 # -------------------- 获取最高版本（GitHub API） --------------------
 
 def fetch_max_version(package_name, arch):
@@ -422,6 +567,9 @@ def fetch_max_version(package_name, arch):
                                 headers=github_api_headers(api_url),
                                 **tls.request_kwargs())
         if response.status_code != 200:
+            # 404 有三种完全不同的原因，混成一句「读不到」会把人引向镜像和网络
+            if response.status_code == 404:
+                _explain_missing_version_list(package_name, arch, api_url)
             print(f"{RED_BOLD}🌊 Error: Cannot fetch package list.{RESET}")
             print(f"{RED_BOLD}🌊 URL: {api_url}{RESET}")
             sys.exit(1)
@@ -521,11 +669,36 @@ def ensure_install_writable():
 
 # -------------------- 核心安装流程 --------------------
 
+# -------------------- 安装步骤（-v 与报错里的「第几步」） --------------------
+#
+# 顺序即实际执行顺序：它只用来给 -v 打「4/11」这样的计数器，以及让出错时能说清
+# 「卡在哪一步」—— 光有一句 reason，用户不知道该往前查还是往后查。
+INSTALL_STEPS = [
+    "parse command line",
+    "resolve package name",
+    "detect architecture",
+    "fetch version list",
+    "read package metadata",
+    "read version record",
+    "choose payload",
+    "download",
+    "verify and install",
+    "install dependencies",
+    "relocate and link",
+]
+
+
 def handle_install(input_string):
+    steplog.plan(INSTALL_STEPS)
+
     # 参数解析
     config = handle_download_args(input_string)
+    # 先解析旗标、打开追踪，再报第一步 —— 否则 -v 自己的这一步会被漏掉
+    steplog.set_verbose(config["verbose"])
+    steplog.begin("parse command line")
 
     # 1. 解析包名
+    steplog.begin("resolve package name")
     raw_pkg = first_package_token(input_string)
     if not raw_pkg:
         print(f"{RED_BOLD}🌊 Error: Invalid package name{RESET}")
@@ -540,6 +713,7 @@ def handle_install(input_string):
     ParsePkgName = require_safe_token(ParsePkgName, "package name")
 
     # 2. 获取架构
+    steplog.begin("detect architecture")
     machine = platform.machine().lower()
     if machine in ["arm64", "aarch64"]:
         ARCH = "arm64"
@@ -567,6 +741,7 @@ def handle_install(input_string):
         ParsePkgVersion = ver_flag
     else:
         silent.say("🌊 Fetching version info...")
+        steplog.begin("fetch version list")
         ParsePkgVersion = fetch_max_version(ParsePkgName, ARCH)
         silent.say("🌊 Version info fetched successfully.")
 
@@ -574,6 +749,7 @@ def handle_install(input_string):
     ParsePkgVersion = require_safe_token(ParsePkgVersion, "package version")
 
     # 4. 获取 bin_name（从 @common 文件）
+    steplog.begin("read package metadata")
     common_url = f"{domains.api_domain()}/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@common"
     try:
         common_resp = requests.get(common_url, timeout=domains.timeout_from_env(),
@@ -595,6 +771,7 @@ def handle_install(input_string):
     bin_name = require_safe_token(bin_name, "bin_name")
 
     # 5. 获取 URL 和 SHA256（deps 也写在该版本文件里）
+    steplog.begin("read version record")
     pkg_version_url = f"{domains.api_domain()}/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@{ParsePkgVersion}"
     try:
         resp = requests.get(pkg_version_url, timeout=domains.timeout_from_env(),
@@ -643,6 +820,7 @@ def handle_install(input_string):
 
     # 4.1 决定从哪儿取字节：配了镜像就走我们自己的存储（4.0 的 payload 命名），
     # 没配或用户要求 --install-from-source 时仍按索引的 url 取（3.1.x 的既有行为）。
+    steplog.begin("choose payload")
     if domains.use_mirror_for("bottle", config["from_source"]):
         payload = domains.resolve_payload("bottle", ParsePkgName, ParsePkgVersion, ARCH,
                                           ParsePkgFile, ParsePkgURL, False)
@@ -651,16 +829,13 @@ def handle_install(input_string):
     # 5.1 解析 deps 字段（写在版本文件里，可能多行），缺失视为无依赖
     dep_refs = get_deps(parse_common_fields(resp.text))
 
-    # 6. 简单 URL 检查，避免低级错误
-    if not ParsePkgURL.startswith("https://"):
-        if ParsePkgURL.startswith("http://"):
-            print(f"{RED_BOLD}🌊 ParsePkgURL using HTTP! That's insecure, Please contact the administrator.{RESET}")
-            sys.exit(1)
-        else:
-            print(f"{RED_BOLD}🌊 ParsePkgURL Invalid, Please contact the administrator.{RESET}")
-            sys.exit(1)
+    # 6. 地址策略已经由步骤 4.1 定完了：走镜像时地址是 domains 拼出来的，
+    # 走 --install-from-source 时 resolve_payload 已经拒绝过非 https 的 url。
+    # 这里不再重复一遍 http/https 判断 —— 重复的那份只会挡住镜像与本机演练
+    # 用的回环地址，而它挡不住任何 resolve_payload 没挡的东西。
 
     # 7. 下载
+    steplog.begin("download")
     original_filename = ParsePkgURL.split("/")[-1]
     temp_path = DOWNLOAD_TMP / f"{original_filename}.partial"
     assert_inside(temp_path, DOWNLOAD_TMP, "download path")
@@ -679,6 +854,7 @@ def handle_install(input_string):
         sys.exit(1)
 
     # 9. 拼接长字符串并传给 pkginstaller.sh（同时带上依赖列表）
+    steplog.begin("verify and install")
     target_dir = BASE_DIR / "bin" / f"{bin_name}@{ParsePkgVersion}"
     assert_inside(target_dir, BASE_DIR / "bin", "install target")
     pkg_info_string = "\n".join([
@@ -707,11 +883,13 @@ def handle_install(input_string):
         sys.exit(1)
 
     # 10. 安装依赖（递归处理依赖的依赖，进度条与软件包一致）
+    steplog.begin("install dependencies")
     if dep_refs:
         install_dependencies(dep_refs, ARCH, config, input_string,
                              ("pkg", bin_name, ParsePkgVersion))
 
     # 11. 路径替换：依赖与软件包都就位后统一做一遍
+    steplog.begin("relocate and link")
     #     （必须放最后：先装的依赖可能引用后装的依赖，提前替换会解析不到）
     transfer_installed_artifacts(target_dir)
 

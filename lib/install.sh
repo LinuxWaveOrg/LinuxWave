@@ -77,12 +77,20 @@ lw_say() {
 
 lw_say_err() {
     # 错误信息两边都打：英文给日志与工单，中文给用户。语言只决定先后。
+    #
+    # 两句话相同时只打一遍（URL、纯符号行都属于这种）。这里必须用 if 而不是
+    # `[[ … ]] && printf`：本脚本是 set -e，条件为假时那条复合命令返回 1，
+    # 会当成一次失败把安装器**静默**终止 —— 表现是输出停在半句、退出码 1。
     if [[ "$LW_LANG" == "zh" ]]; then
         printf '%b\n' "${2-$1}" >&2
-        [[ -n "${1:-}" && "${1:-}" != "${2:-}" ]] && printf '%b\n' "$1" >&2
+        if [[ -n "${1:-}" && "${1:-}" != "${2:-}" ]]; then
+            printf '%b\n' "$1" >&2
+        fi
     else
         printf '%b\n' "$1" >&2
-        [[ -n "${2:-}" && "${2:-}" != "${1:-}" ]] && printf '%b\n' "$2" >&2
+        if [[ -n "${2:-}" && "${2:-}" != "${1:-}" ]]; then
+            printf '%b\n' "$2" >&2
+        fi
     fi
 }
 
@@ -122,6 +130,10 @@ for _lw_arg in ${CLI_ARGV[@]+"${CLI_ARGV[@]}"}; do
         --raw|--RAW) CLI_RAW=true ;;
         --zh|--ZH) LW_LANG="zh" ;;
         --skip-platform-check|--SKIP-PLATFORM-CHECK) CLI_SKIP_PLATFORM_CHECK=true ;;
+        # `--help` 要放行平台闸门：想知道这个安装器怎么用的人，可能是先在
+        # 错误的系统上跑了一遍 —— 让他看用法，比只给一句「这不是给你的」有用。
+        --help|-h|--HELP) CLI_HELP=true ;;
+        --print-usage) CLI_PRINT_USAGE=true ;;
     esac
 done
 unset _lw_arg
@@ -136,7 +148,8 @@ lw_apply_presentation
 # --skip-platform-check 跳过这道闸门：拿它调试、或者在手上没有那台机器的时候
 # 演练一遍（通常配 --dry-run）。跳过时必须说一声 —— 后面的下载地址是按 Linux
 # 挑的，装出来能不能跑没人保证。
-if [[ "$CLI_SKIP_PLATFORM_CHECK" != "true" && "$(uname -s 2>/dev/null)" != "Linux" ]]; then
+if [[ "$CLI_SKIP_PLATFORM_CHECK" != "true" && "$CLI_HELP" != "true" \
+      && "$CLI_PRINT_USAGE" != "true" && "$(uname -s 2>/dev/null)" != "Linux" ]]; then
     lw_say "🌊 Error: this installer is for Linux; this system is $(uname -s 2>/dev/null)." \
         "🌊 错误：本安装器只用于 Linux；当前系统是 $(uname -s 2>/dev/null)。" >&2
     lw_say "🌊 On macOS use MacWave instead: https://macwave.org" \
@@ -826,7 +839,7 @@ Options:
                          shared install) is used, and that one needs sudo.
                          Requires passwordless sudo when privilege is needed.
       --dry-run          Print what would be done; create/download/write nothing
-      --raw              Plain output: no colours, no 🌊, for logs and scripts
+      --raw              Plain output for logs and scripts: no emoji, no colour
       --zh               Speak Chinese (English by default)
       --print-usage      Print this usage, then continue (--help stops instead)
       --skip-probe       Do not contact the self-update probe (offline mirrors)
@@ -1043,11 +1056,21 @@ else
 fi
 
 if [[ -z "$LINUXWAVE_VERSION" || -z "$LATEST_BRANCH" ]]; then
-    lw_say_err "${RED_BOLD}🌊 Error: Cannot read the latest version from the self-update probe.${RESET}" \
-        "${RED_BOLD}🌊 错误：读不到自更新探针里的版本号。${RESET}"
-    lw_say_err "🌊 Check your network or proxy, then run the installer again." \
-        "🌊 请检查网络或代理后重新运行安装器。"
-    exit 1
+    if [[ "$CLI_DRY_RUN" == "true" ]]; then
+        # 试运行可能只是想看输出，不该因为断网就断在第一行：用占位值把流程
+        # 走完，后面每一处都只打印、不落地。真实安装仍然在这里退出。
+        LINUXWAVE_VERSION="${LINUXWAVE_VERSION:-unknown}"
+        LATEST_BRANCH="${LATEST_BRANCH:-unknown}"
+        lw_say_err "${YELLOW}🌊 Dry run: could not read the latest version; using '$LINUXWAVE_VERSION'.${RESET}" \
+            "${YELLOW}🌊 试运行：读不到最新版本号，用占位值 '$LINUXWAVE_VERSION'。${RESET}"
+        lw_say_err "🌊   $(lw_redact "$PROBE_URL")" "🌊   $(lw_redact "$PROBE_URL")"
+    else
+        lw_say_err "${RED_BOLD}🌊 Error: Cannot read the latest version from the self-update probe.${RESET}" \
+            "${RED_BOLD}🌊 错误：读不到自更新探针里的版本号。${RESET}"
+        lw_say_err "🌊 Check your network or proxy, then run the installer again." \
+            "🌊 请检查网络或代理后重新运行安装器。"
+        exit 1
+    fi
 fi
 
 BRANCH="$LATEST_BRANCH"
@@ -1241,6 +1264,63 @@ lw_privileged() {
     lw_sudo "$@"
 }
 
+lw_download() {
+    # lw_download <url> <out> <max-time> [runner]
+    #
+    # 非 --raw 时就是原来那句 `curl -fsSL … -o <out>` —— 行为、返回值完全不变。
+    # --raw 时多打一行井号刻度：**总长已知就每 10% 一个 #**（与 Python 侧
+    # _RawProgress 同一条规则），未知就每 MiB 一个。不换行重绘、不带颜色，
+    # 所以落进日志是一行完整的进度，而不是一串控制字符。
+    local url="$1" out="$2" cap="$3" runner="${4:-}"
+    local rc=0 total pid size shown=0 step
+    if ! lw_raw; then
+        if [[ "$runner" == "run_cmd" ]]; then
+            run_cmd curl -fsSL --connect-timeout 20 --max-time "$cap" ${CURL_CACERT:+--cacert "$CURL_CACERT"} -o "$out" "$url"
+        else
+            curl -fsSL --connect-timeout 20 --max-time "$cap" ${CURL_CACERT:+--cacert "$CURL_CACERT"} -o "$out" "$url"
+        fi
+        return $?
+    fi
+
+    # 先问一次长度。HEAD 失败不算错：拿不到就按 MiB 打刻度。
+    total="$(curl -fsSI --max-time "$cap" ${CURL_CACERT:+--cacert "$CURL_CACERT"} "$url" 2>/dev/null \
+        | tr -d '\r' | tr 'A-Z' 'a-z' | awk -F': *' '$1=="content-length"{print $2}' | tail -n 1)"
+    case "$total" in
+        ''|*[!0-9]*) total=0 ;;
+    esac
+    if (( total > 0 )); then
+        step=$(( total / 10 ))
+        (( step > 0 )) || step=1
+    else
+        step=1048576
+    fi
+
+    rm -f "$out" 2>/dev/null || true
+    curl -fsSL --connect-timeout 20 --max-time "$cap" ${CURL_CACERT:+--cacert "$CURL_CACERT"} -o "$out" "$url" & pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        size=$(wc -c < "$out" 2>/dev/null | tr -d ' ')
+        size=${size:-0}
+        while (( (shown + 1) * step <= size )); do
+            printf '#'
+            shown=$(( shown + 1 ))
+        done
+        sleep 0.2
+    done
+    wait "$pid" || rc=$?
+
+    if (( rc == 0 )); then
+        # 小文件可能一格都没打；补满十个 #，让每一行下载都是同一个形状
+        while (( shown < 10 )); do
+            printf '#'
+            shown=$(( shown + 1 ))
+        done
+        printf '  %s\n' "$(wc -c < "$out" 2>/dev/null | tr -d ' ')"
+    else
+        printf '\n'
+    fi
+    return $rc
+}
+
 run_cmd() {
     # 试运行只把命令打出来：建目录、写配置、删旧文件都经由这里。
     if [[ "${CLI_DRY_RUN:-false}" == "true" ]]; then
@@ -1268,6 +1348,11 @@ if [[ "$NEED_SUDO" == "true" ]]; then
                 "${RED_BOLD}🌊 请以 root 运行，或为安装用户配置免密 sudo。${RESET}"
             exit 1
         fi
+    elif [[ "$CLI_DRY_RUN" == "true" ]]; then
+        # 试运行承诺「不在系统里留下任何痕迹」，提权也没有东西可做；
+        # 真去调 sudo -v 会卡在密码提示上，断掉的正是试运行的用途。
+        lw_say "${YELLOW}🌊 Dry run: would ask for administrator access here.${RESET}" \
+            "${YELLOW}🌊 试运行：这里会请求管理员权限。${RESET}"
     else
         lw_say "${YELLOW}🌊 Granting temporary administrator access for installation...${RESET}" \
             "${YELLOW}🌊 正在获取临时的管理员权限以完成安装……${RESET}"
@@ -1310,42 +1395,56 @@ cleanup_update_commands() {
 }
 trap cleanup_update_commands EXIT
 
-lw_say "🌊 Fetching the update commands..." "🌊 正在获取更新命令……"
+# 4.4 起试运行不再去取这份脚本：它只是打印「会做什么」，而断网时取不到就会
+# 退出 —— 试运行的用途恰恰是「先看看」，不该被网络挡住。真实安装照旧：
+# 取不到就退出，绝不留下一个配置已写好、文件却一个都没下的半成品。
+fetch_update_commands() {
+    lw_say "🌊 Fetching the update commands..." "🌊 正在获取更新命令……"
 
-UPDATE_COMMANDS_OK=false
-for attempt in $(seq 1 "$UPDATE_COMMANDS_ATTEMPTS"); do
-    if curl -fsSL --max-time 60 ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
-            -o "$UPDATE_COMMANDS_TMP" "$UPDATE_COMMANDS_URL"; then
-        UPDATE_COMMANDS_OK=true
-        break
+    UPDATE_COMMANDS_OK=false
+    for attempt in $(seq 1 "$UPDATE_COMMANDS_ATTEMPTS"); do
+        if lw_download "$UPDATE_COMMANDS_URL" "$UPDATE_COMMANDS_TMP" 60; then
+            UPDATE_COMMANDS_OK=true
+            break
+        fi
+        if [[ "$attempt" -lt "$UPDATE_COMMANDS_ATTEMPTS" ]]; then
+            lw_say "${YELLOW}🌊 Retrying the update commands ($((attempt + 1))/$UPDATE_COMMANDS_ATTEMPTS)...${RESET}" \
+                "${YELLOW}🌊 正在重试获取更新命令（$((attempt + 1))/$UPDATE_COMMANDS_ATTEMPTS）……${RESET}"
+        fi
+    done
+
+    if [[ "$UPDATE_COMMANDS_OK" != "true" ]]; then
+        lw_say_err "${RED_BOLD}🌊 Error: Cannot fetch the update commands for $LINUXWAVE_VERSION.${RESET}" \
+            "${RED_BOLD}🌊 错误：取不到 $LINUXWAVE_VERSION 的更新命令。${RESET}"
+        lw_say_err "${RED_BOLD}🌊   $(lw_redact "$UPDATE_COMMANDS_URL")${RESET}" \
+            "${RED_BOLD}🌊   $(lw_redact "$UPDATE_COMMANDS_URL")${RESET}"
+        lw_say_err "🌊 Nothing was installed. Check your network or proxy, then run the installer again." \
+            "🌊 什么都没装。请检查网络或代理后重新运行安装器。"
+        exit 1
     fi
-    if [[ "$attempt" -lt "$UPDATE_COMMANDS_ATTEMPTS" ]]; then
-        lw_say "${YELLOW}🌊 Retrying the update commands ($((attempt + 1))/$UPDATE_COMMANDS_ATTEMPTS)...${RESET}" \
-            "${YELLOW}🌊 正在重试获取更新命令（$((attempt + 1))/$UPDATE_COMMANDS_ATTEMPTS）……${RESET}"
+
+    # 哈希对不上说明「即将被 bash 执行的东西」不是发布时那一份。
+    # 实验期只警告；LINUXWAVE_STRICT_HASHES=1 时才失败。
+    lw_check_integrity "update_commands.sh" "$UPDATE_COMMANDS_TMP" "$EXPECTED_UPDATE_COMMANDS_SHA256"
+
+    # 即将被 bash 执行的东西，先确认它至少是合法 shell。
+    if ! /bin/bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
+        lw_say_err "${RED_BOLD}🌊 Error: the update commands for $LINUXWAVE_VERSION are not valid shell.${RESET}" \
+            "${RED_BOLD}🌊 错误：$LINUXWAVE_VERSION 的更新命令不是合法 shell。${RESET}"
+        lw_say_err "🌊 Nothing was installed. Please report this to the administrator." \
+            "🌊 什么都没装。请把这件事报给维护者。"
+        exit 1
     fi
-done
+}
 
-if [[ "$UPDATE_COMMANDS_OK" != "true" ]]; then
-    lw_say_err "${RED_BOLD}🌊 Error: Cannot fetch the update commands for $LINUXWAVE_VERSION.${RESET}" \
-        "${RED_BOLD}🌊 错误：取不到 $LINUXWAVE_VERSION 的更新命令。${RESET}"
-    lw_say_err "${RED_BOLD}🌊   $(lw_redact "$UPDATE_COMMANDS_URL")${RESET}" \
-        "${RED_BOLD}🌊   $(lw_redact "$UPDATE_COMMANDS_URL")${RESET}"
-    lw_say_err "🌊 Nothing was installed. Check your network or proxy, then run the installer again." \
-        "🌊 什么都没装。请检查网络或代理后重新运行安装器。"
-    exit 1
-fi
-
-# 哈希对不上说明「即将被 bash 执行的东西」不是发布时那一份。
-# 实验期只警告；LINUXWAVE_STRICT_HASHES=1 时才失败。
-lw_check_integrity "update_commands.sh" "$UPDATE_COMMANDS_TMP" "$EXPECTED_UPDATE_COMMANDS_SHA256"
-
-# 即将被 bash 执行的东西，先确认它至少是合法 shell。
-if ! /bin/bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
-    lw_say_err "${RED_BOLD}🌊 Error: the update commands for $LINUXWAVE_VERSION are not valid shell.${RESET}" \
-        "${RED_BOLD}🌊 错误：$LINUXWAVE_VERSION 的更新命令不是合法 shell。${RESET}"
-    lw_say_err "🌊 Nothing was installed. Please report this to the administrator." \
-        "🌊 什么都没装。请把这件事报给维护者。"
-    exit 1
+if [[ "$CLI_DRY_RUN" == "true" ]]; then
+    lw_say "${YELLOW}🌊 Dry run: would fetch the update commands for $LINUXWAVE_VERSION and run them.${RESET}" \
+        "${YELLOW}🌊 试运行：将获取 $LINUXWAVE_VERSION 的更新命令并执行：${RESET}"
+    lw_say "${YELLOW}    $(lw_redact "$UPDATE_COMMANDS_URL")${RESET}"
+    lw_say "${YELLOW}🌊   They download the program files into $BASE_DIR and apply directory migrations.${RESET}" \
+        "${YELLOW}🌊   它会把程序文件下载到 $BASE_DIR，并执行目录结构迁移。${RESET}"
+else
+    fetch_update_commands
 fi
 
 # ==========================================
@@ -1728,9 +1827,8 @@ ensure_portable_python() {
         # 路径形状由 net/domains.py 的 python_archive_url 定义，scripts/python_source_test.sh 会比对。
         # 自家存储只试一次：它不通就该立刻回上游，而不是在这里重试三次。
         if [[ -z "${LINUXWAVE_PYTHON_FROM_SOURCE:-}" ]]; then
-            if run_cmd curl -fsSL ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
-                   --connect-timeout 20 --max-time 600 -o "$archive" \
-                   "$PYTHON_DATA_URL/pythondata/$version/$(basename "$url")" 2>/dev/null; then
+            if lw_download "$PYTHON_DATA_URL/pythondata/$version/$(basename "$url")" \
+                   "$archive" 600 run_cmd 2>/dev/null; then
                 :
             else
                 run_cmd rm -f "$archive" 2>/dev/null || true
@@ -1745,9 +1843,7 @@ ensure_portable_python() {
             # 每次重试前清掉上次的半截文件：否则「文件存在」会被当成下载成功，
             # 最后倒在 sha256 比对那一步，报错方向就错了。
             run_cmd rm -f "$archive" 2>/dev/null || true
-            if run_cmd curl -fsSL ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
-                   --retry 2 --retry-all-errors --retry-delay 3 \
-                   --connect-timeout 20 --max-time 600 -o "$archive" "$url" 2>/dev/null; then
+            if lw_download "$url" "$archive" 600 run_cmd 2>/dev/null; then
                 break
             fi
             if [[ "$attempt" -lt 3 ]]; then
@@ -1892,95 +1988,109 @@ PYTHON_BIN=""
 PYTHON_SOURCE=""
 
 lw_say "🌊 Preparing the Python runtime..." "🌊 正在准备 Python 运行环境……"
-lw_try ensure_portable_python "$BASE_DIR" "$(portable_python_arch)"
-BUNDLED_PY="$LW_OPTIONAL_RESULT"
-
-if [[ -n "$BUNDLED_PY" ]]; then
-    PYTHON_BIN="$BUNDLED_PY"
-    PYTHON_SOURCE="bundled"
-    lw_say "🌊 Using the bundled Python: ${BUNDLED_PY#"$BASE_DIR"/}" \
-        "🌊 使用自带解释器：${BUNDLED_PY#"$BASE_DIR"/}"
-else
-    PYTHON_BIN="$(command -v python3 || true)"
-    PYTHON_SOURCE="system"
-    if [[ -z "$PYTHON_BIN" ]]; then
-        lw_say_err "${RED_BOLD}🌊 Error: no Python 3 interpreter is available.${RESET}" \
-            "${RED_BOLD}🌊 错误：没有可用的 Python 3 解释器。${RESET}"
-        lw_say_err "${RED_BOLD}🌊 The bundled Python could not be downloaded and python3 is not in PATH.${RESET}" \
-            "${RED_BOLD}🌊 自带解释器下载失败，PATH 上也没有 python3。${RESET}"
-        exit 1
-    fi
-    lw_say "${YELLOW}🌊 Warning: could not prepare the bundled Python; using $PYTHON_BIN instead.${RESET}" \
-        "${YELLOW}🌊 警告：没能准备好自带解释器，改用 $PYTHON_BIN。${RESET}"
-    lw_say "${YELLOW}🌊 Re-run the installer when the network is available to make this installation self-contained.${RESET}" \
-        "${YELLOW}🌊 网络可用时重跑一次安装器，就能把这次安装补齐成自带环境的形态。${RESET}"
-fi
-
-run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
-
-if run_cmd "$PYTHON_BIN" -m venv "$VENV_DIR" >/dev/null 2>&1; then
-    VENV_PY="$VENV_DIR/bin/python3"
-    [[ -x "$VENV_PY" ]] || VENV_PY="$VENV_DIR/bin/python"
-    lw_say "🌊 Private Python environment ready: ${VENV_DIR#"$BASE_DIR"/}" \
-        "🌊 私有 Python 环境已就绪：${VENV_DIR#"$BASE_DIR"/}"
-else
-    VENV_PY=""
-    lw_say "${YELLOW}🌊 Warning: could not create a private virtualenv; using the ${PYTHON_SOURCE} interpreter directly.${RESET}" \
-        "${YELLOW}🌊 警告：无法创建私有 venv，直接使用 ${PYTHON_SOURCE} 解释器。${RESET}"
-fi
-
 # 运行时依赖的唯一清单（pyproject.toml 是事实来源，scripts/depsync_test.sh
 # 断言两边一致）。urllib3 不是可有可无的：net/tls.py 用它抑制 --skip-ssl 下的
 # InsecureRequestWarning，缺了它整个 TLS 策略模块都 import 不起来。
 PIP_DEPS=(requests packaging urllib3 rich)
 
-deps_present() {
-    # 判断一个解释器是否真的能 import 到每一个依赖（启动器用的是同一条判据）
-    [[ -n "$1" ]] || return 1
-    "$1" -c 'import requests, packaging, urllib3, rich' >/dev/null 2>&1
-}
+if [[ "$CLI_DRY_RUN" == "true" ]]; then
+    # 试运行把这一段也「走一遍」，但一步都不执行：真去下 26MB 的解释器、
+    # 建 venv、跑 pip，既违背「不改变任何东西」，也会在断网时中途退出。
+    lw_say "${YELLOW}🌊 Dry run: would check the bundled Python and download it when missing (about 26 MB).${RESET}" \
+        "${YELLOW}🌊 试运行：将检查自带解释器，缺了就下载（约 26 MB）。${RESET}"
+    lw_say "${YELLOW}🌊   Destination: $BASE_DIR/python/<version>/bin/python3${RESET}"
+    lw_say "${YELLOW}🌊 Dry run: would create the private Python environment at $VENV_DIR.${RESET}" \
+        "${YELLOW}🌊 试运行：将创建私有 Python 环境：$VENV_DIR。${RESET}"
+    lw_say "${YELLOW}🌊 Dry run: would install ${PIP_DEPS[*]} into the private environment (index: $PIP_INDEX_URL).${RESET}" \
+        "${YELLOW}🌊 试运行：将把 ${PIP_DEPS[*]} 装进私有环境（索引：$PIP_INDEX_URL）。${RESET}"
+    # 后面写启动器要用它；试运行只需要一个「看起来对」的值，不会执行
+    PYTHON_BIN="$(command -v python3 || echo python3)"
+else
+    lw_try ensure_portable_python "$BASE_DIR" "$(portable_python_arch)"
+    BUNDLED_PY="$LW_OPTIONAL_RESULT"
 
-if [[ -n "$VENV_PY" && -x "$VENV_PY" ]]; then
-    lw_say "🌊 Installing Python dependencies into the private environment..." \
-        "🌊 正在把 Python 依赖装进私有环境……"
-    # --timeout/--retries 收小：离线环境里让 pip 尽快失败，好走到下面的降级分支，
-    # 而不是死等默认的长超时（隔离测试根里每次安装都会走一遍）。
-    run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 --upgrade pip >/dev/null 2>&1 || true
-    run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 "${PIP_DEPS[@]}" >/dev/null 2>&1 || true
-
-    if deps_present "$VENV_PY"; then
-        :
+    if [[ -n "$BUNDLED_PY" ]]; then
+        PYTHON_BIN="$BUNDLED_PY"
+        PYTHON_SOURCE="bundled"
+        lw_say "🌊 Using the bundled Python: ${BUNDLED_PY#"$BASE_DIR"/}" \
+            "🌊 使用自带解释器：${BUNDLED_PY#"$BASE_DIR"/}"
     else
-        # 拿不到 PyPI 时（离线安装、镜像不可达），退回「继承父解释器 site-packages」
-        # 的 venv —— 系统 python3 上通常已经有这三个包（apt 的 python3-requests 等），
-        # 这样离线环境也能装完并跑起来，而不是直接失败。
-        lw_say "${YELLOW}🌊 Could not install the dependencies into the venv; retrying with the parent's packages.${RESET}" \
-            "${YELLOW}🌊 依赖没能装进 venv，改用继承父解释器 site-packages 的方式重试。${RESET}"
-        run_cmd rm -rf "$VENV_DIR" 2>/dev/null || true
-        run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
-        if run_cmd "$PYTHON_BIN" -m venv --system-site-packages "$VENV_DIR" >/dev/null 2>&1; then
-            VENV_PY="$VENV_DIR/bin/python3"
-            [[ -x "$VENV_PY" ]] || VENV_PY="$VENV_DIR/bin/python"
+        PYTHON_BIN="$(command -v python3 || true)"
+        PYTHON_SOURCE="system"
+        if [[ -z "$PYTHON_BIN" ]]; then
+            lw_say_err "${RED_BOLD}🌊 Error: no Python 3 interpreter is available.${RESET}" \
+                "${RED_BOLD}🌊 错误：没有可用的 Python 3 解释器。${RESET}"
+            lw_say_err "${RED_BOLD}🌊 The bundled Python could not be downloaded and python3 is not in PATH.${RESET}" \
+                "${RED_BOLD}🌊 自带解释器下载失败，PATH 上也没有 python3。${RESET}"
+            exit 1
         fi
-        if ! deps_present "$VENV_PY"; then
-            VENV_PY=""
+        lw_say "${YELLOW}🌊 Warning: could not prepare the bundled Python; using $PYTHON_BIN instead.${RESET}" \
+            "${YELLOW}🌊 警告：没能准备好自带解释器，改用 $PYTHON_BIN。${RESET}"
+        lw_say "${YELLOW}🌊 Re-run the installer when the network is available to make this installation self-contained.${RESET}" \
+            "${YELLOW}🌊 网络可用时重跑一次安装器，就能把这次安装补齐成自带环境的形态。${RESET}"
+    fi
+
+    run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
+
+    if run_cmd "$PYTHON_BIN" -m venv "$VENV_DIR" >/dev/null 2>&1; then
+        VENV_PY="$VENV_DIR/bin/python3"
+        [[ -x "$VENV_PY" ]] || VENV_PY="$VENV_DIR/bin/python"
+        lw_say "🌊 Private Python environment ready: ${VENV_DIR#"$BASE_DIR"/}" \
+            "🌊 私有 Python 环境已就绪：${VENV_DIR#"$BASE_DIR"/}"
+    else
+        VENV_PY=""
+        lw_say "${YELLOW}🌊 Warning: could not create a private virtualenv; using the ${PYTHON_SOURCE} interpreter directly.${RESET}" \
+            "${YELLOW}🌊 警告：无法创建私有 venv，直接使用 ${PYTHON_SOURCE} 解释器。${RESET}"
+    fi
+
+    deps_present() {
+        # 判断一个解释器是否真的能 import 到每一个依赖（启动器用的是同一条判据）
+        [[ -n "$1" ]] || return 1
+        "$1" -c 'import requests, packaging, urllib3, rich' >/dev/null 2>&1
+    }
+
+    if [[ -n "$VENV_PY" && -x "$VENV_PY" ]]; then
+        lw_say "🌊 Installing Python dependencies into the private environment..." \
+            "🌊 正在把 Python 依赖装进私有环境……"
+        # --timeout/--retries 收小：离线环境里让 pip 尽快失败，好走到下面的降级分支，
+        # 而不是死等默认的长超时（隔离测试根里每次安装都会走一遍）。
+        run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 --upgrade pip >/dev/null 2>&1 || true
+        run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 "${PIP_DEPS[@]}" >/dev/null 2>&1 || true
+
+        if deps_present "$VENV_PY"; then
+            :
+        else
+            # 拿不到 PyPI 时（离线安装、镜像不可达），退回「继承父解释器 site-packages」
+            # 的 venv —— 系统 python3 上通常已经有这三个包（apt 的 python3-requests 等），
+            # 这样离线环境也能装完并跑起来，而不是直接失败。
+            lw_say "${YELLOW}🌊 Could not install the dependencies into the venv; retrying with the parent's packages.${RESET}" \
+                "${YELLOW}🌊 依赖没能装进 venv，改用继承父解释器 site-packages 的方式重试。${RESET}"
+            run_cmd rm -rf "$VENV_DIR" 2>/dev/null || true
+            run_cmd mkdir -p "$VENV_DIR" 2>/dev/null || true
+            if run_cmd "$PYTHON_BIN" -m venv --system-site-packages "$VENV_DIR" >/dev/null 2>&1; then
+                VENV_PY="$VENV_DIR/bin/python3"
+                [[ -x "$VENV_PY" ]] || VENV_PY="$VENV_DIR/bin/python"
+            fi
+            if ! deps_present "$VENV_PY"; then
+                VENV_PY=""
+            fi
         fi
     fi
-fi
 
-if [[ -z "$VENV_PY" ]]; then
-    lw_say "${YELLOW}🌊 Warning: no private environment with the dependencies; using $PYTHON_BIN directly.${RESET}" \
-        "${YELLOW}🌊 警告：没有带依赖的私有环境，直接使用 $PYTHON_BIN。${RESET}"
-fi
+    if [[ -z "$VENV_PY" ]]; then
+        lw_say "${YELLOW}🌊 Warning: no private environment with the dependencies; using $PYTHON_BIN directly.${RESET}" \
+            "${YELLOW}🌊 警告：没有带依赖的私有环境，直接使用 $PYTHON_BIN。${RESET}"
+    fi
 
-# 最后一道判据：选定解释器必须真的能 import。给不出可用的解释器就不要谎报安装成功。
-if ! deps_present "$VENV_PY" && ! deps_present "$PYTHON_BIN"; then
-    lw_say_err "${RED_BOLD}🌊 Error: no Python interpreter with requests/packaging/urllib3/rich is available.${RESET}" \
-        "${RED_BOLD}🌊 错误：没有哪个 Python 解释器能 import requests/packaging/urllib3/rich。${RESET}"
-    lw_say_err "${RED_BOLD}🌊 Install them for one interpreter and re-run, or retry when the network is up.${RESET}" \
-        "${RED_BOLD}🌊 请给其中一个解释器装上这三个包后重跑，或等网络恢复再试。${RESET}"
-    lw_say_err "${RED_BOLD}🌊   python3 -m pip install requests packaging urllib3 rich${RESET}"
-    exit 1
+    # 最后一道判据：选定解释器必须真的能 import。给不出可用的解释器就不要谎报安装成功。
+    if ! deps_present "$VENV_PY" && ! deps_present "$PYTHON_BIN"; then
+        lw_say_err "${RED_BOLD}🌊 Error: no Python interpreter with requests/packaging/urllib3/rich is available.${RESET}" \
+            "${RED_BOLD}🌊 错误：没有哪个 Python 解释器能 import requests/packaging/urllib3/rich。${RESET}"
+        lw_say_err "${RED_BOLD}🌊 Install them for one interpreter and re-run, or retry when the network is up.${RESET}" \
+            "${RED_BOLD}🌊 请给其中一个解释器装上这三个包后重跑，或等网络恢复再试。${RESET}"
+        lw_say_err "${RED_BOLD}🌊   python3 -m pip install requests packaging urllib3 rich${RESET}"
+        exit 1
+    fi
 fi
 
 write_launcher "$BASE_DIR" "$PYTHON_BIN"
@@ -2041,7 +2151,11 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     #   · `id -G`（不带参数）读的是**当前会话**的进程组 —— 回答「这个 shell 真的
     #     具备该组身份了吗」。刚写进 /etc/group 而还没重登时，前者为真、后者为假，
     #     所以「要不要重新登录」只能用后者，否则会把待重登的用户谎报成已生效。
-    SHARED_GID="$(getent group "$SHARED_USER" 2>/dev/null | cut -d: -f3)"
+    # `|| true`：查不到这个组是**正常的**（还没建），而本脚本是 set -e +
+    # ERR trap —— 不加就直接把「组不存在」报成「安装失败 (exit 2)」。
+    # 非 glibc 系统（macOS 上演练时）连 getent 都没有，command not found 的 127
+    # 会走同一条错路。
+    SHARED_GID="$(getent group "$SHARED_USER" 2>/dev/null | cut -d: -f3 || true)"
     if [[ "$CURRENT_USER" != "$SHARED_USER" ]] \
         && ! id -G "$CURRENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$SHARED_GID"; then
         # 加组失败不该让整个安装失败：树本身已经装好、也仍然能用，
@@ -2201,7 +2315,12 @@ record_agreement() {
 echo ""
 lw_say "${YELLOW}Please read the agreement before use (see bottom of https://linuxwave.org).${RESET}" \
     "${YELLOW}使用前请先阅读用户协议（见 https://linuxwave.org 页面底部）。${RESET}"
-if [[ "$CLI_CI" == "true" ]]; then
+if [[ "$CLI_DRY_RUN" == "true" ]]; then
+    # 试运行不问协议，也不记录：什么都不装，就没有「使用」需要同意。
+    lw_say "🌊 Dry run: the agreement is not asked and nothing is recorded." \
+        "🌊 试运行：不问协议，也不记录任何内容。"
+    agreement="yes"
+elif [[ "$CLI_CI" == "true" ]]; then
     lw_say "🌊 --ci: the agreement is accepted automatically." "🌊 --ci：自动接受用户协议。"
     agreement="yes"
 else
@@ -2289,8 +2408,31 @@ fi
 # ==========================================
 
 echo ""
-lw_say "🌊 Installation complete!" "🌊 安装完成！"
-lw_say "🌊 LinuxWave installed to: $DISPLAY_DIR" "🌊 LinuxWave 已安装到：$DISPLAY_DIR"
+if [[ "$CLI_DRY_RUN" == "true" ]]; then
+    lw_say "${GREEN}🌊 Dry run finished. Nothing was installed or changed.${RESET}" \
+        "${GREEN}🌊 试运行结束。没有安装或修改任何内容。${RESET}"
+    lw_say "🌊 LinuxWave would be installed to: $DISPLAY_DIR" "🌊 LinuxWave 将被安装到：$DISPLAY_DIR"
+    # 装饰与艺术字同一条规矩：--raw 是给日志和 grep 看的，逐字去掉。
+    if ! lw_raw; then
+        echo ""
+        printf '%b\n' "${SKY_BLUE}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${RESET}"
+        echo ""
+        printf '%b\n' "${SKY_BLUE}                  (DRY_RUN)The tide rises, the tide falls...                    ${RESET}"
+        echo ""
+        printf '%b\n' "${SKY_BLUE}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${RESET}"
+    fi
+else
+    lw_say "🌊 Installation complete!" "🌊 安装完成！"
+    lw_say "🌊 LinuxWave installed to: $DISPLAY_DIR" "🌊 LinuxWave 已安装到：$DISPLAY_DIR"
+    if ! lw_raw; then
+        printf '%b\n' "${SKY_BLUE}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${RESET}"
+        echo ""
+        printf '%b\n' "${SKY_BLUE}                       The tide rises, the tide falls...                        ${RESET}"
+        echo ""
+        printf '%b\n' "${SKY_BLUE}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${RESET}"
+    fi
+fi
+echo ""
 lw_say "🌊 Architecture: $ARCH" "🌊 架构：$ARCH"
 echo ""
 
