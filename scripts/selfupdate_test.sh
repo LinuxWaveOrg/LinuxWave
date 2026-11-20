@@ -174,11 +174,14 @@ assert data['release_date'] == '2026-01-01', data
 assert 'unquoted' not in data, data
 assert 'broken_line_without_equals' not in data, data
 
-# 版本比较：补齐到四位，2.3 == 2.3.0，跨位数按数值比
-assert module.version_key('2.3') == module.version_key('2.3.0')
-assert module.version_key('2.2.0') < module.version_key('2.3')
-assert module.version_key('2.10.0') > module.version_key('2.9.0')
-assert module.version_key('2.3') >= module.version_key('2.3')
+# 版本比较走 lib/versioncompare.py（版本逻辑只有一份实现）：
+# 2.3 == 2.3.0、跨位数按数值比、预发布排在同号正式版之下
+from versioncompare import compare
+assert compare('2.3', '2.3.0') == 0
+assert compare('2.2.0', '2.3') < 0
+assert compare('2.10.0', '2.9.0') > 0
+assert compare('2.3', '2.3') == 0
+assert compare('4.4.0-beta1', '4.4.0') < 0
 
 print('🌊 Parsing and version comparison OK')
 PYEOF
