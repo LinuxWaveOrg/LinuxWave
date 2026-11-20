@@ -347,10 +347,9 @@ sys.path.insert(0, os.path.join(repo, "scripts"))
 import components
 
 # 3.1.0 起 lib/wave 不再是 wave.py 的副本，而是 write_launcher 生成的 sh 启动器
-# （自带解释器 + 私有 venv）。命令表要从 lib/wave.py 读。
-with open(os.path.join(base_dir, 'lib', 'wave.py'), encoding='utf-8') as handle:
-    source = handle.read()
-
+# （自带解释器 + 私有 venv）。4.0 又把命令表从 wave.py 的 dict 搬进了
+# cli/commands.py 的 Command 列表（表驱动分发），所以这里直接 import 那张表 ——
+# 用正则去扒源码的写法在换结构的那天必然静默失效（正是这条断言想防的事）。
 launcher = os.path.join(base_dir, 'lib', 'wave')
 if os.path.exists(launcher):
     with open(launcher, encoding='utf-8') as handle:
@@ -358,10 +357,12 @@ if os.path.exists(launcher):
             print('🌊 Error: lib/wave is not a launcher (no #! line)')
             sys.exit(1)
 
-block = source.split('COMMANDS = {', 1)[1].split('}', 1)[0]
-commands = re.findall(r'"(\w+)"\s*:\s*"(\w+)"', block)
+sys.path[:0] = [os.path.join(base_dir, name) for name in components.names()]
+import commands as commands_module
+
+commands = [(entry.name, entry.module) for entry in commands_module.all()]
 if not commands:
-    print('🌊 Error: could not read any entry from COMMANDS')
+    print('🌊 Error: could not read any entry from cli/commands.py')
     sys.exit(1)
 
 missing = []
