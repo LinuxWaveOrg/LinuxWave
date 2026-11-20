@@ -362,8 +362,9 @@ else
 import sys
 
 repo = sys.argv[1]
-sys.path.insert(0, f"{repo}/net")
-sys.path.insert(0, f"{repo}/lib")
+sys.path.insert(0, f"{repo}/scripts")
+import components
+components.add_to_sys_path(repo)
 import domains
 
 for raw in ("40", "40s", "1min", "1min20s", "2h", "250ms", "1.5m"):

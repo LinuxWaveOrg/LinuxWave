@@ -21,6 +21,7 @@ RESET = '\033[0m'
 import domains
 import flags
 import steplog
+import tls
 from configpaths import load_base_dir, require_safe_token
 
 
@@ -84,7 +85,8 @@ def fetch_remote_versions(pkg_name, arch, budget=None):
     pkg_name = require_safe_token(pkg_name, "package name")
     api_url = domains.index_list_url(arch, pkg_name)
     try:
-        resp = requests.get(api_url, timeout=_to(budget), headers=github_api_headers(api_url))
+        resp = requests.get(api_url, timeout=_to(budget), headers=github_api_headers(api_url),
+                      **tls.request_kwargs())
         if resp.status_code != 200:
             return []
         # GitHub API 是 JSON 数组，镜像是一行一条的纯文本；listing_names 统一两者。
@@ -108,7 +110,8 @@ def fetch_remote_info(pkg_name, arch, budget=None):
     pkg_name = require_safe_token(pkg_name, "package name")
     common_url = f"{domains.api_domain()}/pkg/pkginfo_{arch}/{pkg_name}/_{pkg_name}@common"
     try:
-        resp = requests.get(common_url, timeout=_to(budget), headers=github_api_headers(common_url))
+        resp = requests.get(common_url, timeout=_to(budget), headers=github_api_headers(common_url),
+                      **tls.request_kwargs())
         if resp.status_code != 200:
             return None, None
     except Exception:
@@ -154,7 +157,8 @@ def handle_search(query, budget=None):
     api_url = domains.index_list_url(arch)
 
     try:
-        resp = requests.get(api_url, timeout=_to(budget), headers=github_api_headers(api_url))
+        resp = requests.get(api_url, timeout=_to(budget), headers=github_api_headers(api_url),
+                      **tls.request_kwargs())
         if resp.status_code != 200:
             print(f"{RED_BOLD}🌊 Error: Cannot fetch package list.{RESET}")
             print(f"{RED_BOLD}🌊 URL: {api_url}{RESET}")

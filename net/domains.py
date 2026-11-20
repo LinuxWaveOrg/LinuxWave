@@ -29,6 +29,7 @@ import sys
 from urllib.parse import quote
 
 import steplog
+import tls
 
 
 # -------------------- 颜色定义 --------------------
@@ -545,13 +546,14 @@ def fetch_text(url, timeout=30):
 
     if not _has_userinfo(url):
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as response:
+            with urllib.request.urlopen(url, timeout=timeout, **tls.urlopen_kwargs()) as response:
                 return response.read().decode()
         except (urllib.error.URLError, UnicodeDecodeError, OSError):
             pass
 
     result = subprocess.run(["curl", "-fsSL", "--max-time", str(max(1, int(timeout))),
-                             "--retry", "2", "--retry-delay", "2", "--retry-connrefused", url],
+                             "--retry", "2", "--retry-delay", "2", "--retry-connrefused"]
+                            + tls.curl_flags() + [url],
                             capture_output=True, text=True)
     if result.returncode != 0:
         return None

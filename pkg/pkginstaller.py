@@ -70,8 +70,6 @@ DOWNLOAD_TMP = BASE_DIR / "downloads" / "tmp"
 try:
     import requests
     from requests.exceptions import HTTPError, ConnectionError, Timeout
-    from urllib3.exceptions import InsecureRequestWarning
-    import urllib3
 except ImportError:
     print(f"{RED_BOLD}🌊 Error: 'requests' library is not installed.{RESET}")
     print(f"{RED_BOLD}🌊 Please install it using: pip3 install requests{RESET}")
@@ -231,9 +229,12 @@ def handle_download_args(input_string):
     found = parse_flags(input_string)
     options = common.parse(input_string)
 
+    # 命令行写了 --skip-ssl 不等于用户可以跳过校验，要问过才算数。
+    # 结论直接落到 net/tls.py 的开关上（grant/revoke），这里不再留一份 config
+    # 副本 —— 两份状态最容易出现「某一处请求还按旧的判断走」。
+    confirm_skip_ssl(found)
+
     config = {
-        # 命令行写了 --skip-ssl 不等于用户可以跳过校验，要问过才算数
-        "skip_ssl_verify": confirm_skip_ssl(found),
         "verbose": options.verbose,
         "resume": options.resume,
         "limit_rate": options.limit_rate,
@@ -254,14 +255,10 @@ def handle_download_args(input_string):
 # -------------------- 下载核心（含真正断点续传） -------------------
 
 def download_file(url, temp_path, config, input_string, display_name):
-    request_kwargs = {"stream": True}
-
-    # SSL 验证（内部变量 SkipSSLVerify 逻辑）
-    if config["skip_ssl_verify"]:
-        request_kwargs["verify"] = False
-        urllib3.disable_warnings(InsecureRequestWarning)
-    else:
-        request_kwargs["verify"] = True
+    # SSL 策略只有一处：net/tls.py。--skip-ssl 已在 confirm_skip_ssl 里授权过，
+    # LINUXWAVE_CACERT 也由它解析，所以这里不再自己传 verify= ——
+    # 否则「下载包体走一套策略、取索引走另一套」这种分歧只会越来越难查。
+    request_kwargs = {"stream": True, **tls.request_kwargs()}
 
     # 简单代理检查，避免低级错误
     if config["proxy"]:
@@ -422,7 +419,8 @@ def fetch_max_version(package_name, arch):
     api_url = domains.index_list_url(arch, package_name)
     try:
         response = requests.get(api_url, timeout=domains.timeout_from_env(),
-                                headers=github_api_headers(api_url))
+                                headers=github_api_headers(api_url),
+                                **tls.request_kwargs())
         if response.status_code != 200:
             print(f"{RED_BOLD}🌊 Error: Cannot fetch package list.{RESET}")
             print(f"{RED_BOLD}🌊 URL: {api_url}{RESET}")
@@ -578,7 +576,8 @@ def handle_install(input_string):
     # 4. 获取 bin_name（从 @common 文件）
     common_url = f"{domains.api_domain()}/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@common"
     try:
-        common_resp = requests.get(common_url, timeout=domains.timeout_from_env())
+        common_resp = requests.get(common_url, timeout=domains.timeout_from_env(),
+                                   **tls.request_kwargs())
         if common_resp.status_code != 200:
             print(f"{RED_BOLD}🌊 Error: Cannot fetch @common file.{RESET}")
             sys.exit(1)
@@ -598,7 +597,8 @@ def handle_install(input_string):
     # 5. 获取 URL 和 SHA256（deps 也写在该版本文件里）
     pkg_version_url = f"{domains.api_domain()}/pkg/pkginfo_{ARCH}/{ParsePkgName}/_{ParsePkgName}@{ParsePkgVersion}"
     try:
-        resp = requests.get(pkg_version_url, timeout=domains.timeout_from_env())
+        resp = requests.get(pkg_version_url, timeout=domains.timeout_from_env(),
+                            **tls.request_kwargs())
         if resp.status_code != 200:
             if config["verbose"]:
                 silent.say(resp.text)

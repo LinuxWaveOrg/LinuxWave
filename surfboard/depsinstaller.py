@@ -24,6 +24,7 @@ RESET = '\033[0m'
 
 import domains
 import silent
+import tls
 from configpaths import assert_inside, load_base_dir
 
 
@@ -115,7 +116,8 @@ def fetch_text(url, attempts=3):
 
     for _ in range(attempts):
         try:
-            response = requests.get(url, timeout=domains.timeout_from_env())
+            response = requests.get(url, timeout=domains.timeout_from_env(),
+                                    **tls.request_kwargs())
         except Exception:
             last_status = 0
             continue

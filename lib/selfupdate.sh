@@ -515,6 +515,59 @@ if [[ -n "$CONTENT_TIME" ]]; then
     CURL_LIMITS="${CURL_LIMITS:-} --speed-limit 1 --speed-time $CONTENT_TIME"
 fi
 
+# 额外根证书（LINUXWAVE_CACERT）。单独一个变量、不并进 CURL_LIMITS：
+# 那里全是整数与 -k，可以按空格拆开用；路径会有空格，必须整体加引号展开。
+# 设了就必须可用 —— 静默忽略会让人以为已经信任了那家 CA。
+CURL_CACERT=""
+if [[ -n "${LINUXWAVE_CACERT:-}" ]]; then
+    _cacert="${LINUXWAVE_CACERT/#\~/$HOME}"
+    if [[ ! -f "$_cacert" || ! -r "$_cacert" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: LINUXWAVE_CACERT is not a readable file: ${_cacert}${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 Next      point it at the CA's root certificate in PEM form, e.g. export LINUXWAVE_CACERT=/etc/ssl/corp-root.pem${RESET}" >&2
+        echo -e "${RED_BOLD}🌊           unset it to go back to the system trust store${RESET}" >&2
+        exit 1
+    fi
+    CURL_CACERT="$_cacert"
+fi
+
+curl_hint() {
+    # curl_hint <退出码> <stderr 文本>：认得出就打印一句下一步，认不出返回 1。
+    #
+    # 为什么需要它：curl 对这类失败只给一个退出码（60），但「证书过期 / 自签 /
+    # 链不完整 / 主机名不匹配」的下一步完全不同 —— 过期只能等对方修，自签要
+    # 找网管要根证书，链不完整要找镜像维护者。统一说「SSL error」等于把四种
+    # 情况都推给用户自己猜，而这类错在开发机上永远不会出现。
+    local status="$1" err="${2:-}" text
+    text="$(printf '%s' "$err" | tr '[:upper:]' '[:lower:]')"
+
+    case "$text" in
+        *"certificate has expired"*)
+            echo -e "${RED_BOLD}🌊 The server's certificate has expired. This is the server's problem: retry later, or contact the mirror maintainer. --skip-ssl does not fix it.${RESET}" >&2
+            return 0 ;;
+        *"self-signed"*)
+            echo -e "${RED_BOLD}🌊 The server uses a self-signed certificate or a private CA (typical inside a corporate network). Ask your network team for the root certificate, then trust it with LINUXWAVE_CACERT=/path/to/root.pem — or switch to an official mirror.${RESET}" >&2
+            return 0 ;;
+        *"unable to get local issuer"*|*"unable to verify the first certificate"*|*"certificate chain is incomplete"*)
+            echo -e "${RED_BOLD}🌊 The server's certificate chain is incomplete (a required intermediate CA is missing). Ask the mirror maintainer to serve the full chain, or trust that root with LINUXWAVE_CACERT=/path/to/root.pem.${RESET}" >&2
+            return 0 ;;
+        *"hostname mismatch"*|*"doesn't match"*|*"does not match"*|*"not valid for"*)
+            echo -e "${RED_BOLD}🌊 The certificate is not valid for this host. Check the domain and the mirror configuration; do not work around this by skipping verification.${RESET}" >&2
+            return 0 ;;
+    esac
+
+    case "$status" in
+        6)
+            echo -e "${RED_BOLD}🌊 Cannot resolve the host name. This is a network problem, not a TLS or certificate one.${RESET}" >&2 ;;
+        7|28)
+            echo -e "${RED_BOLD}🌊 Cannot connect. This is a network problem, not a TLS or certificate one.${RESET}" >&2 ;;
+        35|51|58|60|77)
+            echo -e "${RED_BOLD}🌊 TLS certificate verification failed. Check the mirror's certificate, or use an official mirror (wave mirror shows the addresses in use).${RESET}" >&2 ;;
+        *)
+            return 1 ;;
+    esac
+    return 0
+}
+
 fetch_to_file() {
     # fetch_to_file <url> <目标文件> <超时秒> [runner] [尝试次数]
     # runner 为 run_cmd 时按安装目录的权限决定要不要 sudo。
@@ -524,7 +577,9 @@ fetch_to_file() {
     local runner="${4:-direct}"
     local attempts="${5:-$FETCH_ATTEMPTS}"
     local partial="$destination.linuxwave-part"
-    local attempt status code
+    local attempt status code err
+    local errfile
+    errfile="$(mktemp "${TMPDIR:-/tmp}/linuxwave-curl-err.XXXXXX")"
 
     "$runner" mkdir -p "$(dirname "$destination")"
 
@@ -533,17 +588,23 @@ fetch_to_file() {
         # 同时取 HTTP 状态码：curl 的退出码并不总能反映「404」。
         # raw.githubusercontent 在 404 时常常报 (56) 收数据失败而不是 (22)，
         # 只看退出码会把「这个文件不存在」当成网络抖动重试三次。
-        code="$("$runner" curl -fsSL --max-time "$timeout" ${CURL_LIMITS:-} -w '%{http_code}' \
-            -o "$partial" "$url" 2>/dev/null)" || status=$?
+        #
+        # stderr 单独留一份：证书失败的原因只在那里（curl 只给一个退出码 60），
+        # 而「过期 / 自签 / 链不完整 / 主机名不匹配」的下一步完全不同。
+        code="$("$runner" curl -fsSL --max-time "$timeout" ${CURL_CACERT:+--cacert "$CURL_CACERT"} ${CURL_LIMITS:-} \
+            -w '%{http_code}' -o "$partial" "$url" 2>"$errfile")" || status=$?
         if [[ "$status" -eq 0 ]]; then
             "$runner" mv -f "$partial" "$destination"
+            rm -f "$errfile"
             return 0
         fi
         "$runner" rm -f "$partial" 2>/dev/null || true
+        err="$(cat "$errfile" 2>/dev/null || true)"
 
         case "$code" in
             4??)
                 # 4xx 是「请求本身不对」，重试不会变好：404 就是没有这个文件。
+                rm -f "$errfile"
                 return 1
                 ;;
         esac
@@ -551,6 +612,7 @@ fetch_to_file() {
         case "$status" in
             22|23|1|2|3)
                 # 22=HTTP 错误、23=写盘失败、1~3=用法错误。同样不值得重试。
+                rm -f "$errfile"
                 return 1
                 ;;
         esac
@@ -561,6 +623,10 @@ fetch_to_file() {
         fi
     done
 
+    # 全部尝试都失败：把最后一次的原因翻译成一句能照做的下一步。
+    # 认不出时什么都不加，让调用方原来那句「取不到」继续负责。
+    curl_hint "$status" "$err" || true
+    rm -f "$errfile"
     return 1
 }
 

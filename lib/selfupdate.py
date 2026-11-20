@@ -25,6 +25,7 @@ RESET = '\033[0m'
 import common
 import domains
 import silent
+import tls
 from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir, load_base_dir
 
 # -------------------- 同意记录 --------------------
@@ -60,12 +61,14 @@ UPDATE_TIMEOUT = 1800
 def fetch_url_text(url):
     """取一段文本：优先标准库，本地 Python 缺根证书时改走 curl。取不到返回 None。"""
     try:
-        with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT) as response:
+        with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT,
+                                    **tls.urlopen_kwargs()) as response:
             return response.read().decode()
     except (urllib.error.URLError, UnicodeDecodeError, OSError):
         pass
 
-    result = subprocess.run(['curl', '-fsSL', '--max-time', str(FETCH_TIMEOUT), url],
+    result = subprocess.run(['curl', '-fsSL', '--max-time', str(FETCH_TIMEOUT)]
+                            + tls.curl_flags() + [url],
                             capture_output=True, text=True)
     if result.returncode != 0:
         return None

@@ -373,7 +373,8 @@ lw_verify_latest_signature() {
     tmp="$(mktemp)"
     sig="$(mktemp)"
     printf '%s\n' "$data" > "$tmp"
-    curl -fsSL --max-time 30 -o "$sig" "$url.sig" 2>/dev/null || status=$?
+    curl -fsSL --max-time 30 ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
+        -o "$sig" "$url.sig" 2>/dev/null || status=$?
     if [[ "$status" -ne 0 ]]; then
         lw_signature_note "🌊 No signature for the self-update data (this release predates signing)." \
             "🌊 这份自更新数据没有签名（早于签名制度，属正常情况）。"
@@ -532,6 +533,34 @@ SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_
 PYTHON_DATA_URL="$(lw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 # pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
 PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
+
+# ==========================================
+# 额外根证书（LINUXWAVE_CACERT）
+# ==========================================
+#
+# 企业网络里 TLS 会被中间设备重签，自建镜像也可能用私有 CA。把根证书交给我们就
+# 够了，不必让人为了连上而关掉校验（安装器没有 --skip-ssl：首次安装时还没有任何
+# 已装代码，跳过校验只会把「装进来的是不是我们要的」这件事彻底放弃）。
+#
+# 设了就必须可用：静默忽略的后果是用户以为自己已经信任了那家 CA，实际还在失败，
+# 于是他会去怀疑镜像、怀疑网络，唯独不会想到是路径写错了。
+#
+# 用 ${CURL_CACERT:+--cacert "$CURL_CACERT"} 展开，而不是把它拼进一段无引号的
+# 参数串 —— 路径里带空格是常事。
+CURL_CACERT=""
+if [[ -n "${LINUXWAVE_CACERT:-}" ]]; then
+    _cacert="${LINUXWAVE_CACERT/#\~/$HOME}"
+    if [[ ! -f "$_cacert" || ! -r "$_cacert" ]]; then
+        lw_say_err "${RED_BOLD}🌊 Error: LINUXWAVE_CACERT is not a readable file: ${_cacert}${RESET}" \
+            "${RED_BOLD}🌊 错误：LINUXWAVE_CACERT 不是一个可读的文件：${_cacert}${RESET}"
+        lw_say_err "🌊 Next      point it at the CA's root certificate in PEM form, e.g. export LINUXWAVE_CACERT=/etc/ssl/corp-root.pem" \
+            "🌊   请指向那家 CA 的根证书（PEM 格式），例如 export LINUXWAVE_CACERT=/etc/ssl/corp-root.pem"
+        lw_say_err "🌊           unset it to go back to the system trust store" \
+            "🌊   取消这个变量即回到系统证书库"
+        exit 1
+    fi
+    CURL_CACERT="$_cacert"
+fi
 
 # 数据仓库：版本号、代码分支与文件清单都从这里读
 
@@ -1002,7 +1031,8 @@ if [[ "$CLI_SKIP_PROBE" == "true" ]]; then
     LINUXWAVE_VERSION="${LINUXWAVE_VERSION:-}"
     LATEST_BRANCH="${LINUXWAVE_BRANCH:-HEAD}"
 else
-    PROBE_DATA="$(curl -fsSL --max-time 30 "$PROBE_URL" 2>/dev/null || true)"
+    PROBE_DATA="$(curl -fsSL --max-time 30 ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
+        "$PROBE_URL" 2>/dev/null || true)"
     if [[ -n "$PROBE_DATA" ]]; then
         # 先验签再看字段：签名覆盖的正是下面要读的这份内容。
         lw_verify_latest_signature "$PROBE_DATA" "$PROBE_URL"
@@ -1284,7 +1314,8 @@ lw_say "🌊 Fetching the update commands..." "🌊 正在获取更新命令…�
 
 UPDATE_COMMANDS_OK=false
 for attempt in $(seq 1 "$UPDATE_COMMANDS_ATTEMPTS"); do
-    if curl -fsSL --max-time 60 -o "$UPDATE_COMMANDS_TMP" "$UPDATE_COMMANDS_URL"; then
+    if curl -fsSL --max-time 60 ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
+            -o "$UPDATE_COMMANDS_TMP" "$UPDATE_COMMANDS_URL"; then
         UPDATE_COMMANDS_OK=true
         break
     fi
@@ -1668,7 +1699,8 @@ ensure_portable_python() {
     # 本机没有，才去版本数据里找该下哪个。进度写 stderr：stdout 是返回值通道。
     lw_say_err "🌊 Fetching the bundled Python definition..." "🌊 正在获取自带解释器的版本信息……"
     data_file="$(mktemp)"
-    if ! curl -fsSL --max-time 30 -o "$data_file" "$data_url" 2>/dev/null; then
+    if ! curl -fsSL --max-time 30 ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
+            -o "$data_file" "$data_url" 2>/dev/null; then
         rm -f "$data_file"
         return 1
     fi
@@ -1696,7 +1728,8 @@ ensure_portable_python() {
         # 路径形状由 net/domains.py 的 python_archive_url 定义，scripts/python_source_test.sh 会比对。
         # 自家存储只试一次：它不通就该立刻回上游，而不是在这里重试三次。
         if [[ -z "${LINUXWAVE_PYTHON_FROM_SOURCE:-}" ]]; then
-            if run_cmd curl -fsSL --connect-timeout 20 --max-time 600 -o "$archive" \
+            if run_cmd curl -fsSL ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
+                   --connect-timeout 20 --max-time 600 -o "$archive" \
                    "$PYTHON_DATA_URL/pythondata/$version/$(basename "$url")" 2>/dev/null; then
                 :
             else
@@ -1712,7 +1745,8 @@ ensure_portable_python() {
             # 每次重试前清掉上次的半截文件：否则「文件存在」会被当成下载成功，
             # 最后倒在 sha256 比对那一步，报错方向就错了。
             run_cmd rm -f "$archive" 2>/dev/null || true
-            if run_cmd curl -fsSL --retry 2 --retry-all-errors --retry-delay 3 \
+            if run_cmd curl -fsSL ${CURL_CACERT:+--cacert "$CURL_CACERT"} \
+                   --retry 2 --retry-all-errors --retry-delay 3 \
                    --connect-timeout 20 --max-time 600 -o "$archive" "$url" 2>/dev/null; then
                 break
             fi

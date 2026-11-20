@@ -19,6 +19,7 @@ import common
 import domains
 import flags as flags_module
 import silent
+import tls
 import requests
 
 from configpaths import require_safe_token
@@ -132,7 +133,8 @@ def fetch_common_fields(package_name, arch):
     而 bin/ 与 links/ 用的是 bin_name。"""
     common_url = f"{domains.api_domain()}/pkg/pkginfo_{arch}/{package_name}/_{package_name}@common"
     try:
-        response = requests.get(common_url, timeout=domains.timeout_from_env())
+        response = requests.get(common_url, timeout=domains.timeout_from_env(),
+                               **tls.request_kwargs())
     except Exception as error:
         print(f"{RED_BOLD}🌊 Error: {error}{RESET}")
         sys.exit(1)
