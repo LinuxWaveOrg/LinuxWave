@@ -175,15 +175,20 @@ Usage:
   wave <command> [package] [flags]
 
 Commands:
-  install     Install a package (Latest Version)
+  install     Install a package (latest version)
+  upgrade     Install a package at the latest version
   uninstall   Uninstall a package
   list        List installed packages
   search      Search for a package in the index
   info        Display detailed information about a package
-  selfupdate  Update LinuxWave itself
+  selfupdate  Update LinuxWave itself to the latest version
   link        Link installed packages without a version number
   unlink      Remove those unversioned links
   linkquery   Show which version an unversioned link points to
+  mirror      Show which addresses packages are fetched from
+  latest      Show which packages have a newer version available
+  shellenv    Print the shell code that puts LinuxWave on your PATH
+  manual      Show the full manual (same text as man and info)
 
 Flags:
   -h, --help              Show help for any command
