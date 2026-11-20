@@ -16,7 +16,7 @@ macOS? View [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
-3.2.1, Release on 2026-11-08
+4.0.0, Release on 2026-11-20
 
 ## 🌊 What is LinuxWave?
 
