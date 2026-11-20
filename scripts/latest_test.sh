@@ -195,6 +195,21 @@ out=$( cd "$WORK" && env -u LINUXWAVE_BOTTLE_DOMAIN -u LINUXWAVE_DEPS_DOMAIN \
 ok "读不到时印出请求的地址" "$out" "pkginfo_$ARCH/jq/versions"
 ok "404 时点名少了 ref 段"  "$out" "no ref segment"
 
+# --all 在索引整个读不到时，「一个都没查到」绝不能汇总成「全是最新」：
+# 那会把一个配置错误伪装成「升级已经做完了」。
+out=$( cd "$WORK" && env -u LINUXWAVE_BOTTLE_DOMAIN -u LINUXWAVE_DEPS_DOMAIN \
+       HOME="$HOME_DIR" LINUXWAVE_TEST="$TEST_ROOT" \
+       LINUXWAVE_API_DOMAIN="http://127.0.0.1:$PORT/infosource" \
+       python3 "$BASE/lib/wave.py" latest --all 2>&1 )
+not_ok "读不到时不说全是最新" "$out" "are up to date"
+ok     "读不到时说清有几个没查成" "$out" "could not be checked"
+ok     "读不到时状态是 index unreadable" "$out" "index unreadable"
+out=$( cd "$WORK" && env -u LINUXWAVE_BOTTLE_DOMAIN -u LINUXWAVE_DEPS_DOMAIN \
+       HOME="$HOME_DIR" LINUXWAVE_TEST="$TEST_ROOT" \
+       LINUXWAVE_API_DOMAIN="http://127.0.0.1:$PORT/infosource" \
+       python3 "$BASE/lib/wave.py" latest --all >/dev/null 2>&1; echo "rc=$?" )
+ok "读不到时退出码非零" "$out" "rc=1"
+
 echo
 echo "========== 4. --all =========="
 
