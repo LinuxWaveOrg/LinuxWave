@@ -26,3 +26,5 @@
 
 - [ ] 4.0.0 之后的补丁版本：`info --json/--yaml/--toml/--raw`、`upgrade --all`、
       man 页与 MANPATH 都在 `4.0-dev` 上，尚未发版
+- [ ] 补丁版发布时，`linuxwavedata/<新版本>/latest.toml` 的 `build_number` 要换一个
+      更大的值：客户端现在会读它（同版本重新发布靠它区分先后）
