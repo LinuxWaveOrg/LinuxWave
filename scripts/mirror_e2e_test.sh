@@ -46,7 +46,7 @@ VERSION="1.0"
 ARCH="amd64"
 UPSTREAM_FILENAME="demo.tar.gz"
 PAYLOAD="$(python3 -c "
-import sys; sys.path.insert(0, '$REPO_DIR/lib'); sys.path.insert(0, '$REPO_DIR/net'); sys.path.insert(0, '$REPO_DIR/config')
+import sys; sys.path.insert(0, '$REPO_DIR/scripts'); import components; components.add_to_sys_path('$REPO_DIR')
 import domains
 print(domains.payload_filename('$PKG', '$VERSION', '$ARCH', '$UPSTREAM_FILENAME'))
 ")"
@@ -147,17 +147,23 @@ fi
 run_case() {
     # run_case <域名> <输出文件>
     local domain="$1" out="$2"
-    LINUXWAVE_BOTTLE_DOMAIN="$domain" python3 - "$REPO_DIR" "$out" "$PKG" "$VERSION" \
+    # pkginstaller 一 import 就要读配置（load_base_dir）。CI 上没有装好的
+    # LinuxWave，所以给一个只含 base_dir 的临时配置 —— 这里测的是传输路径，
+    # 不是安装树布局。
+    local root
+    root="$(mktemp -d)"
+    mkdir -p "$root/etc/linuxwave_config" "$root/base/downloads/tmp"
+    printf '{"base_dir": "%s"}\n' "$root/base" > "$root/etc/linuxwave_config/config.json"
+    LINUXWAVE_BOTTLE_DOMAIN="$domain" LINUXWAVE_TEST="$root" \
+        python3 - "$REPO_DIR" "$out" "$PKG" "$VERSION" \
         "$ARCH" "$UPSTREAM_FILENAME" <<'PY'
 import pathlib
 import sys
 
 repo, out, name, version, arch, upstream_filename = sys.argv[1:7]
-sys.path.insert(0, f"{repo}/lib")
-sys.path.insert(0, f"{repo}/net")
-sys.path.insert(0, f"{repo}/config")
-sys.path.insert(0, f"{repo}/pkg")
-sys.path.insert(0, f"{repo}/surfboard")
+sys.path.insert(0, f"{repo}/scripts")
+import components
+components.add_to_sys_path(repo)
 
 import domains
 import pkginstaller
@@ -217,7 +223,7 @@ fi
 # ==========================================
 
 masked="$(python3 -c "
-import sys; sys.path.insert(0, '$REPO_DIR/lib'); sys.path.insert(0, '$REPO_DIR/net'); sys.path.insert(0, '$REPO_DIR/config')
+import sys; sys.path.insert(0, '$REPO_DIR/scripts'); import components; components.add_to_sys_path('$REPO_DIR')
 import domains
 print(domains.redact_url('http://$USER_NAME:$PASSWORD@127.0.0.1:$PORT/bottle/$PKG/$PAYLOAD'))
 ")"
@@ -232,7 +238,7 @@ fi
 # ==========================================
 
 if LINUXWAVE_BOTTLE_DOMAIN="" python3 -c "
-import sys; sys.path.insert(0, '$REPO_DIR/lib'); sys.path.insert(0, '$REPO_DIR/net'); sys.path.insert(0, '$REPO_DIR/config')
+import sys; sys.path.insert(0, '$REPO_DIR/scripts'); import components; components.add_to_sys_path('$REPO_DIR')
 import domains
 try:
     domains.resolve_payload('bottle', '$PKG', '$VERSION', '$ARCH', '$UPSTREAM_FILENAME', '', False)
