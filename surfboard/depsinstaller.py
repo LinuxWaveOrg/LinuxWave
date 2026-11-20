@@ -45,7 +45,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from depsversionparser import parse_dep_ref
+    from querier import parse_dep_ref
     from querier import dep_dir, is_installed
 except ImportError as error:
     print(f"{RED_BOLD}🌊 Error: 'surfboard' module is not available ({error}).{RESET}")
