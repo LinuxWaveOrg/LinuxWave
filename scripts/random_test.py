@@ -900,7 +900,7 @@ def phase_flag_sanity(wave, checks):
     for form in SILENT_FORMS + SHOW_ERROR_FORMS:
         expect(checks, wave.run(["install", form, "--show-error"], timeout=60), 1,
                f"install {form} --show-error（缺包名）",
-               must_contain=("no package name",))
+               must_contain=("Invalid package name",))
 
     for form in SILENT_FORMS + SHOW_ERROR_FORMS:
         expect(checks,
@@ -1610,7 +1610,7 @@ def phase_max_time_forms(wave, checks):
     for form in MAX_TIME_FORMS:
         label = f"wave install --max-time={form}（缺包名）"
         result = wave.run(["install", f"--max-time={form}"], timeout=60)
-        expect(checks, result, 1, label, must_contain=("no package name",),
+        expect(checks, result, 1, label, must_contain=("Invalid package name",),
                must_not_contain=("cannot parse", "Traceback"))
 
     for form in MAX_TIME_ILLEGAL_FORMS:
@@ -1672,10 +1672,10 @@ def phase_flag_matrix(wave, rng, checks):
                      not ((result.stdout or "") + (result.stderr or "")), describe(result))
     for flag in SHOW_ERROR_FORMS:
         expect(checks, wave.run(["install", flag], timeout=60), 1,
-               f"wave install {flag}（缺包名）", must_contain=("no package name",))
+               f"wave install {flag}（缺包名）", must_contain=("Invalid package name",))
     # -sS 留下错误，但输出要给脚本读，所以不带 🌊
     expect(checks, wave.run(["install", "-sS"], timeout=60), 1, "wave install -sS",
-           must_contain=("no package name",), must_not_contain=("🌊",))
+           must_contain=("Invalid package name",), must_not_contain=("🌊",))
 
     # 5) 静默不改变退出码：卸载一个不存在的包照样是失败
     result = wave.run(["uninstall", "no_such_package_mw", "-s"], timeout=60)
@@ -1690,7 +1690,7 @@ def phase_flag_matrix(wave, rng, checks):
     for flag in REMOVE_OLD_FLAGS:
         expect(checks, wave.run(["install", "jq", flag], timeout=60), 1,
                f"wave install jq {flag}（upgrade 专属）",
-               must_contain=("only applies to `wave upgrade`",))
+               must_contain=("only applies to wave upgrade",))
 
     # 7) wave upgrade --all（4.1.4）的三条离线错误分支
     expect(checks, wave.run(["upgrade"], timeout=60), 1, "wave upgrade（缺包名）",
@@ -1707,7 +1707,7 @@ def phase_flag_matrix(wave, rng, checks):
         for form in MAX_TIME_FORMS:
             expect(checks, wave.run(["install", f"{flag}={form}"], timeout=60), 1,
                    f"wave install {flag}={form}（缺包名）",
-                   must_contain=("no package name",), must_not_contain=("cannot parse",))
+                   must_contain=("Invalid package name",), must_not_contain=("cannot parse",))
         for form in MAX_TIME_ILLEGAL_FORMS:
             expect(checks, wave.run(["install", "jq", f"{flag}={form}"], timeout=60), 1,
                    f"wave install jq {flag}={form}（非法取值）",
