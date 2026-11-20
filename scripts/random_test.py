@@ -1536,18 +1536,27 @@ def phase_uninstall_cycle(wave, rng, installed_plans, checks):
         if silent_flag:
             argv.append(silent_flag)
         label = f"uninstall {plan.token}"
-        result = wave.run(argv)
 
         bin_dir = wave.layout.base_dir / "bin" / f"{plan.bin_name}@{plan.version}"
         link = wave.layout.base_dir / "links" / plan.bin_name
+        # 这两个状态要在**执行之前**取。阶段 2 随机跑过 5 次 `unlink`，
+        # `links/{名称}` 可能早就不在了 —— CI 上就是这么红的：`bin/…@版本`
+        # 那条通过、链接那条失败，说明链接是被阶段 2 合法删掉的，不是这次卸载动的。
+        # 断言的本意是「非法参数不改变现状」，不是「文件必须存在」。
+        bin_before = bin_dir.exists()
+        link_before = link.exists()
+
+        result = wave.run(argv)
 
         # 故意带了非法参数：这条命令必须**整个**被拒绝，而不是「忽略那个参数、
         # 照样卸掉」。后者更难查 —— 用户以为命令没跑，其实东西已经没了。
         if illegal:
             expect(checks, result, 1, label,
                    must_contain=(f"illegal option {illegal}",))
-            checks.check(f"{label}: 非法参数没有卸载任何东西", bin_dir.exists(), str(bin_dir))
-            checks.check(f"{label}: 非法参数没动不带版本号的链接", link.exists(), str(link))
+            checks.check(f"{label}: 非法参数没有卸载任何东西",
+                         bin_dir.exists() == bin_before, str(bin_dir))
+            checks.check(f"{label}: 非法参数没动不带版本号的链接",
+                         link.exists() == link_before, str(link))
             continue
 
         if silent:
