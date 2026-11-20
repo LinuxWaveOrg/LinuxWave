@@ -48,6 +48,8 @@ curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/ins
 
 （安装结束时，安装器会打印出让 `wave` 在当前终端立刻可用的确切命令。）
 
+**安装后建议阅读手册。[点击阅读](Foreword/Foreword-zh.md)。**
+
 **环境要求：Linux（x86_64 / arm64）、Python（3.14 及以上）、patchelf（用于依赖库重定位）。**
 
 ### 无人值守安装

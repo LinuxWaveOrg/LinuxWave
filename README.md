@@ -54,6 +54,8 @@ curl -fsSL https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave/HEAD/lib/ins
 
 (When it finishes, the installer prints the exact command that makes `wave` available in the current terminal.)
 
+**We recommend reading the handbook after installing. [Read it here](Foreword/Foreword-en.md).**
+
 **Requirements: Python (3.14 and above), patchelf (for dependency library relocation).**
 
 ### Unattended install
