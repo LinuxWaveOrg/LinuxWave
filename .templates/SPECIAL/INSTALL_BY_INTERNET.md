@@ -160,7 +160,7 @@ mike@mike-Inspiron-16-Plus-7640:~$
 | 项 | 值 |
 | --- | --- |
 | 安装目录 | `/home/linuxwave/.linuxwave`（属主 `linuxwave:linuxwave`，权限 755） |
-| 安装内容 | 20 个文件，7 个子目录：`bin` `deps` `downloads` `lib` `links` `pkg` `surfboard` |
+| 安装内容 | 约 40 个文件，组件目录（`cli` `config` `lib` `net` `pkg` `surfboard`）与 `bin` `deps` `downloads` `links` `Keys` |
 | 系统级配置 | `/etc/linuxwave_config/`（属主 `root:root`，权限 644） |
 | 用户级配置 | `/home/linuxwave/.config/linuxwave_config/` |
 | 可用性 | 任意用户均可运行 `wave` |
@@ -170,11 +170,14 @@ mike@mike-Inspiron-16-Plus-7640:~$
 
 ## 网络相关的注意事项
 
-### 安装器要下载约 20 个文件，且任一失败即中止
+### 安装器要下载约 40 个文件，且任一失败即中止
 
-安装器先取一份文件清单（`configdata/versiondata/files_info`，**有 3 次重试**），再从 `raw.githubusercontent.com` **串行**拉取 `lib/`、`pkg/`、`surfboard/` 下的全部代码文件。
+安装器先取「更新命令」（`linuxwavedata/latest.toml` → `linuxwavedata/<版本>/update_commands.sh`，
+**有 3 次重试**），再执行它；真正逐个下载文件的是那份脚本，从 `raw.githubusercontent.com`
+**串行**拉取组件目录（`cli/` `config/` `lib/` `net/` `pkg/` `surfboard/`）与 `Keys/` 下的文件。
 
-逐个下载的部分**没有重试**，而脚本带 `set -e`——任何一次请求失败，整个安装立即停止。已下载的文件会留在目标目录，重跑安装器会覆盖它们（脚本只在"拒绝许可协议"时才删除目录）。
+单个文件失败会重试 3 次（先写 `.linuxwave-part`、成功后再 `mv`，目标位置不会出现半个文件）。
+重试到底仍失败时整个安装中止，`VERSION.json` **不会**被写 —— 重跑安装器会补齐缺的部分。
 
 若 `raw.githubusercontent.com` 在本网络下不稳定，常见现象是：
 
@@ -195,7 +198,7 @@ curl: (28) Failed to connect ... timed out
 
 ### `wave selfupdate`
 
-自更新同样按 `HEAD` 拉取代码文件，与安装器走同一路径，网络要求一致。
+自更新同样先取 `linuxwavedata/latest.toml` 与其指向的那份更新命令，再由它拉取代码文件 —— 与安装器走同一路径，网络要求一致。
 
 ---
 
