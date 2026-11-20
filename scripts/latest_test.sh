@@ -186,6 +186,15 @@ fi
 out=$(wave latest wget 2>&1)
 not_ok "缺清单不是拼写问题，不乱猜" "$out" "did you mean"
 
+# 地址少了 ref 段时，报错必须自证「请求了哪个地址」：只印一句 HTTP 404 的话，
+# 用户会把配置错误当成镜像故障（真实踩过一次，两轮才定位）。
+out=$( cd "$WORK" && env -u LINUXWAVE_BOTTLE_DOMAIN -u LINUXWAVE_DEPS_DOMAIN \
+       HOME="$HOME_DIR" LINUXWAVE_TEST="$TEST_ROOT" \
+       LINUXWAVE_API_DOMAIN="http://127.0.0.1:$PORT/infosource" \
+       python3 "$BASE/lib/wave.py" latest jq 2>&1 )
+ok "读不到时印出请求的地址" "$out" "pkginfo_$ARCH/jq/versions"
+ok "404 时点名少了 ref 段"  "$out" "no ref segment"
+
 echo
 echo "========== 4. --all =========="
 

@@ -134,18 +134,14 @@ def explain_unreachable_name_list(api_url, status=None):
     域名少了 ref 段（镜像布局是 `<Org>/<repo>/<ref>/…`），或者域名指错产品。
     所以提示里必须把「期望形状」和「怎么看当前生效值」写出来 ——
     只说 `Cannot fetch package list` + 一个 404 的 URL，用户只能自己猜。
+
+    提示内容由 domains.unreachable_hint 出，wave latest 用的是同一份。
     """
     reason = "cannot read the package name list"
     if status:
         reason += f" (HTTP {status})"
-    steplog.fail(
-        reason,
-        request=api_url,
-        hint=["LINUXWAVE_API_DOMAIN must point at <mirror>/LinuxWave/infosource/<ref>",
-              "the mirror lays files out under a ref segment — main or HEAD, whichever "
-              "the mirror synced (see `wave mirror`)",
-              "if the address is right, check the network / --proxy, or ask the "
-              "administrator to re-run scripts/build_versions_index.py on the mirror"])
+    steplog.fail(reason, request=api_url,
+                 hint=domains.unreachable_hint(api_url, status))
 
 
 def handle_list(budget=None):

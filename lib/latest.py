@@ -409,15 +409,19 @@ def report_failure(row, arch, timeout, advice=None):
             steplog.fail(f"{name} is not in the index", hint=hint)
         # 名字在清单里，却读不到它的版本清单 —— 问题在清单本身，不在拼写
         steplog.fail(f"the index has no version list for {name}",
+                     request=domains.index_list_url(arch, name),
                      response=row["problem"] or "empty list",
                      hint=["if every package is like this, the mirror has no versions "
                            "lists yet (see docs/mirror.md)"])
 
-    # 连名字清单都拿不到：只能是网络 / 证书 / 地址问题，别再猜包名。
-    # 证书问题的那几行（过期、自签、链不完整、主机名）由 fetch_versions 带回来。
+    # 连名字清单都拿不到：只能是地址 / 网络 / 证书问题，别再猜包名。
+    # 地址是我们自己踩过的坑（少了 ref 段），所以提示里先排掉它 —— 只说
+    # 「检查网络」的话，用户会把一条 404 当成网络故障查很久。
+    url = domains.index_list_url(arch, name)
     steplog.fail(f"cannot read the version list for {name}",
+                 request=url,
                  response=row["problem"] or "empty list",
-                 hint=advice or "check the network and any --proxy setting, then retry")
+                 hint=domains.unreachable_hint(url, row["problem"], advice))
 
 
 def main():
