@@ -11,7 +11,7 @@ name: Random Regression
 
 on:
   push:
-    branches: [4.0-dev, 4.0, main]
+    branches: [4.4, 4.0-dev, 4.0, main]
   workflow_dispatch:
     inputs:
       seed:
