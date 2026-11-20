@@ -1,0 +1,81 @@
+name: Random Regression
+
+# 随机端到端回归：每次随机选安装目录方案、随机抽包、随机带旗标，真装真卸。
+# 它抓的是「确定性测试写不出来的组合」—— 4.x 的旗标组合与目录方案太多了，
+# 逐条写用例既写不完也维护不起。
+#
+# 代价是时间长、要真下载，所以单开一个作业、只在需要时跑：
+#   * 推送到 4.0-dev / 4.0 / main
+#   * 手动触发（可以传 seed 复现某次失败）
+# 不放在 PR 上：一次几分钟到几十分钟的随机回归会让每个 PR 都变成赌博。
+
+on:
+  push:
+    branches: [4.0-dev, 4.0, main]
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "随机种子（复现某次失败时填）"
+        required: false
+      time_budget:
+        description: "时间预算（分钟）"
+        required: false
+        default: "40"
+
+jobs:
+  random-test:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ELF 重定向要它：没有 patchelf，装出来的包一跑就 "cannot open shared object file"
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+
+      # 索引数据直接检出本地副本，不走 api.github.com（未认证 60 次/小时，Runner 共用出口 IP）
+      - name: Checkout infosource data
+        uses: actions/checkout@v4
+        with:
+          repository: LinuxWaveOrg/infosource
+          ref: main
+          path: infosource-data
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Python dependencies
+        run: python3 -m pip install requests packaging urllib3 rich
+
+      - name: Show the plan first
+        run: python3 scripts/random_test.py --dry-run --infosource infosource-data --seed "${SEED:-1}"
+        env:
+          SEED: ${{ github.event.inputs.seed }}
+
+      - name: Run randomized regression
+        timeout-minutes: 60
+        run: |
+          python3 -u scripts/random_test.py \
+            --infosource infosource-data \
+            --time-budget "${TIME_BUDGET:-40}" \
+            ${SEED:+--seed "$SEED"} \
+            --log-file "$RUNNER_TEMP/random-test.log"
+        env:
+          TIME_BUDGET: ${{ github.event.inputs.time_budget }}
+          SEED: ${{ github.event.inputs.seed }}
+
+      - name: Upload the regression log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: random-test-log
+          path: ${{ runner.temp }}/random-test.log
+          if-no-files-found: warn
+          retention-days: 14
