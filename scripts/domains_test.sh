@@ -18,6 +18,14 @@ LIB_DIR="$REPO_DIR/net"
 FAILED=0
 SKIPPED=0
 
+# 这个脚本量的是「不设环境变量时的行为」，所以先把用户 shell 里那份地址摘掉：
+# 谁的 ~/.zshrc 里导出过 LINUXWAVE_API_DOMAIN，整份用例都会红在一个假问题上。
+while IFS='=' read -r _name _; do
+    if [[ "$_name" == LINUXWAVE_* && "$_name" != "LINUXWAVE_TEST" ]]; then
+        unset "$_name"
+    fi
+done < <(env)
+
 pass() { echo -e "  ${GREEN}✅ $1${RESET}"; }
 fail() { echo -e "  ${RED_BOLD}❌ $1${RESET}"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⏭  $1${RESET}"; SKIPPED=$((SKIPPED + 1)); }
