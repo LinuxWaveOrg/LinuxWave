@@ -411,7 +411,17 @@ lw_verify_latest_signature() {
 }
 
 # >>> RSA public key (managed by scripts/embed_rsa_pub.py) >>>
-LW_RSA_PUB_PEM=''
+LW_RSA_PUB_PEM='-----BEGIN PUBLIC KEY-----
+MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAjU1mGJPPTAhFrjXYtE65
+xfDZtAaK8OM+uWJSTnXkLJuFWXMZsFtqVU78Hab/qYWGFbb4csY/9nDe3gChVWNe
+z6gz+pevUmMBI53IaUlj/ifqHbMzINyTcVrass2D60+dzyFxwd0n58IFWsKEBq2m
+tTO9o2aQWmJPHjK4mOmItXDpbjM8qcDnf6tOHBoPBJni07zE/v1b3eRuJt3m++J0
+F1zKJN4PWdgyuwSQWxXHP3/zeT0oTFC25zR/4jdCI10MY9fYZk7R1u6bf65nW0dd
+W/Bixk2Gn5rI1ddGn+FpLgilggVPRyF+PoLtsEDqGT2pWieEU+TrpHNWzPbYNTfj
+CThk8UNi6xGfnYsok3MkS1QRG4F1JZ0hkoI2ChgefKam9xYIRcdnJ3i65/2ZUpAx
+nIybx6s0ysMUITaqQOUCNBo009W9ivRuwD8Iae9t0Hwpv7Ou87fkBWvysYYRwF9l
+yrQUrEHrNKHvFDhzyAHAFrSBjLATEQrNLZhwnkSjV447AgMBAAE=
+-----END PUBLIC KEY-----'
 # <<< RSA public key <<<
 
 # ==========================================
