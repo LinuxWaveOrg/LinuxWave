@@ -45,7 +45,7 @@ PROJECT=all
 DRY_RUN=false
 EXTRA=()
 
-say() { printf '🌊 %s\n' "$*"; }
+lw_say() { printf '🌊 %s\n' "$*"; }
 die() { printf '🌊 Error: %s\n' "$*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
@@ -64,7 +64,7 @@ done
 
 case "$PROJECT" in
     linuxwave|macwave|all) ;;
-    *) die "--project 只能是 linuxwave / macwave / all（收到 $PROJECT）" ;;
+    *) die "--project 只能是 linuxwave / macwave / all（收到 ${PROJECT}）" ;;
 esac
 
 run() {
@@ -105,13 +105,13 @@ sync_tree() {
     dir="$ROOT/$org/$repo/$ref"
 
     if [[ -d "$dir/.git" ]]; then
-        say "更新 $org/$repo@$ref"
+        lw_say "更新 $org/$repo@$ref"
         run git -C "$dir" fetch -q --depth 1 origin
         run git -C "$dir" reset -q --hard '@{u}'
         return 0
     fi
 
-    say "克隆 $org/$repo@$ref → $dir"
+    lw_say "克隆 $org/$repo@$ref → $dir"
     run mkdir -p "$ROOT/$org/$repo"
     if [[ "$ref" == HEAD ]]; then
         run git clone -q --depth 1 "https://github.com/$gh_org/$repo" "$dir"
@@ -129,7 +129,7 @@ gen_index() {
     for base in "$api"/pkg/pkginfo_*; do
         [[ -d "$base" ]] || continue
         arch="${base##*/pkginfo_}"
-        say "生成索引 $arch"
+        lw_say "生成索引 $arch"
         if $DRY_RUN; then
             printf '    would: write %s/versions and %s/*/versions\n' "$base" "$base"
             continue
@@ -158,14 +158,14 @@ sync_linuxwave() {
     sync_tree LinuxWaveOrg configdata main
 
     branch="$(toml_field "$cfg" branch)"
-    [[ -n "$branch" ]] || die "读不到 LinuxWave 的发布分支（$cfg）"
+    [[ -n "$branch" ]] || die "读不到 LinuxWave 的发布分支（${cfg}）"
     sync_tree LinuxWaveOrg LinuxWave "$branch"
     [[ "$branch" == main ]] || sync_tree LinuxWaveOrg LinuxWave main
 
     sync_tree LinuxWaveOrg infosource main
 
     if $DRY_RUN; then
-        say "索引：$ROOT/LinuxWave/infosource/main（试运行，不生成）"
+        lw_say "索引：$ROOT/LinuxWave/infosource/main（试运行，不生成）"
     else
         gen_index "$ROOT/LinuxWave/infosource/main"
     fi
@@ -186,7 +186,7 @@ sync_macwave() {
     sync_tree MacWaveOrg Selfupdate HEAD
 
     branch="$(toml_field "$st" branch)"
-    [[ -n "$branch" ]] || die "读不到 MacWave 的发布分支（$st）"
+    [[ -n "$branch" ]] || die "读不到 MacWave 的发布分支（${st}）"
     sync_tree MacWaveOrg MacWave "$branch"
     [[ "$branch" == main ]] || sync_tree MacWaveOrg MacWave main
 
@@ -194,7 +194,7 @@ sync_macwave() {
     sync_tree MacWaveOrg infosource HEAD
 
     if $DRY_RUN; then
-        say "索引：$ROOT/MacWave/infosource/HEAD（试运行，不生成）"
+        lw_say "索引：$ROOT/MacWave/infosource/HEAD（试运行，不生成）"
     else
         gen_index "$ROOT/MacWave/infosource/HEAD"
     fi
@@ -215,4 +215,4 @@ for spec in ${EXTRA[@]+"${EXTRA[@]}"}; do
     sync_tree "$gh_org" "${rest%%:*}" "${rest##*:}"
 done
 
-say "完成。根目录：$ROOT"
+lw_say "完成。根目录：$ROOT"

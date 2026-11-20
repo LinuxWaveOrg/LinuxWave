@@ -215,9 +215,9 @@ runpy.run_path(os.path.join(os.environ["LW_REPO"], "lib", "wave.py"), run_name="
 
 code=$(run_wave upgrade jq@1.2.3)
 if [[ "$code" != "0" ]] && grep -q 'upgrade always targets the latest version' "$OUT_FILE"; then
-    pass "拒绝 包名@版本（退出码 $code）"
+    pass "拒绝 包名@版本（退出码 ${code}）"
 else
-    fail "没有拒绝 包名@版本（退出码 $code）"
+    fail "没有拒绝 包名@版本（退出码 ${code}）"
 fi
 
 if grep -q "wave install jq@1.2.3" "$OUT_FILE"; then
@@ -228,34 +228,34 @@ fi
 
 code=$(run_wave upgrade)
 if [[ "$code" != "0" ]] && grep -q 'Missing package name' "$OUT_FILE"; then
-    pass "缺包名时给出用法（退出码 $code）"
+    pass "缺包名时给出用法（退出码 ${code}）"
 else
-    fail "缺包名时没有正确拒绝（退出码 $code）"
+    fail "缺包名时没有正确拒绝（退出码 ${code}）"
 fi
 
 code=$(run_wave upgrade jq --ver=1.2.3)
 if [[ "$code" != "0" ]] && grep -q 'not accepted by upgrade' "$OUT_FILE"; then
-    pass "--ver 被 upgrade 拒绝（退出码 $code）"
+    pass "--ver 被 upgrade 拒绝（退出码 ${code}）"
 else
-    fail "--ver 没有被拒绝（退出码 $code）"
+    fail "--ver 没有被拒绝（退出码 ${code}）"
 fi
 
 # --no-link 与它的旧名 --unlink 都拒绝：替换掉不带版本号的链接是 `wave link` 的事
 for flag in --no-link --unlink; do
     code=$(run_wave upgrade jq "$flag")
     if [[ "$code" != "0" ]] && grep -q 'not accepted by upgrade' "$OUT_FILE"; then
-        pass "--upgrade 拒绝 $flag（退出码 $code）"
+        pass "--upgrade 拒绝 ${flag}（退出码 ${code}）"
     else
-        fail "upgrade 没有拒绝 $flag（退出码 $code）"
+        fail "upgrade 没有拒绝 ${flag}（退出码 ${code}）"
     fi
 done
 
 # --all 与包名互斥：批量是对所有已装包，给一个包名说明用户想表达的是另一件事
 code=$(run_wave upgrade --all jq)
 if [[ "$code" != "0" ]] && grep -q 'drop the package name' "$OUT_FILE"; then
-    pass "--all 与包名同时出现时被拒绝（退出码 $code）"
+    pass "--all 与包名同时出现时被拒绝（退出码 ${code}）"
 else
-    fail "--all 与包名同时出现时没有被拒绝（退出码 $code）"
+    fail "--all 与包名同时出现时没有被拒绝（退出码 ${code}）"
 fi
 
 echo ""

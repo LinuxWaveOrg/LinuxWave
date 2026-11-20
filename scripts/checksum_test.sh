@@ -180,7 +180,7 @@ else
         skip "缺校验值的包被拒绝（网络不可达，未能走到校验）"
     else
         if [[ "$INSTALL_RC" -ne 0 ]]; then
-            pass "缺校验值的包安装失败（退出码 $INSTALL_RC）"
+            pass "缺校验值的包安装失败（退出码 ${INSTALL_RC}）"
         else
             fail "缺校验值的包竟然安装成功"
         fi
@@ -198,7 +198,7 @@ else
         skip "校验值错误的包被拒绝（网络不可达，未能走到下载）"
     else
         if [[ "$INSTALL_RC" -ne 0 ]]; then
-            pass "校验值错误的包安装失败（退出码 $INSTALL_RC）"
+            pass "校验值错误的包安装失败（退出码 ${INSTALL_RC}）"
         else
             fail "校验值错误的包竟然安装成功"
         fi
@@ -225,7 +225,7 @@ sentinel() {
     if grep -qF "$needle" "$REPO_DIR/$file" 2>/dev/null; then
         pass "$label"
     else
-        fail "$label（$file 里找不到「$needle」）"
+        fail "${label}（$file 里找不到「${needle}」）"
     fi
 }
 

@@ -100,12 +100,12 @@ count_in() {
 # ==========================================================
 
 install_run() {
-    /bin/bash -c "$(cat "$OFFLINE_INSTALLER")" -- "$@" > "$OUT" 2>&1
+    bash -c "$(cat "$OFFLINE_INSTALLER")" -- "$@" > "$OUT" 2>&1
     return $?
 }
 
 uninstall_run() {
-    /bin/bash -c "$(cat "$SANDBOX_DIR/source-uninstall.sh")" -- "$@" > "$OUT" 2>&1
+    bash -c "$(cat "$SANDBOX_DIR/source-uninstall.sh")" -- "$@" > "$OUT" 2>&1
     return $?
 }
 
@@ -242,7 +242,7 @@ scenario_agreement() {
     fi
 
     reset_state
-    printf '1\nn\n' | script -qec "/bin/bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
+    printf '1\nn\n' | script -qec "bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
     check "拒绝协议后退出码非 0" "$?" "1"
     check "拒绝协议后安装树被回滚" "$([[ -e /root/.local/linuxwave ]] && echo yes || echo no)" "no"
     check "拒绝协议后配置目录被回滚" "$([[ -e /root/.config/linuxwave_config ]] && echo yes || echo no)" "no"
@@ -284,7 +284,7 @@ scenario_uninstall_confirm() {
     reset_state
     install_run --ci --dir-option=2
     uninstall_copy_fresh
-    /bin/bash /root/lw-uninstall.sh < /dev/null > "$OUT" 2>&1
+    bash /root/lw-uninstall.sh < /dev/null > "$OUT" 2>&1
     check "无终端时退出码非 0" "$([[ "$?" -ne 0 ]] && echo yes || echo no)" "yes"
     check "无终端时什么都不删" \
         "$([[ -e /root/.local/linuxwave ]] && echo yes || echo no)" "yes"
@@ -294,14 +294,14 @@ scenario_uninstall_confirm() {
         # 5.2 回答 n → 取消
         install_run --ci --dir-option=2
         uninstall_copy_fresh
-        printf 'n' | script -qec "/bin/bash /root/lw-uninstall.sh" /dev/null > "$OUT" 2>&1
+        printf 'n' | script -qec "bash /root/lw-uninstall.sh" /dev/null > "$OUT" 2>&1
         check "答 n 时取消卸载" "$([[ -e /root/.local/linuxwave ]] && echo yes || echo no)" "yes"
         contains "答 n 时输出已取消" "$OUT" "Uninstall cancelled"
 
         # 5.3 回答 y → 删除
         install_run --ci --dir-option=2
         uninstall_copy_fresh
-        printf 'y' | script -qec "/bin/bash /root/lw-uninstall.sh" /dev/null > "$OUT" 2>&1
+        printf 'y' | script -qec "bash /root/lw-uninstall.sh" /dev/null > "$OUT" 2>&1
         check "答 y 时卸载完成" "$([[ -e /root/.local/linuxwave ]] && echo no || echo yes)" "yes"
     else
         skip "答 n / 答 y 的断言（缺 script，无法提供 pty）"
@@ -325,16 +325,16 @@ scenario_self_delete() {
     install_run --ci --dir-option=2
     check "安装成功（自删场景前置）" "$?" "0"
     uninstall_copy_fresh
-    /bin/bash /root/lw-uninstall.sh --force > "$OUT" 2>&1
+    bash /root/lw-uninstall.sh --force > "$OUT" 2>&1
     check "以文件方式运行后自删" "$([[ -e /root/lw-uninstall.sh ]] && echo yes || echo no)" "no"
 
-    # 用 /bin/bash -c 运行时 $0 是解释器自身；曾经这里会把 /bin/bash 删掉
+    # 用 bash -c 运行时 $0 是解释器自身；曾经这里会把 bash 删掉
     reset_state
     install_run --ci --dir-option=2
     uninstall_run --force
     local rc=$?
-    check "以 /bin/bash -c 运行卸载成功" "$rc" "0"
-    check "以 /bin/bash -c 运行不误删解释器" "$([[ -x /bin/bash ]] && echo yes || echo no)" "yes"
+    check "以 bash -c 运行卸载成功" "$rc" "0"
+    check "以 bash -c 运行不误删解释器" "$([[ -x bash ]] && echo yes || echo no)" "yes"
 }
 
 scenario_shared() {
@@ -444,7 +444,7 @@ scenario_install_menu() {
     if command -v script > /dev/null 2>&1; then
         # 9.1 无效输入：绝不能静默装到别的目录去（用户明确没选那里）
         reset_state
-        printf '9\n9\n9\n' | script -qec "/bin/bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
+        printf '9\n9\n9\n' | script -qec "bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
         local rc=$?
         check "连续无效输入后退出码非 0" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)" "yes"
         contains "无效输入被明确指出" "$OUT" "is not one of 1-5"
@@ -456,7 +456,7 @@ scenario_install_menu() {
 
         # 9.2 有效输入照常工作（菜单 → 协议）
         reset_state
-        printf '3\ny\n' | script -qec "/bin/bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
+        printf '3\ny\n' | script -qec "bash $OFFLINE_INSTALLER" /dev/null > "$OUT" 2>&1
         check "菜单选 3 能装成功" "$([[ -d /opt/linuxwave ]] && echo yes || echo no)" "yes"
     else
         skip "菜单场景（缺 script，无法提供 pty）"
@@ -523,7 +523,7 @@ import pkginstaller as P
 print(P.group_name_for_gid(0), P.group_name_for_gid($probe_gid))
 " 2>&1)"
     check "gid 0 不劝人加入 root 组" "$(echo "$probe_out" | cut -d' ' -f1)" "None"
-    check "非 0 的 gid 反查出真实组名（应为 $probe_name）" \
+    check "非 0 的 gid 反查出真实组名（应为 ${probe_name}）" \
         "$(echo "$probe_out" | cut -d' ' -f2)" "$probe_name"
 
     # 11.2 安装器的共用提示：推荐的是免 sudo 的 `wave install`，
@@ -705,7 +705,7 @@ PY
         kill "$holder_pid" 2> /dev/null
         wait "$holder_pid" 2> /dev/null
         rm -f "$FIFO" "$DRIVER"
-        fail "重试提示处 Ctrl-C：未能走到重试提示（退出码 $early_rc），输出："
+        fail "重试提示处 Ctrl-C：未能走到重试提示（退出码 ${early_rc}），输出："
         sed 's/^/    | /' "$OUT2" >&2
         return
     fi
@@ -946,7 +946,7 @@ chmod +x "$R/root/bin/sudo" "$R/root/bin/loginctl" "$R/root/bin/systemctl"
 cp "${BASH_SOURCE[0]}" "$SANDBOX_DIR/sandbox_test.sh"
 
 export SANDBOX_DIR R
-exec unshare -rm /bin/bash -c '
+exec unshare -rm bash -c '
     mount --bind "$R/etc"      /etc
     mount --bind "$R/home"     /home
     mount --bind "$R/opt"      /opt
@@ -959,5 +959,5 @@ exec unshare -rm /bin/bash -c '
     export PATH="/root/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     export LC_ALL=C.UTF-8
     cd /root
-    exec /bin/bash "$SANDBOX_DIR/sandbox_test.sh"
+    exec bash "$SANDBOX_DIR/sandbox_test.sh"
 '

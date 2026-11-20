@@ -89,11 +89,11 @@ out="$(LIB_DIR="$WORK/lib" AGREEMENT_FILE="$WORK/config/AGREEMENT.json" \
     bash -c 'source "$1"; record_agreement; echo rc=$?' _ "$WORK/lib.sh" 2>&1)"
 case "$out" in
     *"cannot read AGREEMENT_ID"*) pass "读不到 id 时如实说明" ;;
-    *) fail "读不到 id 时没有说明（$out）" ;;
+    *) fail "读不到 id 时没有说明（${out}）" ;;
 esac
 case "$out" in
     *"rc=0"*) pass "读不到 id 不中断安装" ;;
-    *) fail "读不到 id 不该中断（$out）" ;;
+    *) fail "读不到 id 不该中断（${out}）" ;;
 esac
 report "读不到 id 时不留下空文件" \
     "$([[ -e "$WORK/config/AGREEMENT.json" ]] && echo yes || echo no)" "no"

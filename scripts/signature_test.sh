@@ -69,7 +69,7 @@ case "$out" in
 esac
 case "$out" in
     *"does not match the signed data"*) pass "哈希不一致时说清楚了" ;;
-    *) fail "哈希不一致时没有提示（$out）" ;;
+    *) fail "哈希不一致时没有提示（${out}）" ;;
 esac
 
 bash -c 'source "$1"; LINUXWAVE_STRICT_HASHES=1; lw_check_integrity x "$2" "$3"' \
@@ -96,7 +96,7 @@ verify() {  # verify <公钥路径或空> <严格模式 ?> [附加 env]
 out="$(verify "" 0)"
 case "$out" in
     *"rc=0"*) pass "没有公钥时整段跳过" ;;
-    *) fail "没有公钥时不该报错（$out）" ;;
+    *) fail "没有公钥时不该报错（${out}）" ;;
 esac
 case "$out" in
     *"signature OK"*) fail "没有公钥时不该说签名通过" ;;
@@ -106,17 +106,17 @@ esac
 out="$(verify "$WORK/good.pub" 0)"
 case "$out" in
     *"signature OK"*) pass "签名正确时明确说通过" ;;
-    *) fail "签名正确却没报通过（$out）" ;;
+    *) fail "签名正确却没报通过（${out}）" ;;
 esac
 
 out="$(verify "$WORK/other.pub" 0)"
 case "$out" in
     *"rc=0"*) pass "签名不对时（非严格）继续" ;;
-    *) fail "签名不对时（非严格）不该中断（$out）" ;;
+    *) fail "签名不对时（非严格）不该中断（${out}）" ;;
 esac
 case "$out" in
     *"not signed by the trusted key"*) pass "签名不对时说清楚了" ;;
-    *) fail "签名不对时没有提示（$out）" ;;
+    *) fail "签名不对时没有提示（${out}）" ;;
 esac
 
 LINUXWAVE_RSA_PUB="$WORK/other.pub" LINUXWAVE_STRICT_HASHES=1 \
@@ -128,11 +128,11 @@ mv "$WORK/latest.toml.sig" "$WORK/latest.toml.sig.bak"
 out="$(verify "$WORK/good.pub" 0)"
 case "$out" in
     *"No signature"*) pass ".sig 缺失时按「这一版没签名」处理" ;;
-    *) fail ".sig 缺失时应说明没签名（$out）" ;;
+    *) fail ".sig 缺失时应说明没签名（${out}）" ;;
 esac
 case "$out" in
     *"rc=0"*) pass ".sig 缺失不算错误" ;;
-    *) fail ".sig 缺失不该失败（$out）" ;;
+    *) fail ".sig 缺失不该失败（${out}）" ;;
 esac
 mv "$WORK/latest.toml.sig.bak" "$WORK/latest.toml.sig"
 

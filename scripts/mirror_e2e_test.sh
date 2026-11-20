@@ -58,7 +58,7 @@ EXPECTED_SHA="$(sha256sum "$MIRROR_ROOT/$PKG/$PAYLOAD" | awk '{print $1}')"
 echo "🌊 Mirror payload: $PKG/$PAYLOAD  sha256=${EXPECTED_SHA:0:12}…"
 
 if [[ "$PAYLOAD" != "demo@1.0.amd64.tar.gz" ]]; then
-    fail "payload 文件名不是预期形状（得到 $PAYLOAD）"
+    fail "payload 文件名不是预期形状（得到 ${PAYLOAD}）"
 else
     pass "payload 文件名按 <包>@<版本>.<架构><扩展名> 生成"
 fi
@@ -117,7 +117,7 @@ for _ in $(seq 1 100); do
     sleep 0.1
 done
 if [[ "$ready" == "1" ]]; then
-    pass "本地镜像已启动（$PORT，要求 Basic 认证）"
+    pass "本地镜像已启动（${PORT}，要求 Basic 认证）"
 else
     fail "本地镜像没起来"
     sed 's/^/    /' "$WORK/server.log"
@@ -137,7 +137,7 @@ anon_code="$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' \
 if [[ "$anon_code" == "401" ]]; then
     pass "不带凭据取镜像 → 401（认证真的生效）"
 else
-    fail "不带凭据竟然拿到了 $anon_code，这台的「成功」不能证明凭据有用"
+    fail "不带凭据竟然拿到了 ${anon_code}，这台的「成功」不能证明凭据有用"
 fi
 
 # ==========================================
@@ -180,7 +180,7 @@ if run_case "$authed_domain" "$WORK/fetched.tgz" > "$WORK/run.log" 2>&1; then
     if [[ "$actual_sha" == "$EXPECTED_SHA" ]]; then
         pass "带凭据从镜像取到了字节，sha256 一致"
     else
-        fail "取到了字节但 sha256 不符（$actual_sha != $EXPECTED_SHA）"
+        fail "取到了字节但 sha256 不符（$actual_sha != ${EXPECTED_SHA}）"
     fi
 else
     fail "带凭据从镜像取字节失败"
@@ -224,7 +224,7 @@ print(domains.redact_url('http://$USER_NAME:$PASSWORD@127.0.0.1:$PORT/bottle/$PK
 if [[ "$masked" == *"$USER_NAME:***@"* && "$masked" != *"$PASSWORD"* ]]; then
     pass "镜像地址在日志里被脱敏（用户名保留、口令掩掉）"
 else
-    fail "脱敏结果不对（$masked）"
+    fail "脱敏结果不对（${masked}）"
 fi
 
 # ==========================================

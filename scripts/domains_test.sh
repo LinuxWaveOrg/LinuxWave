@@ -143,7 +143,7 @@ PYV
 )"
 
     if [[ "$shell_verdict" != "$python_verdict" ]]; then
-        fail "shell 与 Python 结论不同：$case_value（shell=$shell_verdict python=$python_verdict）"
+        fail "shell 与 Python 结论不同：${case_value}（shell=$shell_verdict python=${python_verdict}）"
         cross_ok=false
     fi
 done <<< "$CROSS_CASES"
@@ -418,7 +418,7 @@ check_redact() {
     if [[ "$out" == *"$must_have"* && "$out" != *"$must_not_have"* ]]; then
         pass "$(basename "$script")：$label"
     else
-        fail "$(basename "$script")：$label（得到 '$out'）"
+        fail "$(basename "$script")：${label}（得到 '$out'）"
     fi
 }
 
@@ -522,21 +522,21 @@ out="$(run_sudo_case "$REPO_DIR/lib/install.sh" curl -fsSL http://x)"
 if [[ "$out" == 'sudo|curl -fsSL http://x' ]]; then
     pass "没有代理变量时与普通 sudo 完全一致"
 else
-    fail "没有代理变量时的调用形状变了（$out）"
+    fail "没有代理变量时的调用形状变了（${out}）"
 fi
 
 out="$(HTTPS_PROXY=http://127.0.0.1:7890 run_sudo_case "$REPO_DIR/lib/install.sh" curl -fsSL http://x)"
 if [[ "$out" == 'sudo|env HTTPS_PROXY=http://127.0.0.1:7890 curl -fsSL http://x' ]]; then
     pass "有代理变量时用 sudo env 显式传过去"
 else
-    fail "有代理变量时没有传过去（$out）"
+    fail "有代理变量时没有传过去（${out}）"
 fi
 
 out="$(https_proxy=http://p:2 run_sudo_case "$REPO_DIR/lib/selfupdate.sh" curl http://x)"
 if [[ "$out" == *'https_proxy=http://p:2'* ]]; then
     pass "小写写法（curl 也认）同样传过去"
 else
-    fail "小写代理变量被丢掉了（$out）"
+    fail "小写代理变量被丢掉了（${out}）"
 fi
 
 echo

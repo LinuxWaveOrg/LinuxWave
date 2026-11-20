@@ -286,7 +286,9 @@ main() {
                  "$LINUXWAVE_INSTALL_DIR/lib/configerror.py" \
                  "$LINUXWAVE_INSTALL_DIR/lib/help.py" \
                  "$LINUXWAVE_INSTALL_DIR/lib/silent.py" \
-                 "$LINUXWAVE_INSTALL_DIR/lib/quiet.py"; do
+                 "$LINUXWAVE_INSTALL_DIR/lib/quiet.py" \
+                 "$LINUXWAVE_INSTALL_DIR/lib/tls.py" \
+                 "$LINUXWAVE_INSTALL_DIR/lib/timeouts.py"; do
         if [ -f "$stale" ]; then
             run rm -f "$stale" || exit 1
         fi

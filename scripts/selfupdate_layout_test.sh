@@ -154,7 +154,7 @@ EXPECTED_COUNT="$(printf '%s\n' "${FILE_LIST[@]}" | grep -cvE '^(lib/(install|un
 if [[ "$WANT_COUNT" -eq "$EXPECTED_COUNT" ]]; then
     pass "全量清单逐文件内联（$WANT_COUNT 条 want）"
 else
-    fail "want 条数不对（$WANT_COUNT，期望 $EXPECTED_COUNT）"
+    fail "want 条数不对（${WANT_COUNT}，期望 ${EXPECTED_COUNT}）"
 fi
 
 # 落盘清单与 want 必须同源：各写一份就会漂移成「自检说完整、实际缺文件」
@@ -176,7 +176,7 @@ fi
 DIGEST_LINE="$(grep -m1 '^    want lib/wave.py' "$OUT" | awk '{print $4}')"
 EXPECTED_DIGEST="$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$REPO_DIR/lib/wave.py")"
 [[ "$DIGEST_LINE" == "$EXPECTED_DIGEST" ]] && pass "哈希与文件内容一致" \
-    || fail "哈希对不上（$DIGEST_LINE != $EXPECTED_DIGEST）"
+    || fail "哈希对不上（$DIGEST_LINE != ${EXPECTED_DIGEST}）"
 
 for forbidden in 'lib/install.sh' 'lib/uninstall.sh' 'lib/wave ' 'Keys/description.md' '__pycache__'; do
     if grep -q "want $forbidden" "$OUT"; then
@@ -202,7 +202,7 @@ DELTA_OUT="$WORK/delta.sh"
 if generate "$DELTA_OUT" --delta lib/wave.py cli/help.py --new cli/help.py > /dev/null 2>&1; then
     DELTA_PATHS="$(sed -n '/^install_delta() {/,/^}$/p' "$DELTA_OUT" | grep '^    want ' | awk '{print $2}' | tr '\n' ' ')"
     [[ "$DELTA_PATHS" == "cli/help.py lib/wave.py " ]] && pass "--new 里的文件排在增量最前" \
-        || fail "增量顺序不对（$DELTA_PATHS）"
+        || fail "增量顺序不对（${DELTA_PATHS}）"
 else
     fail "带 --delta/--new 的生成失败"
 fi

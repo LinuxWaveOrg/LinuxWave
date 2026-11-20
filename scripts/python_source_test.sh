@@ -138,17 +138,17 @@ for script in "$REPO_DIR/lib/install.sh" "$REPO_DIR/lib/selfupdate.sh"; do
     # ① 托管有副本 → 用它，不该出现回落提示
     out="$(run_case "$script" yes no)"
     if grep -q '^RC=0' <<< "$out" && grep -q '^FELL_BACK=0' <<< "$out"; then
-        pass "$name：有托管副本时直接用（无回落提示）"
+        pass "${name}：有托管副本时直接用（无回落提示）"
     else
-        fail "$name：有托管副本时的行为不对（$(tr '\n' ' ' <<< "$out")）"
+        fail "${name}：有托管副本时的行为不对（$(tr '\n' ' ' <<< "$out")）"
     fi
 
     # ② 托管没有副本 → 回落到上游，并且明确说出来
     out="$(run_case "$script" no no)"
     if grep -q '^RC=0' <<< "$out" && grep -q '^FELL_BACK=1' <<< "$out"; then
-        pass "$name：没有托管副本时回落到上游并提示"
+        pass "${name}：没有托管副本时回落到上游并提示"
     else
-        fail "$name：没有托管副本时没有回落（$(tr '\n' ' ' <<< "$out")）"
+        fail "${name}：没有托管副本时没有回落（$(tr '\n' ' ' <<< "$out")）"
     fi
 
     # ③ 加旗标 → 即使托管有副本也直接走上游（用「托管副本是坏的」来证明它没被读）
@@ -187,9 +187,9 @@ for script in "$REPO_DIR/lib/install.sh" "$REPO_DIR/lib/selfupdate.sh"; do
         echo "RC=$?"
     )"
     if grep -q '^RC=0' <<< "$out"; then
-        pass "$name：加旗标时跳过坏掉的托管副本、直接走上游"
+        pass "${name}：加旗标时跳过坏掉的托管副本、直接走上游"
     else
-        fail "$name：加旗标时仍然读了托管副本（$(tr '\n' ' ' <<< "$out")）"
+        fail "${name}：加旗标时仍然读了托管副本（$(tr '\n' ' ' <<< "$out")）"
     fi
 done
 

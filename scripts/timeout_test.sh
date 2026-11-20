@@ -157,9 +157,9 @@ runpy.run_path(os.path.join(os.environ["LW_REPO"], "lib", "wave.py"), run_name="
 
 code=$(run_wave install jq --max-time=abc)
 if [[ "$code" != "0" ]] && grep -q 'Cannot parse --max-time' "$OUT_FILE"; then
-    pass "畸形时长被拒绝（退出码 $code）"
+    pass "畸形时长被拒绝（退出码 ${code}）"
 else
-    fail "畸形时长没有被正确拒绝（退出码 $code）"
+    fail "畸形时长没有被正确拒绝（退出码 ${code}）"
 fi
 
 if grep -q 'Use seconds or a unit' "$OUT_FILE"; then
@@ -170,9 +170,9 @@ fi
 
 code=$(run_wave install jq --max-time)
 if [[ "$code" != "0" ]] && grep -q 'Missing time after --max-time' "$OUT_FILE"; then
-    pass "缺值被拒绝（退出码 $code）"
+    pass "缺值被拒绝（退出码 ${code}）"
 else
-    fail "缺值没有被正确拒绝（退出码 $code）"
+    fail "缺值没有被正确拒绝（退出码 ${code}）"
 fi
 
 echo ""

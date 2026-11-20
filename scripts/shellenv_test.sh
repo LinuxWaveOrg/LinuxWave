@@ -46,11 +46,11 @@ PY
 )"
 case "$py_out" in
     *"case \":\$PATH:\" in"*) pass "带 case 守卫（可重复 eval）" ;;
-    *) fail "缺少 case 守卫（$py_out）" ;;
+    *) fail "缺少 case 守卫（${py_out}）" ;;
 esac
 case "$py_out" in
     *"$BASE/bin:$BASE/links:$BASE/lib"*) pass "三个目录都在，顺序为 bin:links:lib" ;;
-    *) fail "目录不全或顺序不对（$py_out）" ;;
+    *) fail "目录不全或顺序不对（${py_out}）" ;;
 esac
 case "$py_out" in
     *🌊*) fail "输出里混进了提示语（会被 eval 当命令执行）" ;;

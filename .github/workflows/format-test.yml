@@ -196,6 +196,31 @@ jobs:
         run: |
           bash scripts/raw_test.sh
 
+      # 更新清单生成器：按版本冻结的 update_commands.sh 内容与迁移段
+      - name: Run update commands test
+        run: |
+          bash scripts/update_commands_test.sh
+
+      # 安装器的旗标矩阵（--help / --print-usage / 平台闸门 / --skip-platform-check）
+      - name: Run install flags test
+        run: |
+          bash scripts/install_flags_test.sh
+
+      # 什么时候要提权：按写权限判断，配置目录的位置另算
+      - name: Run install privilege test
+        run: |
+          bash scripts/install_privilege_test.sh
+
+      # Markdown 里的代码块与链接不能烂掉
+      - name: Run markdown test
+        run: |
+          bash scripts/markdown_test.sh
+
+      # shell 卫生：变量花括号、bash -n、函数名、bash 版本边界
+      - name: Run shell lint
+        run: |
+          bash scripts/shell_lint.sh
+
       # --max-time 的时长解析与传导（畸形值必须报错，不能静默用默认值）
       - name: Run timeout test
         run: |
