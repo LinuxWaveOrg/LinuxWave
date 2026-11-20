@@ -1,106 +1,272 @@
 #!/usr/bin/env python3
 
 # build_update_commands.py
-
-# 生成 4.0 布局里「按版本冻结」的更新脚本：`linuxwavedata/<版本>/update_commands.sh`。
+# 生成 linuxwavedata/<版本>/update_commands.sh。
 #
-# 为什么它是生成物而不是手写：脚本内容随版本变化，手写必然漂移；上游同样由
-# 仓库里的脚本生成，并在文件头注明「请勿手工编辑」。
+# 为什么要有生成器：脚本对客户端承诺了一整套环境变量契约，还要处理「首次安装」
+# 与「从上一版升级」两种情形。手写容易漏掉某一路径，而漏掉的后果是某个文件没被
+# 下载 —— 装完之后某条命令才 ModuleNotFoundError。
 #
-# 这一版的做法是**委托**：脚本自己不做逐文件下载，而是取 `$BRANCH` 上的
-# `lib/selfupdate.sh` 交给它做（它读 configdata 的 files_info、处理目录迁移、
-# 重建启动器）。这样按版本冻结的是「入口」，而细粒度逻辑仍在一处演进。
-# 等哪天要改成「只下载真正变动的文件」，改这个生成器即可，客户端一行不用动。
+# 两种清单的区别：
+#   full  首次安装（或修复受损安装）要的**全部**文件
+#   delta 从上一版升级时**变动过**的文件
+# 客户端把「安装目录里有没有 lib/wave.py」「清单里的文件齐不齐」作为判据。
+# 之所以要两个，是因为只列变化不足以支持全新安装 —— 没变的文件在首次安装时
+# 一个都不存在。
 #
 # 用法：
-#   python3 scripts/build_update_commands.py --version 3.2.0 --branch 3.2 \
-#       --output ../configdata-data/linuxwavedata/3.2.0/update_commands.sh
+#   python3 scripts/build_update_commands.py \
+#       --version 4.0.0 \
+#       --out ../Selfupdate/linuxwavedata/4.0.0/update_commands.sh
+#
+#   --delta 省略时等于 full（新版本首次发布时的正常情形）。
+#   --files 省略时按 --ref 指向的仓库树生成。
+#
+#   --new 列出「上一版还不存在」的文件。它们会被排到 delta 的**最前面**，
+#   这不是排版偏好：新模块常被改动过的老模块 import，若旧模块先落地、新模块
+#   后落地，中途一次网络失败就会留下「能 import 的目录、但模块不在」的安装，
+#   wave 从此起不来，连重跑 selfupdate 都做不到。先下新文件，最坏也只是
+#   老逻辑继续跑，重试即可。
 
 import argparse
-import pathlib
+import hashlib
+import subprocess
 import sys
+from pathlib import Path
 
-TEMPLATE = '''#!/bin/bash
+REPO_DIR = Path(__file__).resolve().parent.parent
 
-# LinuxWave update commands — {version}
+# 这些目录下的文件装进安装树；其余（docs、scripts、.github、notes）不参与安装。
 #
-# 由 scripts/build_update_commands.py 生成，请勿手工编辑。
-#
-# 客户端（`wave selfupdate`）保证以下环境变量：
-#
-#   LINUXWAVE_INSTALL_DIR      安装根目录
-#   LINUXWAVE_CONFIG_DIR       配置目录
-#   LINUXWAVE_CORE_URL         代码地址前缀（不含分支）
-#   LINUXWAVE_BRANCH           代码分支
-#   LINUXWAVE_TARGET_VERSION   目标版本（本脚本所属的版本）
-#   LINUXWAVE_CURRENT_VERSION  当前已装版本；首次安装时为空
-#   LINUXWAVE_FILE_TIMEOUT     单个文件的超时秒数
-#   LINUXWAVE_NEED_SUDO        1 = 安装目录需要 sudo 才能写
-#   LINUXWAVE_SILENT           1 = 少打印
-#   LINUXWAVE_DRY_RUN          1 = 只报告将要做什么，不落盘
-#
-# 约定：
-#   - 任何一步失败都要 exit 非零；客户端据此判定「什么都没更新」，不写 VERSION.json
-#   - 必须幂等：重跑一次不能把已经就位的东西弄坏
+# 清单的唯一来源是 scripts/components.txt —— 与 lib/wave.py 的 sys.path、测试沙箱的
+# 拷贝、CI 的工作目录共用同一份。加一个顶层组件只改那份文件。
+# 清单由 scripts/components.py 读（与 components.sh 同源）。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from components import names as component_names  # noqa: E402
+import assets as asset_dirs  # noqa: E402
 
-set -u
+# 装进安装树的两类目录：
+#   components  运行时可执行代码，会进 sys.path
+#   assets      文档等资源，**不进 sys.path**
+# 清单与 sys.path 因此不能共用一份 —— 把它们混在一起，`import` 就会去
+# Keys/ 里找模块（找不到，但错误信息会指向一个莫名其妙的地方）。
+COMPONENT_DIRS = tuple(component_names())
+ASSET_DIRS = tuple(asset_dirs.names())
+INSTALLED_DIRS = COMPONENT_DIRS + ASSET_DIRS
+if not COMPONENT_DIRS:
+    raise SystemExit("🌊 Error: scripts/components.txt lists no component directory.")
 
-: "${{LINUXWAVE_INSTALL_DIR:?LINUXWAVE_INSTALL_DIR is required}}"
-: "${{LINUXWAVE_CORE_URL:?LINUXWAVE_CORE_URL is required}}"
-: "${{LINUXWAVE_BRANCH:?LINUXWAVE_BRANCH is required}}"
-
-TARGET_VERSION="{version}"
-TIMEOUT="${{LINUXWAVE_FILE_TIMEOUT:-180}}"
-
-# 真正干活的脚本认的是 UPDATE_* 这两个名字，这里做一次映射
-export LINUXWAVE_UPDATE_VERSION="${{LINUXWAVE_TARGET_VERSION:-$TARGET_VERSION}}"
-export LINUXWAVE_UPDATE_BRANCH="${{LINUXWAVE_BRANCH}}"
-export LINUXWAVE_MAX_TIME="$TIMEOUT"
-
-url="$LINUXWAVE_CORE_URL/$LINUXWAVE_BRANCH/lib/selfupdate.sh"
-
-# 先完整落到临时文件再执行，两个原因：
-#   1. `bash -c "$(curl …)"` 里 curl 失败时 bash 仍然返回 0，会被误判成更新成功；
-#   2. selfupdate.sh 自身就在这次更新要覆盖的文件里 —— 边读边覆盖同一个文件不安全。
-tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
-
-if ! curl -fsSL --max-time "$TIMEOUT" -o "$tmp" "$url"; then
-    echo "🌊 Error: cannot fetch $url" >&2
-    echo "🌊 Nothing was updated." >&2
-    exit 1
-fi
-
-/bin/bash "$tmp"
-'''
+# 运行时由客户端生成、不从仓库复制的文件：
+#   lib/wave        启动器，write_launcher 按私有 venv 与解释器路径生成
+#   lib/install.sh  安装器装自己没意义（每次都是从远端执行的）
+#   lib/uninstall.sh 同理
+EXCLUDED = {
+    "lib/wave",
+    "lib/install.sh",
+    "lib/uninstall.sh",
+}
 
 
-def render(version, branch):
-    return TEMPLATE.format(version=version, branch=branch)
+def files_from_git(ref):
+    entries = []
+    for directory in INSTALLED_DIRS:
+        # 必须递归：`git ls-tree` 不加 -r 时，子目录只会出现它的名字（如 `lib/net`），
+        # 于是清单里多出一条「文件」，客户端去 curl 它必然 404 —— 安装直接失败。
+        # 用 -r 之后列出的全是 blob（文件），tree 不会混进来。
+        result = subprocess.run(
+            ["git", "-C", str(REPO_DIR), "ls-tree", "-r", "--name-only", f"{ref}:{directory}"],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"🌊 Error: cannot list {directory} at {ref}", file=sys.stderr)
+            return None
+        for name in result.stdout.splitlines():
+            name = name.strip()
+            if not name:
+                continue
+            entries.append(f"{directory}/{name}")
+    return sorted(entries)
+
+
+def sanitize(paths):
+    """把一份原始清单收拾成能装的文件清单，返回 (保留的, [(被丢掉的, 原因)])。
+
+    必须在这里过滤，而不是只在上游的 files_from_git 里 —— 发版时用 `--files`
+    传入一份 `find` 的结果是常见做法，而 find 会把工作区里的 __pycache__ 也列
+    进来（git 里其实没有这些目录）。清单里混进 pkg/__pycache__ 之后，客户端会对
+    那些路径各重试 3 次再报 404，用户看到一堆红字才更新完成。
+
+    同理 `--files` 会绕过 EXCLUDED（lib/install.sh 等三份被当成普通文件下载并
+    覆盖了安装目录里的副本）。两个过滤器都放在这里，才不会因为换了入口就漏。
+    """
+    kept = []
+    dropped = []
+    for path in paths:
+        path = (path or "").strip()
+        if not path:
+            continue
+        parts = path.split("/")
+        if "__pycache__" in parts:
+            dropped.append((path, "字节码缓存目录，git 里没有"))
+            continue
+        if path.endswith(".pyc"):
+            dropped.append((path, "字节码文件，git 里没有"))
+            continue
+        if path.rstrip("/") in EXCLUDED:
+            dropped.append((path, "运行时由客户端生成或不该自装"))
+            continue
+        # 资源目录里的 README.md / description.md 是写给**仓库读者**的说明，装进
+        # 安装树没人读，但它一缺就会让整个安装失败（Keys/description.md 的 404 会
+        # 把「镜像还没同步这个分支」变成一个看起来像单文件问题的事故）。
+        if parts[-1] in ("README.md", "description.md"):
+            dropped.append((path, "给人看的说明文件，不进安装树"))
+            continue
+        if parts[0] not in INSTALLED_DIRS:
+            dropped.append((path, f"不在 {INSTALLED_DIRS} 之下"))
+            continue
+        kept.append(path)
+    return sorted(kept), dropped
+
+
+def want_lines(paths, digests=None):
+    """生成 `want <路径> <0|1> <sha256>` 三列。
+
+    第三列是 4.0 起的实验性签名：哈希写进清单，客户端据此判断「下到的字节是不是
+    发布时那一份」。列缺失或为空时客户端退回旧行为（只靠 TLS），所以老版本客户端
+    看到三列也只是忽略第三列 —— 这一列是**纯加法**。
+    """
+    lines = []
+    for path in paths:
+        executable = "1" if path.endswith(".sh") else "0"
+        digest = (digests or {}).get(path, "")
+        lines.append(f"    want {path} {executable} {digest}".rstrip())
+    return "\n".join(lines)
+
+
+def file_digests(paths, repo, ref=None):
+    """每个文件的 sha256；读不到就留空（那一行退回「不校验」）。
+
+    ref 给定时读 git 对象里的字节（发布产物必须来自 tag / 分支，而不是工作区），
+    否则读工作区 —— `--files` 模式就是这么用的，它本来就允许带未提交的内容。
+    """
+    digests = {}
+    for path in paths:
+        data = None
+        if ref:
+            result = subprocess.run(["git", "-C", str(repo), "cat-file", "blob", f"{ref}:{path}"],
+                                    capture_output=True)
+            if result.returncode == 0:
+                data = result.stdout
+        else:
+            try:
+                data = (repo / path).read_bytes()
+            except OSError:
+                data = None
+        if data is not None:
+            digests[path] = hashlib.sha256(data).hexdigest()
+    return digests
+
+
+def list_lines(paths):
+    """全量清单的裸路径，一行一个，给脚本里的 tree_complete() 用。
+
+    与 want_lines 分开写：判断「安装树完整吗」只需要路径，不需要 +x 标记。
+    两者必须来自同一个 files 列表 —— 各写一份就会漂移，而漂移的后果是
+    「自检说完整、实际缺文件」（比不检查更糟）。
+    """
+    return "\n".join(paths)
+
+
+TEMPLATE = open(Path(__file__).resolve().parent / "update_commands.template.sh").read()
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", required=True, help="目标版本，如 3.2.0")
-    parser.add_argument("--branch", required=True, help="配套的代码分支，如 3.2")
-    parser.add_argument("--output", required=True, help="输出路径（…/linuxwavedata/<版本>/update_commands.sh）")
+    parser = argparse.ArgumentParser(description="Generate update_commands.sh for one release.")
+    parser.add_argument("--version", required=True, help="target version, e.g. 4.0.0")
+    parser.add_argument("--branch", default="", help="code branch; defaults to major.minor of --version")
+    parser.add_argument("--ref", default="HEAD", help="git ref to read the file list from")
+    parser.add_argument("--files", nargs="*", default=None, help="full file list (default: from --ref)")
+    parser.add_argument("--delta", nargs="*", default=None,
+                        help="changed files since the previous release (default: same as --files)")
+    parser.add_argument("--new", nargs="*", default=None,
+                        help="files that did not exist in the previous release; emitted first so a "
+                             "half-finished update still has every module it imports")
+    parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
 
-    text = render(args.version, args.branch)
-
-    output = pathlib.Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(text)
-    output.chmod(0o755)
-
-    # 生成的东西至少要能过语法检查，否则等于把一个坏更新器发给用户
-    import subprocess
-    result = subprocess.run(["/bin/bash", "-n", str(output)], capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"🌊 Error: generated script has a syntax error:\n{result.stderr}", file=sys.stderr)
+    branch = args.branch or ".".join(args.version.split(".")[:2])
+    if not branch:
+        print("🌊 Error: cannot derive a branch; pass --branch.", file=sys.stderr)
         return 1
 
-    print(f"🌊 Wrote {output} ({len(text)} bytes)")
+    raw_files = args.files
+    source = "--files"
+    if not raw_files:
+        raw_files = files_from_git(args.ref)
+        source = f"git {args.ref}"
+        if raw_files is None:
+            return 1
+    if not raw_files:
+        print("🌊 Error: the file list is empty.", file=sys.stderr)
+        return 1
+
+    # 不管清单来自 --files 还是 git，都过同一道过滤（见 sanitize 的说明）
+    files, dropped = sanitize(raw_files)
+    if not files:
+        print("🌊 Error: the file list is empty after filtering.", file=sys.stderr)
+        return 1
+
+    if args.delta:
+        delta, dropped_delta = sanitize(args.delta)
+        dropped = dropped + dropped_delta
+        # 空的 delta 不能放行：install_delta 里一条 want 都没有，脚本瞬间成功返回，
+        # 客户端于是写 VERSION.json —— 版本号前进了，文件一个都没换。与「文件下不到
+        # 却报成功」是同一类故障，只是更难发现（连报错都没有）。
+        if not delta:
+            print("🌊 Error: every entry in --delta was filtered out; "
+                  "an empty delta would silently upgrade nothing.", file=sys.stderr)
+            return 1
+        unknown = [path for path in delta if path not in files]
+        if unknown:
+            print(f"🌊 Error: --delta names files missing from the full list: {unknown}",
+                  file=sys.stderr)
+            return 1
+    else:
+        delta = files
+
+    if args.new:
+        fresh, dropped_new = sanitize(args.new)
+        dropped = dropped + dropped_new
+        # 去重后拼接：--new 里可能有重复项，也可能已列在 delta 的更前面
+        fresh = list(dict.fromkeys(path for path in fresh if path in delta))
+        if fresh:
+            delta = fresh + [path for path in delta if path not in fresh]
+
+    if dropped:
+        print(f"🌊 Dropped {len(dropped)} entries that must not be installed:", file=sys.stderr)
+        for path, why in dropped:
+            print(f"     - {path}  ({why})", file=sys.stderr)
+
+    digests = file_digests(files, REPO_DIR, None if source == "--files" else args.ref)
+    missing = [path for path in files if path not in digests]
+    if missing:
+        # 没有哈希 = 这一行不校验。发布时静默漏掉几个，等于签名只覆盖一半。
+        print(f"🌊 Warning: no sha256 for {len(missing)} file(s): {missing}", file=sys.stderr)
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(TEMPLATE
+                        .replace("@@VERSION@@", args.version)
+                        .replace("@@BRANCH@@", branch)
+                        .replace("@@FULL@@", want_lines(files, digests))
+                        .replace("@@FULL_FILES@@", list_lines(files))
+                        .replace("@@DELTA@@", want_lines(delta, digests)))
+    args.out.chmod(0o755)
+
+    print(f"🌊 {args.out}")
+    print(f"   version {args.version}  branch {branch}")
+    print(f"   full {len(files)} file(s), delta {len(delta)} file(s)")
+    # 这一行是给 latest.toml 用的：客户端先验 latest.toml 的签名，再用这里记下的
+    # 哈希确认「即将被 bash 执行的那个脚本」没被换过。
+    print(f"   update_commands_sha256 = {hashlib.sha256(args.out.read_bytes()).hexdigest()}")
     return 0
 
 
