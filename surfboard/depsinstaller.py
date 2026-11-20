@@ -25,7 +25,7 @@ RESET = '\033[0m'
 import domains
 import silent
 import tls
-from configpaths import assert_inside, load_base_dir
+from configpaths import assert_inside, load_base_dir, require_safe_filename
 
 
 BASE_DIR = load_base_dir()
@@ -208,7 +208,7 @@ def download_dependency(dep_url, dep_display_name, config, input_string):
     from pkginstaller import download_file
 
     DOWNLOAD_TMP.mkdir(parents=True, exist_ok=True)
-    original_filename = dep_url.split("/")[-1]
+    original_filename = require_safe_filename(dep_url.split("/")[-1], "file name")
     temp_path = DOWNLOAD_TMP / f"{original_filename}.partial"
     assert_inside(temp_path, DOWNLOAD_TMP, "dependency download path")
 

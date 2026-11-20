@@ -215,6 +215,24 @@ def is_safe_filename(value):
     return _matches_name(value, ALLOWED_PUNCT_FILENAME)
 
 
+def require_safe_filename(value, what="file name"):
+    """文件名白名单：比 token 多允许扩展名里的字符（`.` 连用、`@`、`+`）。
+
+    与 require_safe_token 分开是因为两者的来源不同：token 是包名/版本号，
+    文件名来自远端索引（`file:` 字段）或 URL 末段，形如
+    `jq@1.7.1.arm64.tar.gz`。它会进下载路径、也会进 shell 脚本的参数，
+    所以同样不允许路径分隔符、空白与控制字符。
+    """
+    if not is_safe_filename(value):
+        print(f"{RED_BOLD}🌊 Error: Unsafe {what}: {value!r}{RESET}")
+        print(f"{RED_BOLD}🌊 Allowed: letters (any script), digits, and "
+              f"{''.join(sorted(ALLOWED_PUNCT_FILENAME))}.{RESET}")
+        print(f"{RED_BOLD}🌊 Path separators, whitespace, control characters and shell "
+              f"metacharacters are never allowed.{RESET}")
+        sys.exit(1)
+    return str(value)
+
+
 def require_safe_token(value, what):
     # 不合法直接退出：这类输入没有任何"宽松解释"的余地
     if not is_safe_token(value):

@@ -36,6 +36,7 @@ from configpaths import (
     VERSION_FILE,
     assert_inside,
     load_base_dir,
+    require_safe_filename,
     require_safe_token,
 )
 
@@ -823,10 +824,13 @@ def handle_install(input_string):
     # 4.1 决定从哪儿取字节：配了镜像就走我们自己的存储（4.0 的 payload 命名），
     # 没配或用户要求 --install-from-source 时仍按索引的 url 取（3.1.x 的既有行为）。
     steplog.begin("choose payload")
+    payload_filename_hint = None
     if domains.use_mirror_for("bottle", config["from_source"]):
         payload = domains.resolve_payload("bottle", ParsePkgName, ParsePkgVersion, ARCH,
                                           ParsePkgFile, ParsePkgURL, False)
         ParsePkgURL = payload["url"]
+        # 走镜像时文件名由 resolve_payload 拼好（URL 里那段是 quote 过的，不能直接用）
+        payload_filename_hint = payload["filename"]
 
     # 5.1 解析 deps 字段（写在版本文件里，可能多行），缺失视为无依赖
     dep_refs = get_deps(parse_common_fields(resp.text))
@@ -838,7 +842,11 @@ def handle_install(input_string):
 
     # 7. 下载
     steplog.begin("download")
-    original_filename = ParsePkgURL.split("/")[-1]
+    # 文件名会进下载路径，也会进 pkginstaller.sh 的参数 —— 过一遍文件名白名单。
+    # 走镜像时用 resolve_payload 给出的那个（URL 末段被 quote 过，可能是 `%40`）；
+    # 走 --install-from-source 时只能从 URL 末段取。
+    original_filename = require_safe_filename(
+        payload_filename_hint or ParsePkgURL.split("/")[-1], "file name")
     temp_path = DOWNLOAD_TMP / f"{original_filename}.partial"
     assert_inside(temp_path, DOWNLOAD_TMP, "download path")
 
