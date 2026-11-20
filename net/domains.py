@@ -75,7 +75,7 @@ DEFAULTS = {
     # 尚未建立，写一个不存在的地址会让 3.1.0 的自带解释器下载直接 404。
     # 等仓库建好、数据搬过去，只改这两行即可（客户端代码不用动）。
     "python":     "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main",
-    "selfupdate": "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main",
+    "selfupdate": "https://raw.githubusercontent.com/LinuxWaveOrg/Selfupdate/main",
     # 预留：源码包的位置定了以后再接上
     "sourcecode": "",
 }

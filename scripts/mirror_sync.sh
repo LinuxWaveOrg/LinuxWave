@@ -146,15 +146,17 @@ gen_index() {
 
 # -------------------- LinuxWave --------------------
 #
-#   configdata                                    自更新数据与解释器数据（main）
+#   Selfupdate                                    自更新数据（main）
+#   configdata                                    解释器数据（main）
 #   LinuxWave/<发布分支>                           程序文件（main 另外留一份）
 #   infosource                                    索引（main）
 #   Bottle / Deps / Python                         暂无独立仓库，不需要镜像
 
 sync_linuxwave() {
-    local cfg=https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main/linuxwavedata/latest.toml
+    local cfg=https://raw.githubusercontent.com/LinuxWaveOrg/Selfupdate/main/linuxwavedata/latest.toml
     local branch
 
+    sync_tree LinuxWaveOrg Selfupdate main
     sync_tree LinuxWaveOrg configdata main
 
     branch="$(toml_field "$cfg" branch)"

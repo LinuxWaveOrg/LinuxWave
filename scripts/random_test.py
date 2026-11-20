@@ -157,7 +157,6 @@ COMPONENTS = [name for name in COMPONENTS if name]
 ARCH_MAP = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "amd64", "amd64": "amd64"}
 
 SELFUPDATE_LATEST_URL = "https://raw.githubusercontent.com/LinuxWaveOrg/Selfupdate/HEAD/linuxwavedata/latest.toml"
-CONFIGDATA_LATEST_URL = "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD/versiondata/latest_version"
 
 
 # -------------------- 结果记录 --------------------
@@ -336,17 +335,10 @@ def _fetch_text(url):
 
 
 def latest_version_source():
-    # 「最新版本」从哪个仓库读，由被测代码决定，不按分支名猜：
-    #   4.0 起 selfupdate 读 Selfupdate 仓库的 linuxwavedata/latest.toml；
-    #   3.x 读 configdata 的 versiondata/latest_version。
-    # 以 net/domains.py 里有没有 selfupdate_latest_url 作为判据。
-    try:
-        domains_py = (REPO_DIR / "net" / "domains.py").read_text()
-    except OSError:
-        return CONFIGDATA_LATEST_URL, r'version:\s*"([^"]+)"'
-    if "def selfupdate_latest_url" in domains_py:
-        return SELFUPDATE_LATEST_URL, r'^\s*version\s*=\s*"([^"]+)"'
-    return CONFIGDATA_LATEST_URL, r'version:\s*"([^"]+)"'
+    # 「最新版本」只有一处：Selfupdate 仓库的 linuxwavedata/latest.toml。
+    # 3.x 的 versiondata/latest_version 已退休（4.4 起连 configdata 里都不再放
+    # 自更新数据），留一条兼容分支只会让测试读到一个没人维护的文件。
+    return SELFUPDATE_LATEST_URL, r'^\s*version\s*=\s*"([^"]+)"'
 
 
 def installed_version_for_selfupdate():
