@@ -32,6 +32,26 @@ https://mirror.example.com/LinuxWave/LinuxWave/4.0/lib/install.sh
 https://mirror.example.com/MacWave/MacWave/4.4/lib/install.sh
 ```
 
+## 最常见的配错：API 域名少了 ref 段
+
+`LINUXWAVE_API_DOMAIN` / `MACWAVE_API_DOMAIN` 必须**写到 ref 段为止** ——
+客户端会在它后面直接拼 `/pkg/pkginfo_<arch>/…`：
+
+```
+对： https://mirror.example.com/MacWave/infosource/HEAD
+错： https://mirror.example.com/MacWave/infosource      ← 拼出来是 …/infosource/pkg/… → 404 / 401
+```
+
+症状是 `wave search`、`wave install <包>` 一律报「读不到包名清单」，而报错里的
+URL 已经少了那一段。镜像上哪个 ref 有货取决于同步脚本：
+
+| 镜像 | infosource 的 ref |
+| --- | --- |
+| LinuxWave | `main` |
+| MacWave | `HEAD` |
+
+`wave mirror` 会打印当前生效值与来源，`--raw` 可直接粘进 shell 配置。
+
 ## 每个项目要哪几棵树
 
 | 项目 | 仓库 | ref | 用途 |

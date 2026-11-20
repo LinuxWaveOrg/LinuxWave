@@ -127,6 +127,27 @@ def fetch_remote_info(pkg_name, arch, budget=None):
 
 # -------------------- list --------------------
 
+def explain_unreachable_name_list(api_url, status=None):
+    """名字清单拿不到时，说清「该往哪儿看」。
+
+    这条路径最容易被误读成「镜像挂了」。实际最常见的两个原因是**本机配置**：
+    域名少了 ref 段（镜像布局是 `<Org>/<repo>/<ref>/…`），或者域名指错产品。
+    所以提示里必须把「期望形状」和「怎么看当前生效值」写出来 ——
+    只说 `Cannot fetch package list` + 一个 404 的 URL，用户只能自己猜。
+    """
+    reason = "cannot read the package name list"
+    if status:
+        reason += f" (HTTP {status})"
+    steplog.fail(
+        reason,
+        request=api_url,
+        hint=["LINUXWAVE_API_DOMAIN must point at <mirror>/LinuxWave/infosource/<ref>",
+              "the mirror lays files out under a ref segment — main or HEAD, whichever "
+              "the mirror synced (see `wave mirror`)",
+              "if the address is right, check the network / --proxy, or ask the "
+              "administrator to re-run scripts/build_versions_index.py on the mirror"])
+
+
 def handle_list(budget=None):
     
     # 直接扫描 BASE_DIR/bin 目录下的子目录，列出所有已安装的包
@@ -160,12 +181,13 @@ def handle_search(query, budget=None):
         resp = requests.get(api_url, timeout=_to(budget), headers=github_api_headers(api_url),
                       **tls.request_kwargs())
         if resp.status_code != 200:
-            print(f"{RED_BOLD}🌊 Error: Cannot fetch package list.{RESET}")
-            print(f"{RED_BOLD}🌊 URL: {api_url}{RESET}")
-            sys.exit(1)
-    except Exception as e:
-        print(f"{RED_BOLD}🌊 Error: {e}{RESET}")
-        sys.exit(1)
+            explain_unreachable_name_list(api_url, resp.status_code)
+    except SystemExit:
+        raise
+    except Exception as error:
+        steplog.fail(f"cannot reach the index: {error}", request=api_url,
+                     hint=["check the network and any --proxy setting, then retry",
+                           "run `wave mirror` to see the addresses in use"])
 
     # GitHub API 是 JSON 数组（要挑 type == "dir"），镜像是一行一个包名。
     # dirs_only=True 只对 JSON 有意义，纯文本那一侧本来就是目录清单。

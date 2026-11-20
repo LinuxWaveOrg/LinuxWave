@@ -512,9 +512,11 @@ def _explain_missing_version_list(package_name, arch, api_url):
         steplog.fail(
             f"cannot reach the package list, so {package_name} cannot be checked",
             request=api_url,
-            hint=["check LINUXWAVE_API_DOMAIN points at <mirror>/LinuxWave/infosource",
-                  "if every package fails this way, the mirror has no versions lists "
-                  "yet (see docs/MIRROR-SETUP.md)",
+            hint=["LINUXWAVE_API_DOMAIN must point at <mirror>/LinuxWave/infosource/<ref>",
+                  "the mirror lays files out under a ref segment — main or HEAD, "
+                  "whichever the mirror synced (see `wave mirror`)",
+                  "if the address is right, the mirror may not have generated its "
+                  "versions lists yet (see docs/MIRROR-SETUP.md)",
                   "check the network and any --proxy setting, then retry"])
 
     if not names:
