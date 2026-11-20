@@ -1516,6 +1516,10 @@ def phase_command_battery(wave, rng, checks):
 
 def phase_uninstall_cycle(wave, rng, installed_plans, checks):
     banner("阶段 3：随机软件包 uninstall")
+    # 带了非法参数的卸载**必须**整个被拒绝，于是那个包本来就会留在树里。
+    # 把它们的名字带出去，阶段 4 的残留检查要排除掉 —— 否则「断言非法参数不动」
+    # 与「断言树是空的」两条互相打架，随机种子一旦抽中就必红。
+    kept = set()
     for plan in installed_plans:
         argv = ["uninstall", uninstall_token(plan)]
         if rng.random() < 0.3:
@@ -1543,6 +1547,7 @@ def phase_uninstall_cycle(wave, rng, installed_plans, checks):
         # 故意带了非法参数：这条命令必须**整个**被拒绝，而不是「忽略那个参数、
         # 照样卸掉」。后者更难查 —— 用户以为命令没跑，其实东西已经没了。
         if illegal:
+            kept.add(plan.bin_name)
             expect(checks, result, 1, label,
                    must_contain=(f"illegal option {illegal}",))
             checks.check(f"{label}: 非法参数没有卸载任何东西",
@@ -1560,9 +1565,10 @@ def phase_uninstall_cycle(wave, rng, installed_plans, checks):
 
         checks.check(f"{label}: 目录已删除", not bin_dir.exists(), str(bin_dir))
         checks.check(f"{label}: 不带版本号的链接已删除", not link.exists(), str(link))
+    return kept
 
 
-def phase_global_invariants(wave, checks):
+def phase_global_invariants(wave, checks, kept=frozenset()):
     """全局残留检查。前面已经失败过时降级为 WARN，避免一个失败引出一串假失败。"""
     banner("阶段 4：全局不变量")
     strict = not checks.failed
@@ -1576,16 +1582,28 @@ def phase_global_invariants(wave, checks):
             checks.warn(label, f"{detail}（前面已有失败，可能是它留下的）")
 
     deps_left = [p for p in (wave.layout.base_dir / "deps").glob("*/*") if p.is_dir()]
-    verify("依赖被级联清干净", not deps_left, ", ".join(str(p) for p in deps_left[:5]))
+    if deps_left and kept:
+        # 被保留的包还装着，它们的依赖当然还在 —— 这不是残留，是必然结果。
+        # 没有保留包时才算真残留（否则这里会替真正的泄漏打掩护）。
+        checks.warn("依赖被级联清干净",
+                    f"{', '.join(str(p) for p in deps_left[:5])}"
+                    f"（有 {len(kept)} 个包因非法参数被保留，它们的依赖本就会留下）")
+    else:
+        verify("依赖被级联清干净", not deps_left, ", ".join(str(p) for p in deps_left[:5]))
 
     downloads = [p for p in wave.layout.partial_dir.glob("*") if p.is_file()]
     verify("下载临时目录没有残留", not downloads,
            ", ".join(p.name for p in downloads[:5]))
 
-    links = list((wave.layout.base_dir / "links").glob("*"))
+    # 带非法参数卸载的那些包是**故意**留下的（那正是断言要求的行为），
+    # 所以按 bin 名把它们从残留里排掉。
+    def left_over(paths):
+        return [p for p in paths if p.name.split("@")[0] not in kept]
+
+    links = left_over((wave.layout.base_dir / "links").glob("*"))
     verify("links/ 没有残留", not links, ", ".join(p.name for p in links[:5]))
 
-    bins = list((wave.layout.base_dir / "bin").glob("*"))
+    bins = left_over((wave.layout.base_dir / "bin").glob("*"))
     verify("bin/ 没有残留", not bins, ", ".join(p.name for p in bins[:5]))
 
 
@@ -1887,8 +1905,8 @@ def main():
         # 「现在还装着什么」，否则后面 link / linkquery / uninstall 的预测全部错位。
         installed = [plan for plan in installed if plan.bin_name in installed_bin_names(wave)]
         phase_command_battery(wave, rng, checks)
-        phase_uninstall_cycle(wave, rng, installed, checks)
-        phase_global_invariants(wave, checks)
+        kept = phase_uninstall_cycle(wave, rng, installed, checks)
+        phase_global_invariants(wave, checks, kept)
         phase_illegal_and_help(wave, rng, checks)
         phase_max_time_forms(wave, checks)
         phase_flag_matrix(wave, rng, checks)
