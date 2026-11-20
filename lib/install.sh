@@ -20,6 +20,8 @@ set -o pipefail
 CLI_CI=false
 CLI_DRY_RUN=false
 CLI_PRINT_USAGE=false
+# --help：打用法后**停**；--print-usage：打用法后继续。两者分工见解析之后那段。
+CLI_HELP=false
 CLI_SKIP_PROBE=false
 CLI_SKIP_PLATFORM_CHECK=false
 CLI_DIR_OPTION=""
@@ -546,6 +548,27 @@ home_to_tilde() {
     fi
 }
 
+# 同上，但结果会**原样交给用户复制执行**，所以要照顾 shell 的展开规则：
+#   - `~` 只在引号外展开，`"~/a b/x"` 展开不了；含空格的片段写成 `~/"a b"/x`，
+#     bash、zsh 与 csh 都实测可用。
+#   - 路径不在家目录下且含空格时，整段加引号。
+home_to_tilde_arg() {
+    local path="$1"
+    local prefix="" rest="$path"
+    if [[ "$path" == "$HOME" || "$path" == "$HOME"/* ]]; then
+        prefix="~"
+        rest="${path#"$HOME"}"
+        rest="${rest#/}"
+        [[ -z "$rest" ]] && { printf '~'; return; }
+    fi
+    if [[ "$rest" == *" "* || "$rest" == *'"'* ]]; then
+        rest="${rest//\"/\\\"}"
+        printf '%s"%s"' "${prefix:+$prefix/}" "$rest"
+    else
+        printf '%s%s' "${prefix:+$prefix/}" "$rest"
+    fi
+}
+
 # ==========================================
 # 辅助函数：校验自定义目录，防止路径穿越
 # ==========================================
@@ -859,8 +882,7 @@ while [[ $# -gt 0 ]]; do
             fi
             ;;
         -h|--help)
-            usage
-            exit 0
+            CLI_HELP=true
             ;;
         *)
             lw_say_err "${RED_BOLD}🌊 Error: unknown option '$1'. Try --help.${RESET}" \
@@ -873,8 +895,49 @@ done
 
 # --raw / --zh 要在真正开始说话之前生效：后面每一行都经 lw_say。
 lw_apply_presentation
+
+# ==========================================
+# --help 的连用规则
+# ==========================================
+#
+# --help 只回答「怎么用」，不安装。所以它只允许两种出现方式：
+#
+#   install.sh --help                 打用法，停在这里
+#   install.sh --help --dry-run       打用法，然后照 --dry-run 走一遍（不安装）
+#
+# 与其它安装参数连用一律报错：`--help --ci --dir-option=2` 读起来像「按这些参数
+# 装」，实际却只打帮助 —— 拦下来比让人以为装过了强。--zh / --raw 例外，它们只改
+# 呈现；--skip-platform-check 也例外，它只是把闸门关掉，本身不装任何东西。
+if [[ "$CLI_HELP" == "true" ]]; then
+    _lw_bad=""
+    for _lw_arg in ${CLI_ARGV[@]+"${CLI_ARGV[@]}"}; do
+        case "$_lw_arg" in
+            -h|--help|--dry-run|--DRY-RUN|--zh|--ZH|--raw|--RAW) ;;
+            --skip-platform-check|--SKIP-PLATFORM-CHECK) ;;
+            *) _lw_bad="$_lw_arg"; break ;;
+        esac
+    done
+    if [[ -n "$_lw_bad" ]]; then
+        lw_say_err "${RED_BOLD}🌊 Error: --help cannot be combined with '$_lw_bad'.${RESET}" \
+            "${RED_BOLD}🌊 错误：--help 不能和 '$_lw_bad' 连用。${RESET}"
+        lw_say_err "🌊 --help only prints the usage and stops. Two ways to go further:" \
+            "🌊 --help 只打用法、不安装。想再往下走有两条路："
+        lw_say_err "🌊   install.sh --help --dry-run    print the usage, then walk the install" \
+            "🌊   install.sh --help --dry-run    先打用法，再走一遍流程（不安装）"
+        lw_say_err "🌊   install.sh --print-usage       print the usage, then install for real" \
+            "🌊   install.sh --print-usage       先打用法，再真的安装"
+        exit 1
+    fi
+fi
+
 if [[ "$CLI_PRINT_USAGE" == "true" ]]; then
     usage
+fi
+
+if [[ "$CLI_HELP" == "true" ]]; then
+    usage
+    # 与 --dry-run 连用时继续往下走；单独出现时到此为止（探针都不碰，断网也能看）。
+    [[ "$CLI_DRY_RUN" == "true" ]] || exit 0
 fi
 
 # 用 `/bin/bash -c "$(curl ...)"` 运行时，第一个参数会变成脚本名（$0）：
@@ -2265,7 +2328,7 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         "🌊 'wave selfupdate' 仍然需要 sudo：它要重写 $CONFIG_DIR，那里属 root。"
     echo ""
 fi
-RC_DISPLAY=$(home_to_tilde "$RC_FILE")
+RC_DISPLAY=$(home_to_tilde_arg "$RC_FILE")   # 这一行会被用户直接复制执行，见函数注释
 lw_say "🌊 To use 'wave' immediately in this terminal, run:" \
     "🌊 想在当前终端立刻用上 'wave'，请运行："
 lw_say "${YELLOW}    source $RC_DISPLAY${RESET}"
