@@ -232,6 +232,7 @@ wave shellenv                      Print the code that puts wave on your PATH (f
 ```
 bat           by David Peter
 btop          by Aristocratos
+columbula     by Sha0huaZhang
 dust          by bootandy
 eza           by Christina Sørensen and the eza community
 fd            by David Peter
@@ -239,7 +240,7 @@ ffmpeg        by FFmpeg Team
 fzf           by Junegunn Choi
 htop          by Hisham Muhammad and the htop team
 ipsw          by blacktop
-jq            by Stephen Dolan, Nicolas Williams, et al.
+jq            by Stephen Dolan, Nicolas Williams, William Langford, Owen Ou, itchyny, Mattias Wadman, Emanuele Torre, Asaf Meizner, avid Korczynski, et al.
 ldid          by Jay Freeman (saurik) / Procursus Team
 lsd           by Abin Simon
 ncdu          by Yoran Heling
@@ -247,8 +248,10 @@ palera1n      by palera1n Team
 pandoc        by John MacFarlane
 rg            by Andrew Gallant
 tmux          by Nicholas Marriott and contributors
+tree          by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro
 trollrestore  by JJTech (@JJTech0130)
 wget          by GNU Project
+yq            by Mike Farah
 zoxide        by Ajeet D'Souza
 ```
 ## 🌊 许可证
