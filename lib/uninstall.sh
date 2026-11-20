@@ -110,7 +110,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
     exit 1
 fi
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
-    printf '%s\n' "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION. / 错误：LinuxWave 需要 bash 4.4 或更高，当前是 $BASH_VERSION。" >&2
+    printf '%s\n' "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION. / 错误：LinuxWave 需要 bash 4.4 或更高，当前是 ${BASH_VERSION}。" >&2
     printf '%s\n' "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash   macOS: brew install bash" >&2
     exit 1
 fi
@@ -246,10 +246,10 @@ lw_remove_tree() {
         return 0
     fi
     if [[ "$how" == "sudo" ]]         || { [[ "$how" == "auto" ]] && [[ "$dir" != "$HOME"* ]]; }; then
-        lw_say "🌊 Removing $dir (with sudo)..." "🌊 正在删除 $dir（需要 sudo）……"
+        lw_say "🌊 Removing $dir (with sudo)..." "🌊 正在删除 ${dir}（需要 sudo）……"
         sudo rm -rf "$dir"
     else
-        lw_say "🌊 Removing $dir..." "🌊 正在删除 $dir……"
+        lw_say "🌊 Removing $dir..." "🌊 正在删除 ${dir}……"
         rm -rf "$dir"
     fi
 }
@@ -346,7 +346,7 @@ for DIR in "${BASE_DIRS[@]}"; do
     REASON="$(skip_reason "$DIR")"
     if [[ -n "$REASON" ]]; then
         lw_say_err "${YELLOW}🌊 Skipping $DIR: $REASON.${RESET}" \
-                   "${YELLOW}🌊 跳过 $DIR：$REASON。${RESET}"
+                   "${YELLOW}🌊 跳过 ${DIR}：${REASON}。${RESET}"
         lw_say_err "🌊 Nothing was deleted there. If you are sure, remove it yourself." \
                    "🌊 那里一个字节都没删。如果你确认要删，请自己动手。"
         continue
@@ -499,7 +499,7 @@ if [[ "$SHARED_DETECTED" == "true" ]] && id "$SHARED_USER" > /dev/null 2>&1; the
         lw_say "🌊 Removing the '$SHARED_USER' account also deletes its home directory" \
                "🌊 删除 '$SHARED_USER' 账号会连带删掉它的家目录"
         lw_say "🌊 ($SHARED_HOME) and everything else stored in it, not just LinuxWave." \
-               "🌊 （$SHARED_HOME）以及里面的一切，不只是 LinuxWave。"
+               "🌊 （${SHARED_HOME}）以及里面的一切，不只是 LinuxWave。"
         lw_say "🌊 It is a dedicated account created for LinuxWave, so this is normally safe." \
                "🌊 那是为 LinuxWave 专门建的账号，所以通常安全。"
         echo ""

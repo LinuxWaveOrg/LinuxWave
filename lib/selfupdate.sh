@@ -811,7 +811,7 @@ if [[ "${LINUXWAVE_DRY_RUN:-}" == "1" ]]; then
            "🌊 将下载并执行 linuxwavedata/$VERSION/update_commands.sh，"
     lw_say "🌊 regenerate lib/wave, install the Python dependencies, and rewrite" \
            "🌊 重建 lib/wave、安装 Python 依赖，并重写"
-    lw_say "🌊 $VERSION_FILE." "🌊 $VERSION_FILE。"
+    lw_say "🌊 $VERSION_FILE." "🌊 ${VERSION_FILE}。"
     exit 0
 fi
 
