@@ -179,7 +179,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
     lw_say "🌊 Error: LinuxWave needs bash 4.4 or newer; this is $BASH_VERSION." \
-        "🌊 错误：LinuxWave 需要 bash 4.4 或更高版本；当前是 $BASH_VERSION。" >&2
+        "🌊 错误：LinuxWave 需要 bash 4.4 或更高版本；当前是 ${BASH_VERSION}。" >&2
     lw_say "🌊 Debian/Ubuntu: sudo apt install bash   Fedora/RHEL: sudo dnf install bash" \
         "🌊 Debian/Ubuntu：sudo apt install bash   Fedora/RHEL：sudo dnf install bash" >&2
     lw_say "🌊 Install it with the command above. macOS does not need this — use MacWave there." \
@@ -469,7 +469,7 @@ lw_domain() {
             127.0.0.1|localhost|::1) printf '%s\n' "$value"; return 0 ;;
         esac
         echo -e "${RED_BOLD}🌊 Error: $name: plain HTTP is only allowed for loopback mirrors: $value${RESET}" >&2
-        echo -e "${RED_BOLD}🌊 错误：$name：明文 HTTP 只允许本机回环镜像：$value${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 错误：${name}：明文 HTTP 只允许本机回环镜像：$value${RESET}" >&2
         exit 1
     fi
 
@@ -723,7 +723,7 @@ print_shared_install_notes() {
         "${YELLOW}🌊 共享安装（Linuxbrew 式）${RESET}"
     lw_say "🌊 Install directory : $SHARED_BASE_DIR" "🌊 安装目录：$SHARED_BASE_DIR"
     lw_say "🌊 Config directory  : $SHARED_CONFIG_DIR  (system-level, shared by every user)" \
-        "🌊 配置目录：$SHARED_CONFIG_DIR（系统级，全机共用）"
+        "🌊 配置目录：${SHARED_CONFIG_DIR}（系统级，全机共用）"
     lw_say "🌊 Owner             : $SHARED_USER" "🌊 归属用户：$SHARED_USER"
     lw_say ""
     lw_say "${YELLOW}🌊 Make sure these are ready before continuing:${RESET}" \
@@ -1094,7 +1094,7 @@ if ! lw_raw; then
     printf '%b\n' "${SKY_BLUE} ╚══╝╚══╝ ╚═╝  ╚═╝  ╚═══╝  ╚══════╝${RESET}"
     echo ""
 fi
-lw_say "🌊 Welcome to LinuxWave $LINUXWAVE_VERSION!" "🌊 欢迎使用 LinuxWave $LINUXWAVE_VERSION！"
+lw_say "🌊 Welcome to LinuxWave $LINUXWAVE_VERSION!" "🌊 欢迎使用 LinuxWave ${LINUXWAVE_VERSION}！"
 
 # 用了镜像就明说一句。装完遇到问题，第一件事是确认自己连的到底是谁 —— 而镜像地址里
 # 可能带凭据，所以过一遍 lw_redact。
@@ -1130,7 +1130,7 @@ print_dir_menu() {
     lw_say "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}" \
         "${YELLOW}你想把 LinuxWave 装到哪里？（输入序号）${RESET}"
     lw_say "1. $SHARED_BASE_DIR (shared, all users) [recommended]" \
-        "1. $SHARED_BASE_DIR（共享安装，全机可用）[推荐]"
+        "1. ${SHARED_BASE_DIR}（共享安装，全机可用）[推荐]"
     lw_say "2. ~/.local/linuxwave" "2. ~/.local/linuxwave"
     lw_say "3. /opt/linuxwave" "3. /opt/linuxwave"
     lw_say "4. /usr/local/linuxwave" "4. /usr/local/linuxwave"
@@ -1145,13 +1145,19 @@ print_dir_menu() {
 if [[ -n "$CLI_DIR_OPTION" ]]; then
     choice="$CLI_DIR_OPTION"
     lw_say "🌊 Directory option: $choice (from --dir-option)" \
-        "🌊 目录选项：$choice（来自 --dir-option）"
+        "🌊 目录选项：${choice}（来自 --dir-option）"
 elif [[ "$CLI_CI" == "true" ]]; then
     # --ci 承诺「自动应答目录菜单」，那就明确地选默认项并说出来，
     # 而不是去读一个可能不存在的终端、再靠「无效输入」兜底。
     choice="1"
     lw_say "🌊 --ci without --dir-option: using the recommended default, $SHARED_BASE_DIR (shared)" \
-        "🌊 --ci 未指定 --dir-option：使用推荐默认项 $SHARED_BASE_DIR（共享安装）"
+        "🌊 --ci 未指定 --dir-option：使用推荐默认项 ${SHARED_BASE_DIR}（共享安装）"
+elif [[ "$CLI_DRY_RUN" == "true" ]]; then
+    # 试运行同样不提问：它的用途是「先看看」，而菜单要读 /dev/tty，
+    # 在没有终端的场合（CI、`< /dev/null`、管道）只会以「没收到选择」结束。
+    choice="1"
+    lw_say "🌊 Dry run without --dir-option: using the recommended default, $SHARED_BASE_DIR (shared)" \
+        "🌊 试运行未指定 --dir-option：使用推荐默认项 ${SHARED_BASE_DIR}（共享安装）"
 else
     MENU_ATTEMPTS=3
     menu_try=0
@@ -1211,7 +1217,7 @@ case "$choice" in
         if [[ -n "$CLI_CUSTOM_DIR" ]]; then
             custom_dir="$CLI_CUSTOM_DIR"
             lw_say "🌊 Installation directory: $custom_dir (from --dir-option)" \
-                "🌊 安装目录：$custom_dir（来自 --dir-option）"
+                "🌊 安装目录：${custom_dir}（来自 --dir-option）"
         else
             lw_say "${YELLOW}Please enter the installation directory:${RESET}" \
                 "${YELLOW}请输入安装目录：${RESET}"
@@ -1242,11 +1248,35 @@ fi
 # 判断是否需要 sudo
 # ==========================================
 
-# 共享安装固定按系统级处理：安装树不在任何个人家目录之下，
-# 且配置必须落在 /etc，否则其他用户会按各自的 $HOME 去找、找不到。
+# 配置目录先按**语义**定下来：它和「这次要不要提权」是两个概念，合成一个变量
+# 正是两类故障的成因 —— 装到自己可写的外部目录却要密码；~/.local/linuxwave 被
+# 上一次 sudo 装成 root 所有，安装器认为用户目录无需提权，然后一路 Permission denied。
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    CONFIG_DIR="$SHARED_CONFIG_DIR"
+elif [[ "$BASE_DIR" == "$HOME"* ]]; then
+    CONFIG_DIR="$HOME/.config/linuxwave_config"
+else
+    CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
+fi
+
+# 要不要提权，按**写权限**判断，不按「在不在家目录下」：
+#   * 装到自己可写的外部卷（/mnt/ssd/linuxwave）不必输密码；
+#   * ~/.local/linuxwave 归 root 所有时必须提权，否则会在下载那一步报
+#     Permission denied，还被人当成「网络或代理问题」。
+# 两处都要看：只测 BASE_DIR 会漏掉「配置得写 /etc」这一半。
+_writable=0
+lw_can_write "$BASE_DIR" || _writable=$?
+if [[ "$_writable" -eq 2 ]]; then
+    # 不是权限问题（只读挂载、磁盘满…）：提权也解决不了，当场说清楚
+    lw_say_err "${RED_BOLD}🌊 Error: cannot write to $(dirname "$BASE_DIR"): $LW_WRITE_ERROR${RESET}" \
+        "${RED_BOLD}🌊 错误：无法写入 $(dirname "$BASE_DIR")：$LW_WRITE_ERROR${RESET}"
+    lw_say_err "🌊 This is not a permission problem; pick another directory or fix the filesystem." \
+        "🌊 这不是权限问题；请换一个目录，或先修好文件系统。"
+    exit 1
+fi
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     NEED_SUDO=true
-elif [[ "$BASE_DIR" == "$HOME"* ]]; then
+elif [[ "$_writable" -eq 0 ]] && lw_can_write "$CONFIG_DIR"; then
     NEED_SUDO=false
 else
     NEED_SUDO=true
@@ -1409,7 +1439,7 @@ fetch_update_commands() {
         fi
         if [[ "$attempt" -lt "$UPDATE_COMMANDS_ATTEMPTS" ]]; then
             lw_say "${YELLOW}🌊 Retrying the update commands ($((attempt + 1))/$UPDATE_COMMANDS_ATTEMPTS)...${RESET}" \
-                "${YELLOW}🌊 正在重试获取更新命令（$((attempt + 1))/$UPDATE_COMMANDS_ATTEMPTS）……${RESET}"
+                "${YELLOW}🌊 正在重试获取更新命令（$((attempt + 1))/${UPDATE_COMMANDS_ATTEMPTS}）……${RESET}"
         fi
     done
 
@@ -1428,7 +1458,7 @@ fetch_update_commands() {
     lw_check_integrity "update_commands.sh" "$UPDATE_COMMANDS_TMP" "$EXPECTED_UPDATE_COMMANDS_SHA256"
 
     # 即将被 bash 执行的东西，先确认它至少是合法 shell。
-    if ! /bin/bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
+    if ! bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
         lw_say_err "${RED_BOLD}🌊 Error: the update commands for $LINUXWAVE_VERSION are not valid shell.${RESET}" \
             "${RED_BOLD}🌊 错误：$LINUXWAVE_VERSION 的更新命令不是合法 shell。${RESET}"
         lw_say_err "🌊 Nothing was installed. Please report this to the administrator." \
@@ -1442,7 +1472,7 @@ if [[ "$CLI_DRY_RUN" == "true" ]]; then
         "${YELLOW}🌊 试运行：将获取 $LINUXWAVE_VERSION 的更新命令并执行：${RESET}"
     lw_say "${YELLOW}    $(lw_redact "$UPDATE_COMMANDS_URL")${RESET}"
     lw_say "${YELLOW}🌊   They download the program files into $BASE_DIR and apply directory migrations.${RESET}" \
-        "${YELLOW}🌊   它会把程序文件下载到 $BASE_DIR，并执行目录结构迁移。${RESET}"
+        "${YELLOW}🌊   它会把程序文件下载到 ${BASE_DIR}，并执行目录结构迁移。${RESET}"
 else
     fetch_update_commands
 fi
@@ -1470,13 +1500,8 @@ DOWNLOAD_DIR="$BASE_DIR/downloads/tmp"
 # 每个调用者各自的 $HOME 解析，其他用户会找不到。装到其他系统目录（需要
 # sudo）时同样用 /etc；装在用户目录（无需 sudo）时才用 ~/.config。
 # 读取时系统级优先，所以系统级 LinuxWave 总是盖过用户级的。
-if [[ "$SHARED_INSTALL" == "true" ]]; then
-    CONFIG_DIR="$SHARED_CONFIG_DIR"
-elif [[ "$NEED_SUDO" == "true" ]]; then
-    CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
-else
-    CONFIG_DIR="$HOME/.config/linuxwave_config"
-fi
+# CONFIG_DIR 已在「判断是否需要 sudo」那一节按语义定好（见那里的注释：
+# 配置目录的位置与这次要不要提权是两件事）。
 CONFIG_FILE="$CONFIG_DIR/config.json"
 VERSION_FILE="$CONFIG_DIR/VERSION.json"
 # 同意记录。selfupdate.py 读的就是这个文件（AGREEMENT_FILE_NAME）；
@@ -1511,7 +1536,7 @@ install_failed() {
     fi
     lw_say_err "" ""
     lw_say_err "${RED_BOLD}🌊 Installation did not finish (exit $code).${RESET}" \
-        "${RED_BOLD}🌊 安装未完成（退出码 $code）。${RESET}"
+        "${RED_BOLD}🌊 安装未完成（退出码 ${code}）。${RESET}"
     lw_say_err "🌊 Nothing was removed. Files already downloaded may be left in:" \
         "🌊 没有删除任何内容。已下载的文件可能留在："
     lw_say_err "     ${BASE_DIR:-<not chosen yet>}" "     ${BASE_DIR:-<尚未选定>}"
@@ -1566,7 +1591,7 @@ EOF
 #
 # 这一步只是为了让后面的下载与落盘不必每条命令都 sudo。**它不是最终属主**：
 # 装完之后那块「最后一步：确定安装树的属主」会把它改成 root:root（非共享）
-# 或 $SHARED_USER（共享）。两处不要合并，顺序也不能颠倒。
+# 或 ${SHARED_USER}（共享）。两处不要合并，顺序也不能颠倒。
 
 if [[ "$NEED_SUDO" == "true" ]]; then
     if [[ "$SHARED_INSTALL" == "true" ]]; then
@@ -1661,7 +1686,7 @@ fi
 if [[ "$CLI_DRY_RUN" == "true" ]]; then
     lw_say "${YELLOW}🌊 Dry run: the update commands for $LINUXWAVE_VERSION would run now.${RESET}" \
         "${YELLOW}🌊 试运行：$LINUXWAVE_VERSION 的更新命令本该在此执行，实际未执行。${RESET}"
-elif ! /bin/bash "$UPDATE_COMMANDS_TMP"; then
+elif ! bash "$UPDATE_COMMANDS_TMP"; then
     lw_say_err "${RED_BOLD}🌊 Error: the update commands for $LINUXWAVE_VERSION failed.${RESET}" \
         "${RED_BOLD}🌊 错误：$LINUXWAVE_VERSION 的更新命令执行失败。${RESET}"
     lw_say_err "🌊 Nothing was recorded as installed. Fix the cause above, then run the installer again." \
@@ -1819,7 +1844,7 @@ ensure_portable_python() {
         :
     else
         lw_say_err "🌊 Downloading the bundled Python $version (about 30 MB)..." \
-            "🌊 正在下载自带解释器 $version（约 30 MB）……"
+            "🌊 正在下载自带解释器 ${version}（约 30 MB）……"
         archive="$base_dir/downloads/tmp/portable-python-$version.tar.gz"
         run_cmd mkdir -p "$base_dir/downloads/tmp" 2>/dev/null || true
         # 默认先试我们自己托管的 `pythondata/<版本>/<文件名>`（镜像直连，省一次境外下载）；
@@ -2000,9 +2025,9 @@ if [[ "$CLI_DRY_RUN" == "true" ]]; then
         "${YELLOW}🌊 试运行：将检查自带解释器，缺了就下载（约 26 MB）。${RESET}"
     lw_say "${YELLOW}🌊   Destination: $BASE_DIR/python/<version>/bin/python3${RESET}"
     lw_say "${YELLOW}🌊 Dry run: would create the private Python environment at $VENV_DIR.${RESET}" \
-        "${YELLOW}🌊 试运行：将创建私有 Python 环境：$VENV_DIR。${RESET}"
+        "${YELLOW}🌊 试运行：将创建私有 Python 环境：${VENV_DIR}。${RESET}"
     lw_say "${YELLOW}🌊 Dry run: would install ${PIP_DEPS[*]} into the private environment (index: $PIP_INDEX_URL).${RESET}" \
-        "${YELLOW}🌊 试运行：将把 ${PIP_DEPS[*]} 装进私有环境（索引：$PIP_INDEX_URL）。${RESET}"
+        "${YELLOW}🌊 试运行：将把 ${PIP_DEPS[*]} 装进私有环境（索引：${PIP_INDEX_URL}）。${RESET}"
     # 后面写启动器要用它；试运行只需要一个「看起来对」的值，不会执行
     PYTHON_BIN="$(command -v python3 || echo python3)"
 else
@@ -2025,7 +2050,7 @@ else
             exit 1
         fi
         lw_say "${YELLOW}🌊 Warning: could not prepare the bundled Python; using $PYTHON_BIN instead.${RESET}" \
-            "${YELLOW}🌊 警告：没能准备好自带解释器，改用 $PYTHON_BIN。${RESET}"
+            "${YELLOW}🌊 警告：没能准备好自带解释器，改用 ${PYTHON_BIN}。${RESET}"
         lw_say "${YELLOW}🌊 Re-run the installer when the network is available to make this installation self-contained.${RESET}" \
             "${YELLOW}🌊 网络可用时重跑一次安装器，就能把这次安装补齐成自带环境的形态。${RESET}"
     fi
@@ -2079,7 +2104,7 @@ else
 
     if [[ -z "$VENV_PY" ]]; then
         lw_say "${YELLOW}🌊 Warning: no private environment with the dependencies; using $PYTHON_BIN directly.${RESET}" \
-            "${YELLOW}🌊 警告：没有带依赖的私有环境，直接使用 $PYTHON_BIN。${RESET}"
+            "${YELLOW}🌊 警告：没有带依赖的私有环境，直接使用 ${PYTHON_BIN}。${RESET}"
     fi
 
     # 最后一道判据：选定解释器必须真的能 import。给不出可用的解释器就不要谎报安装成功。
@@ -2249,12 +2274,12 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
         # 账号预存、或 /etc/skel 里没有 .bashrc 时文件不存在。
         # 建出来，否则这个账号反而跑不了 wave，而安装却自称已完成。
         lw_say "🌊 Created $SHARED_RC with LinuxWave in PATH." \
-            "🌊 已创建 $SHARED_RC，并在其中写好 LinuxWave 的 PATH。"
+            "🌊 已创建 ${SHARED_RC}，并在其中写好 LinuxWave 的 PATH。"
         lw_privileged chmod 644 "$SHARED_RC"
         lw_privileged chown "$SHARED_USER:$SHARED_USER" "$SHARED_RC"
     else
         lw_say "${YELLOW}🌊 Warning: could not write $SHARED_RC.${RESET}" \
-            "${YELLOW}🌊 警告：没能写入 $SHARED_RC。${RESET}"
+            "${YELLOW}🌊 警告：没能写入 ${SHARED_RC}。${RESET}"
         lw_say "🌊 '$SHARED_USER' can add it manually with:" \
             "🌊 '$SHARED_USER' 可以手工加上这一行："
         lw_say "     echo '$SHELLENV_LINE' >> ~/.bashrc"
@@ -2294,13 +2319,13 @@ record_agreement() {
     fi
     if [[ "$CLI_DRY_RUN" == "true" ]]; then
         lw_say "${YELLOW}🌊 Dry run: would record the agreement (\"$id\") in $AGREEMENT_FILE.${RESET}" \
-            "${YELLOW}🌊 试运行：本该把同意（\"$id\"）记进 $AGREEMENT_FILE。${RESET}"
+            "${YELLOW}🌊 试运行：本该把同意（\"$id\"）记进 ${AGREEMENT_FILE}。${RESET}"
         return 0
     fi
     lw_write_state "$AGREEMENT_FILE" || return 0
     if ! printf '{\n  "agreement": "%s"\n}\n' "$id" | run_cmd tee "$AGREEMENT_FILE" > /dev/null 2>&1; then
         lw_say "${YELLOW}🌊 Note: could not record the agreement in $AGREEMENT_FILE.${RESET}" \
-            "${YELLOW}🌊 注意：未能把同意写进 $AGREEMENT_FILE。${RESET}"
+            "${YELLOW}🌊 注意：未能把同意写进 ${AGREEMENT_FILE}。${RESET}"
         return 0
     fi
     run_cmd chmod 644 "$AGREEMENT_FILE" > /dev/null 2>&1 || true
@@ -2439,9 +2464,9 @@ echo ""
 if [[ "$SHARED_INSTALL" == "true" ]]; then
     lw_say "🌊 Shared install ready." "🌊 共享安装已就绪。"
     lw_say "🌊 Config   : $CONFIG_DIR  (system-level, every user resolves it)" \
-        "🌊 配置目录：$CONFIG_DIR（系统级，所有用户都解析到它）"
+        "🌊 配置目录：${CONFIG_DIR}（系统级，所有用户都解析到它）"
     lw_say "🌊 Owner    : $SHARED_USER:$SHARED_USER  (shared write via the '$SHARED_USER' group)" \
-        "🌊 属主    ：$SHARED_USER:$SHARED_USER（通过 '$SHARED_USER' 组共享写）"
+        "🌊 属主    ：$SHARED_USER:${SHARED_USER}（通过 '$SHARED_USER' 组共享写）"
     lw_say "🌊 Other users can enable 'wave' with:" "🌊 其他用户这样启用 'wave'："
     lw_say "${YELLOW}    echo 'export PATH=\"$INSTALL_DIR:$LINKS_DIR:$LIB_DIR:\$PATH\"' >> ~/.bashrc${RESET}"
     if [[ "$RELOGIN_NEEDED" == "true" ]]; then
@@ -2481,7 +2506,7 @@ if [[ "$SHARED_INSTALL" == "true" ]]; then
     lw_say "     sudo usermod -aG $SHARED_USER <user>   (they re-login as well)" \
         "     sudo usermod -aG $SHARED_USER <用户名>（同样要重新登录）"
     lw_say "🌊 'wave selfupdate' still needs sudo: it rewrites $CONFIG_DIR, which is root-owned." \
-        "🌊 'wave selfupdate' 仍然需要 sudo：它要重写 $CONFIG_DIR，那里属 root。"
+        "🌊 'wave selfupdate' 仍然需要 sudo：它要重写 ${CONFIG_DIR}，那里属 root。"
     echo ""
 fi
 RC_DISPLAY=$(home_to_tilde_arg "$RC_FILE")   # 这一行会被用户直接复制执行，见函数注释

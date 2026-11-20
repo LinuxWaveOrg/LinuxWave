@@ -92,7 +92,7 @@ lw_domain() {
             127.0.0.1|localhost|::1) printf '%s\n' "$value"; return 0 ;;
         esac
         echo -e "${RED_BOLD}🌊 Error: $name: plain HTTP is only allowed for loopback mirrors: $value${RESET}" >&2
-        echo -e "${RED_BOLD}🌊 错误：$name：明文 HTTP 只允许本机回环镜像：$value${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 错误：${name}：明文 HTTP 只允许本机回环镜像：$value${RESET}" >&2
         exit 1
     fi
 
@@ -762,7 +762,7 @@ fi
 # 哈希对不上说明「即将被 bash 执行的东西」不是发布时那一份。
 lw_check_integrity "update_commands.sh" "$UPDATE_COMMANDS_TMP" "$EXPECTED_UPDATE_COMMANDS_SHA256"
 
-if ! /bin/bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
+if ! bash -n "$UPDATE_COMMANDS_TMP" 2>/dev/null; then
     echo -e "${RED_BOLD}🌊 Error: the update commands for $VERSION are not valid shell.${RESET}"
     echo -e "${RED_BOLD}🌊 Nothing was updated. Please report this to the administrator.${RESET}"
     exit 1
@@ -786,7 +786,7 @@ fi
 
 echo "🌊 Running the update commands for $VERSION..."
 
-if ! /bin/bash "$UPDATE_COMMANDS_TMP"; then
+if ! bash "$UPDATE_COMMANDS_TMP"; then
     echo -e "${RED_BOLD}🌊 Error: the update commands for $VERSION failed.${RESET}" >&2
     # VERSION.json 只在全部文件到位后才写，所以版本号还是旧的：
     # 网络恢复后再跑一次 wave selfupdate 就会从这里继续。

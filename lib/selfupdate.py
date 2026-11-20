@@ -134,7 +134,7 @@ def run_script(environment, overall_timeout):
     try:
         with os.fdopen(handle, "w") as stream:
             stream.write(text)
-        return subprocess.run(['/bin/bash', path], env=environment, timeout=overall_timeout)
+        return subprocess.run(['bash', path], env=environment, timeout=overall_timeout)
     finally:
         try:
             os.unlink(path)
