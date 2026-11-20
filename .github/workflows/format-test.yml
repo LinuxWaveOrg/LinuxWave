@@ -82,21 +82,27 @@ jobs:
           {"version": "2.1.0"}
           EOF
           sudo chown -R $(whoami) /etc/linuxwave_config
-          mkdir -p /tmp/linuxwave-test/bin /tmp/linuxwave-test/links /tmp/linuxwave-test/pkg /tmp/linuxwave-test/surfboard /tmp/linuxwave-test/downloads/tmp
+          mkdir -p /tmp/linuxwave-test/bin /tmp/linuxwave-test/links /tmp/linuxwave-test/downloads/tmp
 
       - name: Deploy scripts
         run: |
-          cp pkg/*.py pkg/*.sh /tmp/linuxwave-test/pkg/
-          cp surfboard/*.py surfboard/*.sh /tmp/linuxwave-test/surfboard/
-          chmod +x /tmp/linuxwave-test/surfboard/*.sh
-          mkdir -p /tmp/linuxwave-test/lib
-          cp lib/*.py /tmp/linuxwave-test/lib/
-          cp lib/*.sh /tmp/linuxwave-test/lib/
+          # 组件与资源目录的唯一来源是 scripts/components.txt + assets.txt
+          # （scripts/structure_test.sh 会拦住手写第二份清单）。
+          source scripts/components.sh
+          for name in $(components) $(assets); do
+              mkdir -p "/tmp/linuxwave-test/$name"
+              cp -R "$name"/. "/tmp/linuxwave-test/$name/"
+          done
+          chmod +x /tmp/linuxwave-test/*/*.sh
           # lib/wave.py 按原名落盘；入口 lib/wave 是 install.sh 生成的启动器。
           # 这里只放一个最小等价物（真的启动器由 sandbox_test 走安装脚本时验证）。
           printf '#!/bin/sh\nexec python3 /tmp/linuxwave-test/lib/wave.py "$@"\n' \
             > /tmp/linuxwave-test/lib/wave
-          chmod +x /tmp/linuxwave-test/lib/wave /tmp/linuxwave-test/lib/*.sh
+          chmod +x /tmp/linuxwave-test/lib/wave
+
+      - name: Check project structure
+        run: |
+          bash scripts/structure_test.sh
 
       - name: Run config path test
         run: |
