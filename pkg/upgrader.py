@@ -17,6 +17,7 @@ import sys
 
 import common
 import domains
+import flags as flags_module
 import silent
 import requests
 
@@ -24,6 +25,7 @@ from configpaths import require_safe_token
 from depsinstaller import get_field, parse_common_fields
 from linker import link_package
 from pkginstaller import (
+    confirm_skip_ssl,
     fetch_max_version,
     first_package_token,
     handle_install,
@@ -50,36 +52,50 @@ RESET = '\033[0m'
 REMOVE_OLD_LONG = ("--remove-old-version", "--remove-old-versions", "--rov")
 REMOVE_OLD_SHORT = "X"
 
+# 「升级全部」的两种写法。它们同样要在 split_input 里剥掉 —— 否则会被当成
+# 包名或未知旗标带下去，而批量模式里每个包都该收到同一批「其余旗标」。
+ALL_LONG = ("--all",)
+ALL_SHORT = "a"
+
 # 需要记下来、但不属于「删除旧版本」的写法：给了替代做法，而不是静默忽略
 REJECTED_FLAGS = {
     "--ver": "Use 'wave install <package>@<version>' to install a specific version",
+    "--no-link": "Run 'wave link <package>@<version>' afterwards to choose the linked version",
+    # 4.0 的旧名，同样拒绝；提示里给的是规范写法
     "--unlink": "Run 'wave link <package>@<version>' afterwards to choose the linked version",
 }
 
 
 def split_input(input_string):
-    """把 upgrade 专属旗标剥掉，返回 (剩余词, 是否要求移除旧版本)。
+    """把 upgrade 专属旗标剥掉，返回 (剩余词, 是否移除旧版本, 是否全部)。
 
-    -X 既认单独出现的写法，也认混在短旗标簇里的写法（-Xv 等于 -X -v），
-    与 pkginstaller.parse_flags 把 -abc 拆成 -a -b -c 的规则保持一致。
+    -X 与 -a 既认单独出现的写法，也认混在短旗标簇里的写法（-Xv 等于 -X -v，
+    -aX 等于 -a -X），与 parse_flags 把 -abc 拆成 -a -b -c 的规则保持一致。
     """
     remove_old = False
+    upgrade_all = False
     kept = []
     for word in input_string.split()[2:]:
         if word in REMOVE_OLD_LONG:
             remove_old = True
             continue
-        # 单个 - 开头（且不是 --）：可能是 -X，也可能是 -Xv 这种簇
+        if word in ALL_LONG:
+            upgrade_all = True
+            continue
+        # 单个 - 开头（且不是 --）：可能是 -X / -a，也可能是 -Xv / -aX 这种簇
         if word.startswith("-") and not word.startswith("--") and len(word) > 1:
             letters = word[1:]
             if REMOVE_OLD_SHORT in letters:
                 remove_old = True
                 letters = letters.replace(REMOVE_OLD_SHORT, "")
-                if not letters:
-                    continue
-                word = "-" + letters
+            if ALL_SHORT in letters:
+                upgrade_all = True
+                letters = letters.replace(ALL_SHORT, "")
+            if not letters:
+                continue
+            word = "-" + letters
         kept.append(word)
-    return kept, remove_old
+    return kept, remove_old, upgrade_all
 
 
 def ask_yes_no(prompt):
@@ -140,12 +156,23 @@ def apply_timeout(words):
 
 # -------------------- 清理旧版本 --------------------
 
-def remove_old_versions(bin_name, keep_version):
-    """移除 keep_version 之外的所有已装版本，保留 keep_version。"""
+def remove_old_versions(bin_name, keep_version, assume_yes=False):
+    """移除 keep_version 之外的所有已装版本，保留 keep_version。
+
+    assume_yes：批量升级时用。`wave upgrade --all -X` 已经把「删旧版本」这件事
+    对每个包都说了，再逐个包弹一次问题既啰嗦又容易答错对象；所以批量模式下
+    直接按用户写下的意图执行。
+    """
     old = [version for version in find_installed_versions(bin_name)
            if version_key(version) < version_key(keep_version)]
     if not old:
         silent.say(f"🌊 No old versions of {bin_name} to remove.")
+        return
+
+    # 批量模式：-X 是对每个包说的，不必再逐个确认
+    if assume_yes:
+        silent.say(f"🌊 Removing {len(old)} old version(s) of {bin_name}...")
+        uninstall_versions(bin_name, old)
         return
 
     # 只有一个旧版本：不必再问选哪个，「移除旧版本」已经表达得很清楚
@@ -177,13 +204,79 @@ def remove_old_versions(bin_name, keep_version):
 
 # -------------------- 主流程 --------------------
 
-def handle_upgrade(input_string):
-    words, remove_old = split_input(input_string)
+def upgrade_everything(words, remove_old):
+    """把每个已装包都带到最新版本。
+
+    批量不是「一把梭」：某个包在索引里没了、下载失败、校验不过，都不该让排在
+    后面的包白等 —— 逐个跑、逐个收结果，最后一次性报总账。单个包的成败本来就
+    由 handle_upgrade 打在终端上，这里只补汇总与退出码。
+    """
+    import common
+    from latest import fetch_names, installed_bin_names, resolve_package_name
+
+    # 下面这一次取名字清单也走 HTTPS，所以 --skip-ssl 必须先有结论 ——
+    # 否则用户答应了跳过校验，第一个请求照样失败。批量模式只问一次。
+    accepted_flags = parse_flags("wave install placeholder " + " ".join(words),
+                                 command="upgrade")
+    confirm_skip_ssl(accepted_flags)
+
+    targets = installed_bin_names()
+    if not targets:
+        # 什么也没装不是错误（退出码 0），静默时连这句都不该出现
+        silent.say("🌊 No packages installed yet.")
+        return
+
+    # bin/ 里是 bin_name，索引里是包名，两者不一定相同（choma -> ChOma）。
+    # 复用 latest 的对照逻辑，这样 `wave latest -a` 报的集合与这里逐个升级的集合一致。
+    # 三档超时也要作用在这一步：它同样是请求。
+    index_names = fetch_names(detect_arch(), common.parse(words).timeouts)
+    packages = [resolve_package_name(bin_name, index_names) for bin_name in targets]
+
+    # 其余旗标原样带下去（--proxy / --max-time / -v…）。-X 被 split_input 剥掉了，
+    # 这里补回去：批量模式下它是对每一个包都生效，而不是只对某一个。
+    tail = " ".join(words)
+    if remove_old:
+        tail = (tail + " -X").strip()
+
+    upgraded, unchanged, failed = [], [], []
+    for bin_name, package_name in zip(targets, packages):
+        before = set(find_installed_versions(bin_name))
+        try:
+            handle_upgrade(f"wave upgrade {package_name} {tail}".strip(), assume_yes=True)
+        except SystemExit as status:
+            # 单个包失败（索引里没有、下载/校验失败）只记账，继续下一个
+            if status.code not in (0, None):
+                failed.append(package_name)
+                continue
+        after = set(find_installed_versions(bin_name))
+        (upgraded if after - before else unchanged).append(package_name)
+
+    if len(targets) > 1:
+        silent.say(f"🌊 {len(upgraded)} upgraded, {len(unchanged)} already at the latest, "
+                  f"{len(failed)} failed.")
+    if failed:
+        print(f"{RED_BOLD}🌊 Error: could not upgrade {', '.join(failed)}.{RESET}")
+        print(f"{YELLOW}🌊 The other packages were handled; fix the cause and run it again.{RESET}")
+        sys.exit(1)
+
+
+def handle_upgrade(input_string, assume_yes=False):
+    words, remove_old, upgrade_all = split_input(input_string)
+
+    if upgrade_all:
+        if first_package_token("wave upgrade " + " ".join(words)):
+            print(f"{RED_BOLD}🌊 Error: --all upgrades every installed package; "
+                  f"drop the package name.{RESET}")
+            print(f"{YELLOW}🌊 Either 'wave upgrade <package>' or 'wave upgrade --all'.{RESET}")
+            sys.exit(1)
+        upgrade_everything(words, remove_old)
+        return
 
     raw_package = first_package_token("wave upgrade " + " ".join(words))
     if not raw_package:
         print(f"{RED_BOLD}🌊 Error: Missing package name.{RESET}")
-        print(f"{YELLOW}🌊 Usage: wave upgrade <package> [flags]{RESET}")
+        print(f"{YELLOW}🌊 Use 'wave upgrade <package>', "
+              f"or 'wave upgrade --all' for every installed package.{RESET}")
         sys.exit(1)
 
     if "@" in raw_package:
@@ -201,10 +294,13 @@ def handle_upgrade(input_string):
         index = 0
     rest = words[:index] + words[index + 1:]
     probe = "wave install placeholder " + " ".join(rest)
-    flags = parse_flags(probe)
+    # 报错要说 `wave upgrade` 并回显用户真正敲的那一行，而不是内部那条探针
+    accepted_flags = parse_flags(probe, command="upgrade", shown=input_string)
     for flag, hint in REJECTED_FLAGS.items():
-        if flag in flags:
-            print(f"{RED_BOLD}🌊 Error: {flag} is not accepted by upgrade.{RESET}")
+        if flag in accepted_flags:
+            renamed = (f" (now called {flags_module.ALIASES[flag]})"
+                       if flag in flags_module.ALIASES else "")
+            print(f"{RED_BOLD}🌊 Error: {flag}{renamed} is not accepted by upgrade.{RESET}")
             print(f"{YELLOW}🌊 {hint}.{RESET}")
             sys.exit(1)
 
@@ -264,7 +360,7 @@ def handle_upgrade(input_string):
             print(f"{YELLOW}🌊 Warning: could not re-point the unversioned link ({error}).{RESET}")
 
     if remove_old:
-        remove_old_versions(bin_name, keep)
+        remove_old_versions(bin_name, keep, assume_yes=assume_yes)
 
 
 if __name__ == "__main__":

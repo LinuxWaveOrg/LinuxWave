@@ -29,6 +29,8 @@ import common
 import domains
 import flags as flags_module
 import silent
+import steplog
+import tls
 from configpaths import (
     VERSION_FILE,
     assert_inside,
@@ -114,14 +116,22 @@ def _check_disk_space(path: Path, required_bytes: int = 10 * 1024 * 1024) -> boo
 
 # -------------------- 参数解析 --------------------
 
-def parse_flags(input_string):
+def parse_flags(input_string, command="install", shown=None):
     """校验这条命令接受的旗标；不在白名单里的就报错退出。
 
-    白名单与报错文案的唯一判定处是 cli/flags.py 的 check_allowed()：
+    白名单与报错文案的唯一判定处是 cli/common.py 的 check_allowed()：
     词法（`--name=value`、`-vC`、单独的 `-`）、别名（--unlink → --no-link）、
-    拼错建议与静默输出都在那里。upgrade 也复用它。
+    拼错建议与静默输出都在那里。
+
+    command / shown 给 upgrade 用：它内部会构造一条 `wave install placeholder …`
+    的探针来复用 install 的解析路径，那条探针只该用于解析，报错必须说
+    `wave upgrade` 并回显用户真正敲的那一行。
+
+    白名单始终取 install 的（allow_from）：upgrade 能接受的就是 install 能接受的，
+    减去它在 split_input 里已经剥掉的 -X / --all。--ver / --unlink 因此会走到
+    upgrader 的 REJECTED_FLAGS，由那里给出比「这个命令不认」更具体的替代做法。
     """
-    return common.check_allowed(input_string, "install")
+    return common.check_allowed(input_string, command, shown=shown, allow_from="install")
 
 
 def flag_value(input_string, name):
@@ -152,6 +162,63 @@ def first_package_token(input_string):
     return None
 
 
+# 一次安装只问一次：`wave install a b c` 与 `wave upgrade --all` 都会走到这里，
+# 每下一个包装一遍同样的问题就成了骚扰。
+_SKIP_SSL_ANSWER = None
+
+
+def confirm_skip_ssl(flags):
+    """`--skip-ssl` 的安全询问，并同步 net/tls.py 的状态。返回是否允许跳过校验。
+
+    单独提出来是因为 `upgrade --all` 也要问：它在确认之前就要先取索引里的名字清单，
+    若只在 handle_install 里问，那一次请求就享受不到这个旗标。已经授权过就不再问，
+    批量升级因此只问一次。
+
+    **拒绝 = 中止整个命令，不是「照装一份带校验的」。** 用户明明写了 --skip-ssl
+    却拿到一个 SSL 错误，看起来像旗标没生效，实际是他自己刚拒绝过。
+    """
+    global _SKIP_SSL_ANSWER
+    if tls.enabled():
+        return True
+    if "--skip-ssl" not in flags:
+        tls.revoke()
+        _SKIP_SSL_ANSWER = False
+        return False
+    if _SKIP_SSL_ANSWER is not None:
+        return _SKIP_SSL_ANSWER
+
+    if silent.is_silent():
+        # 静默模式不提问，也**不**改走「按拒绝处理」那条路：用户已经把旗标写出来了，
+        # 那就是他的意思。若这里默默拒绝，装失败时会抛一个 SSL 错误，
+        # 而用户以为自己已经跳过了。
+        tls.grant()
+        _SKIP_SSL_ANSWER = True
+        return True
+
+    # 红色：这是本工具唯一一处「用户主动要求降低安全性」的地方，提示必须
+    # 与普通询问区分开。
+    print(f"{RED_BOLD}🌊 You selected --skip-ssl, this will skip SSL certificate "
+          f"verification, which may cause security risks. Are you sure? [y/N]{RESET}")
+    try:
+        confirm = input().strip()
+    except (EOFError, KeyboardInterrupt):
+        # 非交互（CI / 脚本里 stdin 是 /dev/null）读不到答复：按拒绝处理，
+        # 也就是**中止** —— 缺省往安全的方向倒。
+        confirm = ""
+
+    if confirm not in ("Y", "y"):
+        tls.revoke()
+        steplog.fail(
+            "not installing with --skip-ssl: the confirmation was declined",
+            hint=["nothing was downloaded or installed",
+                  "run it again and answer y at the prompt to skip verification",
+                  "or drop --skip-ssl if certificate verification works on this network"])
+
+    tls.grant()
+    _SKIP_SSL_ANSWER = True
+    return True
+
+
 def handle_download_args(input_string):
     """
     处理下载相关的参数逻辑。
@@ -166,7 +233,7 @@ def handle_download_args(input_string):
 
     config = {
         # 命令行写了 --skip-ssl 不等于用户可以跳过校验，要问过才算数
-        "skip_ssl_verify": False,
+        "skip_ssl_verify": confirm_skip_ssl(found),
         "verbose": options.verbose,
         "resume": options.resume,
         "limit_rate": options.limit_rate,
@@ -177,14 +244,6 @@ def handle_download_args(input_string):
         "max_time": options.timeouts.start(),
         "from_source": "--install-from-source" in found,
     }
-
-    if "--skip-ssl" in found:
-        silent.say('🌊 You selected --skip-ssl, this will skip SSL certificate verification, which may cause security risks. Are you sure?')
-        # silent.ask 在静默模式下不读 stdin 直接返回 None —— 与「读不到答复」
-        # 走同一条分支：不跳过 SSL 校验，缺省往安全的方向倒。
-        confirm = (silent.ask() or "").strip()
-        if confirm in ("Y", "y"):
-            config["skip_ssl_verify"] = True
 
     # 子脚本（pip / surfboard 的 shell）读同一个值，不必层层传参
     os.environ[domains.MAX_TIME_ENV] = str(options.timeouts.total)

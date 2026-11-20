@@ -34,6 +34,14 @@ fail() {
     FAILED=$((FAILED + 1))
 }
 
+# 段 1/2 只跑纯函数，但 import upgrader 会读配置：给一个隔离的假根，
+# 免得测试因为在开发机上找不到真实安装而崩在 import 上。
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"; rm -f "$OUT_FILE"' EXIT
+mkdir -p "$WORK/root/etc/linuxwave_config" "$WORK/tree"
+printf '{"base_dir": "%s"}\n' "$WORK/tree" > "$WORK/root/etc/linuxwave_config/config.json"
+export LINUXWAVE_TEST="$WORK/root"
+
 collect() {
     local verdict text before=$PASSED
     while IFS='|' read -r verdict text; do
@@ -57,8 +65,9 @@ import io
 import sys
 
 repo = sys.argv[1]
-for sub in ("lib", "pkg", "surfboard"):
-    sys.path.insert(0, f"{repo}/{sub}")
+sys.path.insert(0, f"{repo}/scripts")
+import components
+components.add_to_sys_path(repo)
 
 import upgrader
 
@@ -77,28 +86,50 @@ CANONICAL = ["-X", "--remove-old-versions"]
 deprecated = ["--remove-old-version", "--rov"]
 
 for flag in CANONICAL + deprecated:
-    words, remove_old = quiet(upgrader.split_input, f"wave upgrade jq {flag}")
+    words, remove_old, upgrade_all = quiet(upgrader.split_input, f"wave upgrade jq {flag}")
     report(remove_old and words == ["jq"], f"{flag} 等价于移除旧版本")
 
 # 短旗标簇：-Xv = -X -v，剩下的字母要原样留下
-words, remove_old = quiet(upgrader.split_input, "wave upgrade jq -Xv")
+words, remove_old, upgrade_all = quiet(upgrader.split_input, "wave upgrade jq -Xv")
 report(remove_old and words == ["jq", "-v"], "-Xv 等于 -X -v（-v 保留）")
 
-words, remove_old = quiet(upgrader.split_input, "wave upgrade jq -vX")
+words, remove_old, upgrade_all = quiet(upgrader.split_input, "wave upgrade jq -vX")
 report(remove_old and words == ["jq", "-v"], "-vX 等于 -v -X（-v 保留）")
 
 # 不带 -X 时不该误判
-words, remove_old = quiet(upgrader.split_input, "wave upgrade jq --max-time=2min")
+words, remove_old, upgrade_all = quiet(upgrader.split_input, "wave upgrade jq --max-time=2min")
 report((not remove_old) and words == ["jq", "--max-time=2min"],
        "普通旗标原样保留，不会被当成 -X")
 
+# --all：批量升级也要在 split_input 里剥掉，否则它会被当成包名带下去
+for flag in ("--all", "-a"):
+    words, remove_old, upgrade_all = quiet(upgrader.split_input, f"wave upgrade {flag}")
+    report(upgrade_all and words == [] and not remove_old, f"{flag} 等价于升级全部")
+
+# 批量与 -X 互不干扰：两个旗标都剥干净，且能同时出现（含短旗标簇）
+for text, expect_words, expect_old in (
+    ("wave upgrade --all -X", [], True),
+    ("wave upgrade -aX", [], True),
+    ("wave upgrade -Xav", ["-v"], True),
+    ("wave upgrade --all -v", ["-v"], False),
+):
+    words, remove_old, upgrade_all = quiet(upgrader.split_input, text)
+    report(upgrade_all and remove_old == expect_old and words == expect_words,
+           f"{text} 剥出 remove_old={expect_old}、剩下 {expect_words or '空'}")
+
+# 单纯带 d 的词不是 --all：只看旗标，不看子串
+words, remove_old, upgrade_all = quiet(upgrader.split_input, "wave upgrade jq --max-time=2min")
+report(not upgrade_all, "普通旗标不会触发批量模式")
+
 # 被拒绝的两个旗标要有替代做法，而不是静默忽略
-report(set(upgrader.REJECTED_FLAGS) == {"--ver", "--unlink"},
-       "--ver / --unlink 在拒绝名单里")
+report(set(upgrader.REJECTED_FLAGS) == {"--ver", "--no-link", "--unlink"},
+       "--ver / --no-link / --unlink 在拒绝名单里")
 report("wave install" in upgrader.REJECTED_FLAGS["--ver"],
        "--ver 的提示指向 wave install")
 report("wave link" in upgrader.REJECTED_FLAGS["--unlink"],
        "--unlink 的提示指向 wave link")
+report("wave link" in upgrader.REJECTED_FLAGS["--no-link"],
+       "--no-link 的提示也指向 wave link")
 PY
 )
 
@@ -112,8 +143,9 @@ import re
 import sys
 
 repo = sys.argv[1]
-for sub in ("lib", "pkg", "surfboard"):
-    sys.path.insert(0, f"{repo}/{sub}")
+sys.path.insert(0, f"{repo}/scripts")
+import components
+components.add_to_sys_path(repo)
 import help as h
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -145,7 +177,7 @@ import upgrader
 
 accepted = []
 for flag in ("-X", "--remove-old-version", "--remove-old-versions", "--rov"):
-    words, remove_old = upgrader.split_input(f"wave upgrade jq {flag}")
+    words, remove_old, upgrade_all = upgrader.split_input(f"wave upgrade jq {flag}")
     accepted.append(bool(remove_old))
 report(all(accepted), "代码仍接受全部四种写法（文档删了、行为没删）")
 PY
@@ -158,12 +190,18 @@ FAKE_CFG="$(mktemp -d)"
 printf '{"base_dir": "%s"}\n' "$REPO_DIR" > "$FAKE_CFG/config.json"
 trap 'rm -f "$OUT_FILE"; rm -rf "$FAKE_CFG"' EXIT
 
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="timeout 60"
+fi
+
 run_wave() {
-    ( cd "$REPO_DIR" && LW_REPO="$REPO_DIR" LW_CFG="$FAKE_CFG" timeout 60 python3 -c '
+    # macOS 自带没有 timeout（coreutils 才有）；没有就不设上限，测试本身很快
+    ( cd "$REPO_DIR" && LW_REPO="$REPO_DIR" LW_CFG="$FAKE_CFG" ${TIMEOUT_CMD:-} python3 -c '
 import os, pathlib, sys
-sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "lib"))
-sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "net"))
-sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "config"))
+sys.path.insert(0, os.path.join(os.environ["LW_REPO"], "scripts"))
+import components
+components.add_to_sys_path(os.environ["LW_REPO"])
 import configpaths
 fake = pathlib.Path(os.environ["LW_CFG"])
 configpaths.SYSTEM_CONFIG_DIR = fake
@@ -200,6 +238,24 @@ if [[ "$code" != "0" ]] && grep -q 'not accepted by upgrade' "$OUT_FILE"; then
     pass "--ver 被 upgrade 拒绝（退出码 $code）"
 else
     fail "--ver 没有被拒绝（退出码 $code）"
+fi
+
+# --no-link 与它的旧名 --unlink 都拒绝：替换掉不带版本号的链接是 `wave link` 的事
+for flag in --no-link --unlink; do
+    code=$(run_wave upgrade jq "$flag")
+    if [[ "$code" != "0" ]] && grep -q 'not accepted by upgrade' "$OUT_FILE"; then
+        pass "--upgrade 拒绝 $flag（退出码 $code）"
+    else
+        fail "upgrade 没有拒绝 $flag（退出码 $code）"
+    fi
+done
+
+# --all 与包名互斥：批量是对所有已装包，给一个包名说明用户想表达的是另一件事
+code=$(run_wave upgrade --all jq)
+if [[ "$code" != "0" ]] && grep -q 'drop the package name' "$OUT_FILE"; then
+    pass "--all 与包名同时出现时被拒绝（退出码 $code）"
+else
+    fail "--all 与包名同时出现时没有被拒绝（退出码 $code）"
 fi
 
 echo ""

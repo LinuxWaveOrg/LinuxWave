@@ -277,15 +277,18 @@ def _pointer(text, flag):
     return f"{RESET}{label}{shown}\n{RED}{carets}"
 
 
-def check_allowed(input_string, command, shown=None):
+def check_allowed(input_string, command, shown=None, allow_from=None):
     """校验旗标白名单；不在名单里的报错退出。返回拆出来的旗标名列表。
 
-    command: 报错时说的命令名（`illegal option X for wave <command>`）。
-    shown:   回显用的命令行。upgrade 内部会构造一条 `wave install placeholder …`
-             的探针来复用 install 的白名单，那条探针只该用于解析，不该给用户看。
+    command:   报错时说的命令名（`illegal option X for wave <command>`）。
+    shown:     回显用的命令行。upgrade 内部会构造一条 `wave install placeholder …`
+               的探针来复用 install 的白名单，那条探针只该用于解析，不该给用户看。
+    allow_from: 白名单取自哪条命令，缺省就是 command 自己。upgrade 传 "install"：
+               upgrade 能接受的就是 install 能接受的（去掉 -X/--all 这些它自己剥掉的），
+               多出来的那两个由 upgrader 的 REJECTED_FLAGS 给出更贴切的替代做法。
     """
     found = flags.tokens(input_string.split(" "))
-    allowed = allowed_for(command)
+    allowed = allowed_for(allow_from or command)
 
     for flag in found:
         if flag in allowed or flags.ALIASES.get(flag, flag) in allowed:
