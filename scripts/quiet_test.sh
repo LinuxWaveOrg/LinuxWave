@@ -48,22 +48,18 @@ collect < <(python3 - "$REPO_DIR" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1] + "/lib")
 
-# wave.py 顶层要求已安装（读 base_dir）才 import 得动，所以只把 strip_silent
-# 这一段抽出来单独执行 —— 它的行为与上下文无关。
-import pathlib, types
+# 静默旗标的解析在 cli/silent.py（4.0 起唯一实现）；lib/quiet.py 已删除。
+import pathlib
+sys.path.insert(0, sys.argv[1] + "/cli")
+import silent
 
-source = pathlib.Path(sys.argv[1], "lib", "wave.py").read_text()
-start = source.index("def strip_silent(words):")
-end = source.index("# -------------------- 主调度逻辑")
-namespace = {}
-exec(source[start:end], namespace)
-strip_silent = namespace["strip_silent"]
+strip = silent.strip
 
 def check(label, words, expect_kept, expect_silent, expect_show_error):
-    kept, silent, show_error = strip_silent(list(words))
-    ok = kept == expect_kept and silent == expect_silent and show_error == expect_show_error
+    kept, is_silent, show_error = strip(list(words))
+    ok = kept == expect_kept and is_silent == expect_silent and show_error == expect_show_error
     print(("PASS" if ok else "FAIL") + "|" + label +
-          ("" if ok else f"（实际 kept={kept} silent={silent} show={show_error}）"))
+          ("" if ok else f"（实际 kept={kept} silent={is_silent} show={show_error}）"))
 
 check("-s 单个", ["install", "jq", "-s"], ["install", "jq"], True, False)
 check("--silent 长写法", ["install", "jq", "--silent"], ["install", "jq"], True, False)
@@ -87,9 +83,9 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 ROOT="$WORK/root"
 BASE="$ROOT/opt/linuxwave"
-mkdir -p "$ROOT/etc/linuxwave_config" "$BASE"/{lib,pkg,surfboard,net,bin,links,deps,downloads/tmp}
+mkdir -p "$ROOT/etc/linuxwave_config" "$BASE"/{lib,pkg,surfboard,net,cli,config,bin,links,deps,downloads/tmp}
 printf '{"base_dir": "%s"}\n' "$BASE" > "$ROOT/etc/linuxwave_config/config.json"
-for dir in lib pkg net surfboard; do
+for dir in lib pkg net surfboard cli config; do
     cp "$REPO_DIR/$dir"/*.py "$REPO_DIR/$dir"/*.sh "$BASE/$dir"/ 2>/dev/null
 done
 
@@ -181,12 +177,9 @@ echo "========== 4. 清单本身必须与实现一致 =========="
 collect < <(python3 - "$REPO_DIR" <<'PY'
 import pathlib, re, sys, ast
 
-source = pathlib.Path(sys.argv[1], "lib", "wave.py").read_text()
-match = re.search(r"^SILENT_COMMANDS = (\{[^}]*\})", source, re.M)
-if not match:
-    print("FAIL|找不到 SILENT_COMMANDS")
-    raise SystemExit
-declared = ast.literal_eval(match.group(1))
+sys.path.insert(0, sys.argv[1] + "/cli")
+import silent
+declared = set(silent.SILENT_COMMANDS)
 
 expected = {"install", "upgrade", "uninstall", "link", "unlink", "selfupdate"}
 if declared == expected:
@@ -194,12 +187,12 @@ if declared == expected:
 else:
     print(f"FAIL|SILENT_COMMANDS 不对：多了 {declared - expected}，少了 {expected - declared}")
 
-# 静默只压噪音：错误一律还是原来的 print，不能经过 quiet.say
+# 静默只压噪音：错误一律还是原来的 print，不能经过 silent.say
 uninstaller = pathlib.Path(sys.argv[1], "pkg", "uninstaller.py").read_text()
-if "quiet.say" in uninstaller and "quiet.say(f\"{RED_BOLD}🌊 Error" not in uninstaller:
-    print("PASS|错误路径没有被改成 quiet.say")
+if "silent.say" in uninstaller and "silent.say(f\"{RED_BOLD}🌊 Error" not in uninstaller:
+    print("PASS|错误路径没有被改成 silent.say")
 else:
-    print("FAIL|有错误输出被改成了 quiet.say（静默时会把错误也吞掉）")
+    print("FAIL|有错误输出被改成了 silent.say（静默时会把错误也吞掉）")
 PY
 )
 

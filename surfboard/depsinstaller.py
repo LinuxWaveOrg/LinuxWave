@@ -23,7 +23,7 @@ RESET = '\033[0m'
 # -------------------- 配置加载 --------------------
 
 import domains
-import quiet
+import silent
 from configpaths import assert_inside, load_base_dir
 
 
@@ -193,7 +193,7 @@ def add_depender_tag(dep_path, depender):
     )
 
     if result.returncode != 0:
-        quiet.show(result)
+        silent.show(result)
         if result.stderr.strip():
             print(result.stderr.strip())
         sys.exit(result.returncode)
@@ -235,7 +235,7 @@ def transfer_paths(target_dir, shared_index_dir=None):
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
 
-    quiet.show(result)
+    silent.show(result)
     if result.returncode != 0:
         sys.exit(result.returncode)
 
@@ -335,7 +335,7 @@ def ensure_dependency(dep_ref, arch, config, input_string, depender, visited=Non
 
     # 1. 已安装：跳过下载，只补上“谁依赖了我”的标记（随后仍会检查它自己的依赖）
     if already_installed:
-        quiet.say(f"🌊 Dependency {dep_name}@{dep_version} is already installed, skipping.")
+        silent.say(f"🌊 Dependency {dep_name}@{dep_version} is already installed, skipping.")
         add_depender_tag(target_dir, depender)
 
     # 循环依赖保护：本轮已经在处理这个目录，补完标记就返回
@@ -356,7 +356,7 @@ def ensure_dependency(dep_ref, arch, config, input_string, depender, visited=Non
             own_version_url = dep_version_url(dep_name, dep_version, arch)
             status, version_text = fetch_text(own_version_url)
             if status == 404:
-                quiet.say(f"{YELLOW}🌊 Warning: {dep_name}@{dep_version} has no version file, "
+                silent.say(f"{YELLOW}🌊 Warning: {dep_name}@{dep_version} has no version file, "
                           f"skipping its own dependencies.{RESET}")
                 return
             if status != 200:

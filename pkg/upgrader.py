@@ -16,7 +16,7 @@ import platform
 import sys
 
 import domains
-import quiet
+import silent
 import requests
 
 from configpaths import require_safe_token
@@ -83,7 +83,7 @@ def split_input(input_string):
 
 def ask_yes_no(prompt):
     """问一次 Y/n。返回 True / False；读到 EOF（非交互）时返回 None。"""
-    if quiet.is_silent():
+    if silent.is_silent():
         # 静默（-s / -sS）下提示语被吞掉，还要用户回答就成了「看起来卡死」。
         # 返回 None，让调用方走非交互分支（保留旧版本，误删比漏删危险）。
         return None
@@ -161,16 +161,16 @@ def remove_old_versions(bin_name, keep_version):
     old = [version for version in find_installed_versions(bin_name)
            if version_key(version) < version_key(keep_version)]
     if not old:
-        quiet.say(f"🌊 No old versions of {bin_name} to remove.")
+        silent.say(f"🌊 No old versions of {bin_name} to remove.")
         return
 
     # 只有一个旧版本：不必再问选哪个，「移除旧版本」已经表达得很清楚
     if len(old) == 1:
-        quiet.say(f"🌊 Removing the old version {bin_name}@{old[0]}...")
+        silent.say(f"🌊 Removing the old version {bin_name}@{old[0]}...")
         uninstall_versions(bin_name, old)
         return
 
-    quiet.say(f"🌊 {len(old)} old versions of {bin_name} are installed: {', '.join(old)}")
+    silent.say(f"🌊 {len(old)} old versions of {bin_name} are installed: {', '.join(old)}")
     answer = ask_yes_no("🌊 Remove all of them? [Y/n] ")
     if answer is None:
         # 非交互（CI、管道）：没有人能替用户回答，保留旧版本比误删安全
@@ -181,7 +181,7 @@ def remove_old_versions(bin_name, keep_version):
         uninstall_versions(bin_name, old)
         return
 
-    quiet.say("🌊 Choose which old versions to remove, one or more.")
+    silent.say("🌊 Choose which old versions to remove, one or more.")
     try:
         selected = select_versions(bin_name, old)
     except SystemExit:
@@ -228,7 +228,7 @@ def handle_upgrade(input_string):
     apply_timeout(rest)
 
     arch = detect_arch()
-    quiet.say(f"🌊 Checking the latest version of {package_name}...")
+    silent.say(f"🌊 Checking the latest version of {package_name}...")
     latest = fetch_max_version(package_name, arch)
 
     common_fields = fetch_common_fields(package_name, arch)
@@ -254,9 +254,9 @@ def handle_upgrade(input_string):
     else:
         keep = latest
         if installed:
-            quiet.say(f"🌊 Upgrading {bin_name}: {installed[0]} -> {latest}")
+            silent.say(f"🌊 Upgrading {bin_name}: {installed[0]} -> {latest}")
         else:
-            quiet.say(f"🌊 {bin_name} is not installed; installing {latest}.")
+            silent.say(f"🌊 {bin_name} is not installed; installing {latest}.")
         # 整个安装流水线（含依赖、路径重写、建链接）都复用 install，
         # 只把包名换成「包名@最新版本」，其余旗标原样带下去
         install_words = list(words)
@@ -275,7 +275,7 @@ def handle_upgrade(input_string):
         try:
             linked = link_package(bin_name, keep)
             if linked:
-                quiet.say(f"🌊 Linked {bin_name} -> {bin_name}@{linked}")
+                silent.say(f"🌊 Linked {bin_name} -> {bin_name}@{linked}")
         except Exception as error:
             print(f"{YELLOW}🌊 Warning: could not re-point the unversioned link ({error}).{RESET}")
 
@@ -287,5 +287,5 @@ if __name__ == "__main__":
     try:
         handle_upgrade(" ".join(sys.argv[1:]))
     except KeyboardInterrupt:
-        quiet.say("🌊 Operation cancelled by user.")
+        silent.say("🌊 Operation cancelled by user.")
         sys.exit(130)

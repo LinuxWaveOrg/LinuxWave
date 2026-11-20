@@ -17,15 +17,21 @@ check_dependencies()
 from configpaths import load_base_dir
 
 BASE_DIR = load_base_dir()
+CLI_DIR = BASE_DIR / "cli"
+CONFIG_DIR = BASE_DIR / "config"
 LIB_DIR = BASE_DIR / "lib"
+NET_DIR = BASE_DIR / "net"
 PKG_DIR = BASE_DIR / "pkg"
 SURFBOARD_DIR = BASE_DIR / "surfboard"
 
-sys.path.insert(0, str(LIB_DIR))
-sys.path.insert(0, str(PKG_DIR))
-sys.path.insert(0, str(SURFBOARD_DIR))
+# 逆序 insert 才会得到下面这个顺序：每次 insert(0) 都插在最前面，所以最后插入的
+# 排在首位。cli/ 与 config/ 因此压在 lib/ 之上 —— 从旧版本升级上来的树里可能还
+# 留着 lib/help.py 之类的旧副本，不能让它们盖住新模块。
+for _component in (SURFBOARD_DIR, PKG_DIR, NET_DIR, LIB_DIR, CONFIG_DIR, CLI_DIR):
+    sys.path.insert(0, str(_component))
+del _component
 
-import quiet
+import silent
 
 
 # -------------------- 字典定义 --------------------
@@ -54,56 +60,6 @@ ARGUMENTS = {
 }
 
 
-# -------------------- 全局旗标：-s / -S --------------------
-#
-# `-s` 只对「有过程可安静」的命令有意义。list / search / info / linkquery / mirror
-# 存在的目的就是打印，给它们 -s 只会得到一片空白 —— 那不是静默，是把命令废掉。
-# 所以这些命令上出现 -s 直接报错，比让它默默什么都不输出好。
-SILENT_COMMANDS = {"install", "upgrade", "uninstall", "link", "unlink", "selfupdate"}
-
-
-def strip_silent(words):
-    """把 `-s` / `--silent` / `-S` / `--show-error` 从 argv 里拿掉。
-
-    返回 (剩下的 words, 是否静默, 是否保留错误)。写法与 upgrader 处理 -X 一致：
-
-        wave install jq -s          单个
-        wave install jq --silent    长写法
-        wave upgrade jq -sX         合并（s 与 X 都在这一簇里）
-        wave upgrade jq -CsX        合并里夹着别的短旗标
-        wave install jq -sS         静默但保留错误（curl 的 -sS）
-
-    只处理单横线短旗标簇，`--skip-ssl` 这类长旗标不受影响（`s`/`S` 不在
-    `--` 开头的那一类里找）。包名不以 `-` 开头，所以不会被误伤。
-    """
-    silent = False
-    show_error = False
-    kept = []
-    for word in words:
-        if word == "--silent":
-            silent = True
-            continue
-        if word == "--show-error":
-            show_error = True
-            continue
-        if word.startswith("-") and not word.startswith("--") and len(word) > 1:
-            letters = word[1:]
-            # 大写 S 与小写 s 各管一件事，顺序无关：-sS 与 -Ss 等价
-            for letter in ("s", "S"):
-                if letter in letters:
-                    if letter == "s":
-                        silent = True
-                    else:
-                        show_error = True
-                    letters = letters.replace(letter, "")
-            if letters != word[1:]:
-                if letters:
-                    kept.append("-" + letters)
-                continue
-        kept.append(word)
-    return kept, silent, show_error
-
-
 # -------------------- 主调度逻辑 --------------------
 
 def main():
@@ -120,7 +76,7 @@ def main():
     #
     # 取首词也从剥离后的副本里取：`wave -s update jq` 里的 -s 是全局旗标，
     # 不该被当成命令名报「unknown command: -s」。
-    lead, silent, show_error = strip_silent(words)
+    lead, is_silent, _show_error = silent.strip(words)
     FirstWord = lead[0] if lead else words[0]
 
     # 2. 参数优先
@@ -142,33 +98,11 @@ def main():
         from configpaths import apply_proxy_from_command_line
         apply_proxy_from_command_line(words)
 
-        # `-s / --silent`：这条命令只留错误输出。位置放在分发之前，因为
-        # handler 的旗标白名单里没有它（各命令按自己的白名单校验，加进去要改
-        # 十几处），而且它天然是全局选项。所以这里**把它从 argv 里拿掉**，
-        # 而不是让下游去认它 —— 留着的话 `wave install jq -s` 会报
-        # 「illegal option -s」。
-        #
-        # 静默优先于啰嗦：同时给了 -v，-v 会被 pkginstaller 的 verbose 判定挡掉
-        # （见下面的 words 处理：-v 还在，但 quiet.is_silent() 为真时不再打点）。
-        words, silent, show_error = strip_silent(words)
-        if silent:
-            if FirstWord not in SILENT_COMMANDS:
-                # 拒绝得早一点，并且用和「旗标写错」同一种形状，脚本好处理。
-                # 不能说 unknown —— -s 真实存在，只是不适用于只读命令。
-                applicable = ", ".join(f"wave {name}" for name in sorted(SILENT_COMMANDS))
-                quiet.misplaced("-s", f"-s only applies to {applicable}")
-                sys.exit(1)
-            # 单给 -s 时连错误一起吞（curl 语义）；-sS 才留错误。
-            quiet.set_silent(True, show_error=show_error)
-            if show_error:
-                # -sS：输出给脚本读，一律不带 🌊（见 quiet.machine_readable）
-                quiet.machine_readable()
-            else:
-                quiet.silence_everything()
-            # 子脚本（pkginstaller.sh、depsmanager.sh…）也要知道：它们的输出
-            # 虽然由 Python 重印，但 update_commands 那类直接写终端的脚本
-            # 只能靠环境变量。
-            os.environ["LINUXWAVE_SILENT"] = "1"
+        # `-s / --silent`（含 `-sS`）与 `--raw`：剥掉旗标并落到运行期开关。
+        # 为什么必须在分发之前、且必须**从 argv 里拿掉**：各 handler 的旗标白名单
+        # 里没有它们，留着的话 `wave install jq -s` 会报「illegal option -s」。
+        # 哪些命令能用、用错时怎么报，全部由 cli/silent.py 一处决定。
+        words = silent.apply(words, FirstWord)
 
         # `wave <command> -h|--help`：打印该命令自己的用法后退出。
         # 必须在这里拦下：各 handler 的旗标白名单里没有 --help，

@@ -23,7 +23,7 @@ RESET = '\033[0m'
 # -------------------- 常量 --------------------
 
 import domains
-import quiet
+import silent
 from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir, load_base_dir
 
 # -------------------- 同意记录 --------------------
@@ -215,7 +215,7 @@ def _apply_dry_run(input_string):
     """把 --dry-run 写进环境，由 selfupdate.sh 执行「只报告、不落盘」。"""
     if re.search(r"(^|\s)--dry-run(\s|$)", input_string or ""):
         os.environ["LINUXWAVE_DRY_RUN"] = "1"
-        quiet.say("🌊 Dry run: nothing will be downloaded or written.")
+        silent.say("🌊 Dry run: nothing will be downloaded or written.")
 
 
 def _apply_python_source(input_string):
@@ -237,7 +237,7 @@ def handle_selfupdate(input_string=""):
         print(f"{RED_BOLD}🌊 Error: LinuxWave is not installed. Run lib/install.sh first.{RESET}")
         sys.exit(1)
 
-    quiet.say("🌊 Fetching the latest version...")
+    silent.say("🌊 Fetching the latest version...")
 
     data, layout = resolve_release()
     if data is None:
@@ -254,10 +254,10 @@ def handle_selfupdate(input_string=""):
 
     current = installed_version()
     if current and version_key(current) >= version_key(latest):
-        quiet.say(f"{GREEN}🌊 LinuxWave is already up to date (current: {current}).{RESET}")
+        silent.say(f"{GREEN}🌊 LinuxWave is already up to date (current: {current}).{RESET}")
         sys.exit(0)
 
-    quiet.say("🌊 Fetching the new version information")
+    silent.say("🌊 Fetching the new version information")
 
     environment = dict(os.environ)
     environment["LINUXWAVE_UPDATE_VERSION"] = latest
@@ -293,9 +293,9 @@ def handle_selfupdate(input_string=""):
             sys.exit(1)
 
     if current:
-        quiet.say(f"🌊 Updating LinuxWave from {current} to {latest}...")
+        silent.say(f"🌊 Updating LinuxWave from {current} to {latest}...")
     else:
-        quiet.say(f"{YELLOW}🌊 No installed version found, updating to {latest}...{RESET}")
+        silent.say(f"{YELLOW}🌊 No installed version found, updating to {latest}...{RESET}")
 
     try:
         if command is None:
@@ -329,8 +329,8 @@ def handle_selfupdate(input_string=""):
         print(f"{RED_BOLD}🌊 Error: The update did not complete (still on {final or 'unknown'}).{RESET}")
         sys.exit(1)
 
-    quiet.say("")
-    quiet.say(f"{GREEN}🌊 LinuxWave has been updated to {final}!{RESET}")
+    silent.say("")
+    silent.say(f"{GREEN}🌊 LinuxWave has been updated to {final}!{RESET}")
 
     # wave.py 会被覆盖，但当前进程已经加载完了，直接退出即可
     sys.exit(0)
