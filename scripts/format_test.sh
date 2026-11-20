@@ -49,6 +49,21 @@ PKGS=(
 FAILED=0
 PASSED=0
 
+# uninstall_pkg <包名>：卸载并**检查结果**。
+# 以前这里是 `uninstall … || true`：CI 上 uninstaller 因为一个 NameError 崩掉，
+# 却因为 `|| true` 什么都没显示，最后表现为「--unlink 竟然建了链接」——
+# 实际是上一条用例的链接根本没被清掉。卸载失败必须说话。
+uninstall_pkg() {
+    local pkg="$1" out
+    if out=$(python3 "$WAVE_BIN" uninstall "$pkg" 2>&1); then
+        return 0
+    fi
+    echo -e "${RED_BOLD}🌊 FAIL: uninstall ${pkg} failed${RESET}"
+    printf '%s\n' "$out" | tail -5 | sed 's/^/      /'
+    FAILED=$((FAILED + 1))
+    return 1
+}
+
 for entry in "${PKGS[@]}"; do
     IFS='|' read -r pkg fmt <<< "$entry"
     echo ""
@@ -63,28 +78,28 @@ for entry in "${PKGS[@]}"; do
     if [[ ! -x "$BIN_DIR/${pkg}@1.0/${pkg}" ]]; then
         echo -e "${RED_BOLD}🌊 FAIL: ${pkg}@1.0/${pkg} not executable${RESET}"
         FAILED=$((FAILED + 1))
-        python3 "$WAVE_BIN" uninstall "${pkg}@1.0" || true
+        uninstall_pkg "${pkg}@1.0" || true
         continue
     fi
 
     if [[ ! -L "$LINKS_DIR/${pkg}@1.0" ]]; then
         echo -e "${RED_BOLD}🌊 FAIL: ${pkg}@1.0 link not found${RESET}"
         FAILED=$((FAILED + 1))
-        python3 "$WAVE_BIN" uninstall "${pkg}@1.0" || true
+        uninstall_pkg "${pkg}@1.0" || true
         continue
     fi
 
     if [[ ! -x "$LINKS_DIR/${pkg}@1.0" ]]; then
         echo -e "${RED_BOLD}🌊 FAIL: ${pkg}@1.0 link not executable${RESET}"
         FAILED=$((FAILED + 1))
-        python3 "$WAVE_BIN" uninstall "${pkg}@1.0" || true
+        uninstall_pkg "${pkg}@1.0" || true
         continue
     fi
 
     if [[ ! -L "$LINKS_DIR/${pkg}" ]]; then
         echo -e "${RED_BOLD}🌊 FAIL: install did not create the unversioned link ${pkg}${RESET}"
         FAILED=$((FAILED + 1))
-        python3 "$WAVE_BIN" uninstall "${pkg}@1.0" || true
+        uninstall_pkg "${pkg}@1.0" || true
         continue
     fi
 
@@ -97,7 +112,7 @@ for entry in "${PKGS[@]}"; do
         PASSED=$((PASSED + 1))
     fi
 
-    python3 "$WAVE_BIN" uninstall "${pkg}@1.0" || true
+    uninstall_pkg "${pkg}@1.0" || true
 done
 
 echo ""
@@ -110,7 +125,7 @@ if python3 "$WAVE_BIN" install "test_bin_zip@1.0" --unlink </dev/null >/dev/null
         echo -e "${GREEN}🌊 PASS: install --unlink skipped the unversioned link${RESET}"
         PASSED=$((PASSED + 1))
     fi
-    python3 "$WAVE_BIN" uninstall "test_bin_zip@1.0" >/dev/null 2>&1 || true
+    uninstall_pkg "test_bin_zip@1.0" || true
 else
     echo -e "${RED_BOLD}🌊 FAIL: install test_bin_zip@1.0 --unlink${RESET}"
     FAILED=$((FAILED + 1))

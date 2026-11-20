@@ -21,6 +21,7 @@ RESET = '\033[0m'
 # -------------------- 配置加载 --------------------
 
 import common
+import silent
 from configpaths import assert_inside, assert_inside_entry, load_base_dir, require_safe_token
 
 
