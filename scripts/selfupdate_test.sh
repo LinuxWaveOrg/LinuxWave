@@ -32,6 +32,7 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 WAVE_BIN="$REPO_DIR/lib/wave.py"
 SELFUPDATE_PY="$REPO_DIR/lib/selfupdate.py"
 SELFUPDATE_SH="$REPO_DIR/lib/selfupdate.sh"
+BUILDER="$REPO_DIR/scripts/build_update_commands.py"
 
 if [[ ! -f "$WAVE_BIN" ]]; then
     echo -e "${RED_BOLD}🌊 Error: wave.py not found at $WAVE_BIN${RESET}"
@@ -72,55 +73,59 @@ cleanup_mirror() {
 trap cleanup_mirror EXIT
 
 MIRROR_BRANCH="main"
-MIRROR_VERSION="3.1.0"
-mkdir -p "$MIRROR_DIR/core/$MIRROR_BRANCH" "$MIRROR_DIR/selfupdate/versiondata"
+PUBLISHED="3.1.0"
+TARGET="3.1.1"
+mkdir -p "$MIRROR_DIR/core/$MIRROR_BRANCH" "$MIRROR_DIR/selfupdate/linuxwavedata"
 
 tar -C "$REPO_DIR" -cf - \
     --exclude=.git --exclude=.github --exclude=.templates \
     --exclude=.vscode --exclude=.codex --exclude=__pycache__ . \
     | tar -C "$MIRROR_DIR/core/$MIRROR_BRANCH" -xf -
 
-# 文件清单优先用真实的那份（它才是「漏写一个文件」要抓的东西）。
-CONFIGDATA_SRC="${LINUXWAVE_CONFIGDATA:-}"
-if [[ -z "$CONFIGDATA_SRC" ]]; then
-    for candidate in "$REPO_DIR/../configdata-data" "$REPO_DIR/../configdata"; do
-        if [[ -f "$candidate/versiondata/files_info" ]]; then
-            CONFIGDATA_SRC="$candidate"
-            break
-        fi
-    done
-fi
+# 更新命令由**真生成器**产出（清单内联的正是要验证的东西）；安装树的内容就是
+# 镜像里那份工作树，所以清单与镜像必须来自同一次扫描。
+COMPONENTS="$(python3 -c "
+import sys; sys.path.insert(0, '$REPO_DIR/scripts')
+import components, assets
+print(' '.join(components.names() + assets.names()))
+")"
+FILES="$(python3 - "$REPO_DIR" "$COMPONENTS" <<'GENLIST'
+import pathlib
+import sys
 
-if [[ -n "$CONFIGDATA_SRC" && -f "$CONFIGDATA_SRC/versiondata/files_info" ]]; then
-    cp "$CONFIGDATA_SRC/versiondata/files_info" "$MIRROR_DIR/selfupdate/versiondata/files_info"
-    echo "🌊 Using the real files_info from $CONFIGDATA_SRC"
-else
-    {
-        echo "/"
-        for d in lib pkg surfboard; do
-            echo "    $d/"
-            for f in "$REPO_DIR/$d"/*; do
-                [[ -f "$f" ]] || continue
-                base="$(basename "$f")"
-                # 安装器与卸载器不装自己——真实的 files_info 也是这样
-                [[ "$base" == "install.sh" || "$base" == "uninstall.sh" ]] && continue
-                echo "        $base"
-            done
-        done
-    } > "$MIRROR_DIR/selfupdate/versiondata/files_info"
-    echo -e "${YELLOW}🌊 No configdata checkout found; generated files_info from the repo tree.${RESET}"
-fi
+repo = pathlib.Path(sys.argv[1])
+for name in sys.argv[2].split():
+    for path in sorted((repo / name).rglob("*")):
+        if not path.is_file():
+            continue
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        print(f"{name}/{path.relative_to(repo / name)}")
+GENLIST
+)"
 
-# 版本数据由测试自己写：更新目标必须与已装版本同大版本，分支也要对得上镜像目录。
-# update_command 保持生产形状（bash -c "$(curl ...)"），只是把地址换成 file://。
+for version in "$PUBLISHED" "$TARGET"; do
+    mkdir -p "$MIRROR_DIR/selfupdate/linuxwavedata/$version"
+    python3 "$BUILDER" --version "$version" --branch "$MIRROR_BRANCH" \
+        --files $FILES \
+        --out "$MIRROR_DIR/selfupdate/linuxwavedata/$version/update_commands.sh" \
+        > /dev/null 2>&1 || {
+            echo -e "${RED_BOLD}🌊 Error: cannot generate update_commands.sh for $version${RESET}"
+            exit 1
+        }
+done
+
+# 探针里记的哈希钉住「即将被 bash 执行的那份脚本」：第 4 段执行的是 $TARGET 那份
+UPDATE_COMMANDS_SHA="$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" \
+    "$MIRROR_DIR/selfupdate/linuxwavedata/$TARGET/update_commands.sh")"
+
 {
-    echo "version: \"$MIRROR_VERSION\""
-    echo 'release_date: "2026-01-01"'
-    echo 'build_number: "001A0001"'
-    echo "branch: \"$MIRROR_BRANCH\""
-    printf 'update_command: <<< /bin/bash -c "$(curl -fsSL %s)" >>>\n' \
-        "file://$MIRROR_DIR/core/$MIRROR_BRANCH/lib/selfupdate.sh"
-} > "$MIRROR_DIR/selfupdate/versiondata/latest_version"
+    echo "version = \"$TARGET\""
+    echo 'release_date = "2026-01-01"'
+    echo 'build_number = "001A0001"'
+    echo "branch = \"$MIRROR_BRANCH\""
+    echo "update_commands_sha256 = \"$UPDATE_COMMANDS_SHA\""
+} > "$MIRROR_DIR/selfupdate/linuxwavedata/latest.toml"
 
 export LINUXWAVE_CORE_DOMAIN="file://$MIRROR_DIR/core"
 export LINUXWAVE_SELFUPDATE_DOMAIN="file://$MIRROR_DIR/selfupdate"
@@ -137,36 +142,37 @@ echo ""
 
 echo "========== parse version data =========="
 
-if python3 - "$SELFUPDATE_PY" << 'PYEOF'
+if python3 - "$SELFUPDATE_PY" "$REPO_DIR" << 'PYEOF'
 import importlib.util
 import sys
 from pathlib import Path
 
 selfupdate_py = Path(sys.argv[1])
-sys.path.insert(0, str(selfupdate_py.parent))   # selfupdate.py 会 import configpaths
+repo = Path(sys.argv[2])
+sys.path.insert(0, str(repo / "scripts"))
+import components
+components.add_to_sys_path(repo)
+
 spec = importlib.util.spec_from_file_location('selfupdate_module', selfupdate_py)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
-# 单行命令
-single = (
-    'version: "9.9.9"\n'
-    'release_date: "2026-01-01"\n'
-    'build_number: "X1"\n'
-    'branch: "main"\n'
-    'update_command: <<< echo hello >>>\n'
+# latest.toml 的写法：`key = "value"`，`#` 开头是注释；半行残缺不算字段
+sample = (
+    '# 注释\n'
+    'version = "9.9.9"\n'
+    'release_date = "2026-01-01"\n'
+    'build_number = "X1"\n'
+    'branch = "main"\n'
+    'broken_line_without_equals\n'
+    'unquoted = 9.9.10\n'
 )
-data = module.parse_version_data(single)
+data = module.parse_toml(sample)
 assert data['version'] == '9.9.9', data
 assert data['branch'] == 'main', data
 assert data['release_date'] == '2026-01-01', data
-assert data['update_command'] == 'echo hello', data
-
-# 多行命令（<<< >>> 之间可以换行，且不能被当成字段）
-multi = 'version: "1.0"\nupdate_command: <<<\necho one: two\necho three\n>>>\n'
-parsed = module.parse_version_data(multi)
-assert parsed['version'] == '1.0', parsed
-assert parsed['update_command'] == 'echo one: two\necho three', parsed
+assert 'unquoted' not in data, data
+assert 'broken_line_without_equals' not in data, data
 
 # 版本比较：补齐到四位，2.3 == 2.3.0，跨位数按数值比
 assert module.version_key('2.3') == module.version_key('2.3.0')
@@ -184,7 +190,7 @@ else
 fi
 
 # ==========================================
-# 2. 已是最新时必须短路（不会去执行 update_command）
+# 2. 已是最新时必须短路（不会去取更新脚本）
 # ==========================================
 
 echo "========== already up to date =========="
@@ -212,7 +218,7 @@ fi
 rm -f "$LOG_FILE"
 
 # ==========================================
-# 3. 跨大版本必须被拒绝（3.0 起的新规则）
+# 3. 跨大版本必须被拒绝（规则在 selfupdate.sh 里，随目标分支一起发布）
 # ==========================================
 
 echo "========== cross-major selfupdate is refused =========="
@@ -257,21 +263,7 @@ if ! bash -n "$SELFUPDATE_SH"; then
     FAILED=$((FAILED + 1))
 fi
 
-# 线上版本形如 x.0 时，「同大版本且更旧」的版本并不存在（x.0 已是该大版本的最低版本），
-# 所以这里直接给 selfupdate.sh 指定一个同大版本、更高的目标版本号，走完真实的更新流程
-# （读文件清单 → 下载文件 → 写 VERSION.json）。
-LATEST_DATA="$(cat "$MIRROR_DIR/selfupdate/versiondata/latest_version")"
-PUBLISHED="$(printf '%s\n' "$LATEST_DATA" | sed -n 's/^version:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
-RELEASE_BRANCH="$(printf '%s\n' "$LATEST_DATA" | sed -n 's/^branch:[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
-
-if [[ -z "$PUBLISHED" || -z "$RELEASE_BRANCH" ]]; then
-    echo -e "${RED_BOLD}🌊 FAIL: cannot read the published version${RESET}"
-    FAILED=$((FAILED + 1))
-else
-    INSTALLED="$PUBLISHED"
-    TARGET="$(python3 -c 'import sys; parts = sys.argv[1].split("."); parts[-1] = str(int(parts[-1]) + 1); print(".".join(parts))' "$PUBLISHED")"
-
-    python3 - "$VERSION_FILE" "$INSTALLED" << 'PYEOF'
+python3 - "$VERSION_FILE" "$PUBLISHED" << 'PYEOF'
 import json
 import sys
 
@@ -280,72 +272,63 @@ with open(sys.argv[1], 'w') as handle:
               handle, indent=2)
 PYEOF
 
-    LOG_FILE="$(mktemp)"
-    RC=0
-    LINUXWAVE_UPDATE_VERSION="$TARGET" LINUXWAVE_UPDATE_BRANCH="$RELEASE_BRANCH" bash "$SELFUPDATE_SH" > "$LOG_FILE" 2>&1 || RC=$?
-    cat "$LOG_FILE"
+LOG_FILE="$(mktemp)"
+RC=0
+LINUXWAVE_UPDATE_VERSION="$TARGET" LINUXWAVE_UPDATE_BRANCH="$MIRROR_BRANCH" \
+    bash "$SELFUPDATE_SH" > "$LOG_FILE" 2>&1 || RC=$?
+cat "$LOG_FILE"
 
-    if [[ "$RC" -ne 0 ]]; then
-        echo -e "${RED_BOLD}🌊 FAIL: selfupdate.sh exited with $RC${RESET}"
-        FAILED=$((FAILED + 1))
-    fi
-    rm -f "$LOG_FILE"
+if [[ "$RC" -ne 0 ]]; then
+    echo -e "${RED_BOLD}🌊 FAIL: selfupdate.sh exited with $RC${RESET}"
+    FAILED=$((FAILED + 1))
+fi
+rm -f "$LOG_FILE"
 
-    # VERSION.json 必须变成目标版本号（这一步同时证明 selfupdate.sh 真的跑过）
-    if [[ "$(python3 -c "import json; print(json.load(open('$VERSION_FILE'))['version'])")" == "$TARGET" ]]; then
-        echo -e "${GREEN}🌊 OK: end-to-end selfupdate ($INSTALLED -> $TARGET)${RESET}"
-    else
-        echo -e "${RED_BOLD}🌊 FAIL: VERSION.json was not updated to $TARGET${RESET}"
-        FAILED=$((FAILED + 1))
-    fi
+# VERSION.json 必须变成目标版本号（这一步同时证明 selfupdate.sh 真的跑过）
+if [[ "$(python3 -c "import json; print(json.load(open('$VERSION_FILE'))['version'])")" == "$TARGET" ]]; then
+    echo -e "${GREEN}🌊 OK: end-to-end selfupdate ($PUBLISHED -> $TARGET)${RESET}"
+else
+    echo -e "${RED_BOLD}🌊 FAIL: VERSION.json was not updated to $TARGET${RESET}"
+    FAILED=$((FAILED + 1))
 fi
 
 # ==========================================
 # 5. 清单里列出的文件必须都落到了安装目录
 #    2.4 就是漏在这一点上：代码里加了 pkg/linker.py，
-#    但 selfupdate.sh 自带的文件清单没同步，自更新后 wave link 直接 ImportError。
+#    但清单没同步，自更新后 wave link 直接 ImportError。
+#
+#    4.0 起清单不再是 configdata 的一份独立文件，而是内联在按版本冻结的
+#    update_commands.sh 里（FULL_FILES 段）—— 所以直接读那份产物，测的是
+#    「客户端到底执行了什么」。
 # ==========================================
 
 echo "========== every listed file landed =========="
 
 BASE_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['base_dir'])")
+COMMANDS_FILE="$MIRROR_DIR/selfupdate/linuxwavedata/$TARGET/update_commands.sh"
 
-FILES_INFO_URL="$MIRROR_DIR/selfupdate/versiondata/files_info"
-FILES_INFO_TMP="$(mktemp)"
-PARSER_TMP="$(mktemp)"
+FULL_FILES="$(sed -n '/^FULL_FILES="$/,/^"$/p' "$COMMANDS_FILE" | grep -v '^FULL_FILES="' | grep -v '^"$')"
 
-if ! cp "$FILES_INFO_URL" "$FILES_INFO_TMP"; then
-    echo -e "${RED_BOLD}🌊 FAIL: cannot fetch versiondata/files_info${RESET}"
+FILE_COUNT=0
+MISSING=0
+while IFS= read -r rel; do
+    [[ -z "$rel" ]] && continue
+    FILE_COUNT=$((FILE_COUNT + 1))
+    if [[ ! -e "$BASE_DIR/$rel" ]]; then
+        echo -e "${RED_BOLD}🌊 FAIL: $rel was not installed${RESET}"
+        MISSING=$((MISSING + 1))
+    fi
+done <<< "$FULL_FILES"
+
+if [[ "$FILE_COUNT" -eq 0 ]]; then
+    echo -e "${RED_BOLD}🌊 FAIL: the manifest parsed to nothing${RESET}"
+    FAILED=$((FAILED + 1))
+elif [[ "$MISSING" -gt 0 ]]; then
+    echo -e "${RED_BOLD}🌊 FAIL: $MISSING of $FILE_COUNT listed file(s) are missing${RESET}"
     FAILED=$((FAILED + 1))
 else
-    # 抽出 selfupdate.sh 里真正的解析器，保证测的是实现本身而不是另一份复制品
-    sed -n '/^parse_files_info() {/,/^}$/p' "$SELFUPDATE_SH" > "$PARSER_TMP"
-
-    FILE_COUNT=0
-    MISSING=0
-    while IFS=$'\t' read -r repo_path local_path executable; do
-        if [[ -z "$repo_path" ]]; then
-            continue
-        fi
-        FILE_COUNT=$((FILE_COUNT + 1))
-        if [[ ! -e "$BASE_DIR/$local_path" ]]; then
-            echo -e "${RED_BOLD}🌊 FAIL: $repo_path was not installed to $local_path${RESET}"
-            MISSING=$((MISSING + 1))
-        fi
-    done < <(bash -c "source '$PARSER_TMP'; parse_files_info '$FILES_INFO_TMP'")
-
-    if [[ "$FILE_COUNT" -eq 0 ]]; then
-        echo -e "${RED_BOLD}🌊 FAIL: the file list parsed to nothing${RESET}"
-        FAILED=$((FAILED + 1))
-    elif [[ "$MISSING" -gt 0 ]]; then
-        echo -e "${RED_BOLD}🌊 FAIL: $MISSING of $FILE_COUNT listed file(s) are missing${RESET}"
-        FAILED=$((FAILED + 1))
-    else
-        echo -e "${GREEN}🌊 OK: all $FILE_COUNT listed file(s) landed${RESET}"
-    fi
+    echo -e "${GREEN}🌊 OK: all $FILE_COUNT listed file(s) landed${RESET}"
 fi
-
-rm -f "$FILES_INFO_TMP" "$PARSER_TMP"
 
 # ==========================================
 # 6. wave.py 里每个命令都要有对应的模块文件
@@ -354,12 +337,15 @@ rm -f "$FILES_INFO_TMP" "$PARSER_TMP"
 
 echo "========== every command resolves to a module =========="
 
-if python3 - "$BASE_DIR" << 'PYEOF'
+if python3 - "$BASE_DIR" "$REPO_DIR" << 'PYEOF'
 import os
 import re
 import sys
 
-base_dir = sys.argv[1]
+base_dir, repo = sys.argv[1], sys.argv[2]
+sys.path.insert(0, os.path.join(repo, "scripts"))
+import components
+
 # 3.1.0 起 lib/wave 不再是 wave.py 的副本，而是 write_launcher 生成的 sh 启动器
 # （自带解释器 + 私有 venv）。命令表要从 lib/wave.py 读。
 with open(os.path.join(base_dir, 'lib', 'wave.py'), encoding='utf-8') as handle:
@@ -381,7 +367,7 @@ if not commands:
 missing = []
 for command, module in commands:
     if not any(os.path.exists(os.path.join(base_dir, folder, module + '.py'))
-               for folder in ('lib', 'pkg', 'surfboard')):
+               for folder in components.names()):
         missing.append(f'{command} -> {module}.py')
 
 if missing:

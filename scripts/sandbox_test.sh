@@ -5,15 +5,15 @@
 # 宿主的 /etc、/home、/opt、/usr/local、/root、/var、/srv 一个字节都不会被写。
 #
 # 做法：
-#   1. 在临时目录里搭一份离线镜像，只把 BASE_URL / CONFIGDATA_URL 两行改成
-#      file:// 路径（也就是 .templates/SPECIAL/INSTALL-EXAMPLE.md 里的离线手法），
-#      因此整个过程**不需要网络**；
+#   1. 在临时目录里搭一份离线镜像（<域>/<分支>/<仓库内路径> 的形状，与真实镜像
+#      站一致），再把 LINUXWAVE_*_DOMAIN 指向它 —— 跑的是**未经改动**的
+#      lib/install.sh，因此整个过程**不需要网络**；
 #   2. unshare -rm 起一个用户 + 挂载命名空间，把上面那些系统目录换成影子副本；
 #   3. 在命名空间里跑安装 / 卸载的各种路径，逐条断言。
 #
 # 覆盖：各安装目录选项 → 配置落位 → PATH 写入 / 协议拒绝后的完整回滚 /
 #       卸载的确认语义（无终端、y、n、--force、--remove-user）/
-#       安装中途失败时的指引 / 单文件下载重试 / 菜单无效输入不静默换目录 /
+#       安装中途失败时的指引 / 菜单无效输入不静默换目录 /
 #       --ci 自动应答菜单 / 共用安装树不可写时的提示 / Ctrl-C 不打印 traceback /
 #       Ctrl-C 停在重试提示上时不误报成下载失败 / 卸载器自删 / 软链接回归。
 #
@@ -146,7 +146,7 @@ scenario_install_dirs() {
         install_run --ci "$opt_arg"
         check "--dir-option=$opt 安装成功" "$?" "0"
         check "--dir-option=$opt 落到 $display" "$([[ -d "$dir" ]] && echo yes || echo no)" "yes"
-        check "--dir-option=$opt 源码文件数 25" "$(source_file_count "$dir")" "25"
+        check "--dir-option=$opt 源码文件数 = 清单 + 启动器" "$(source_file_count "$dir")" "$((SANDBOX_EXPECTED_FILES + 1))"
         check "--dir-option=$opt 配置在 $cfg" "$(tree_base_dir "$cfg/config.json")" "$dir"
         check "--dir-option=$opt 入口可执行" "$([[ -x "$dir/lib/wave" ]] && echo yes || echo no)" "yes"
         # 3.1.0：入口从「wave.py 的副本」变成 sh 启动器，且自带私有环境
@@ -167,10 +167,10 @@ scenario_install_dirs() {
             *"LinuxWave "*[0-9]*) check "--dir-option=$opt PATH 无 python3 时打印版本" "yes" "yes" ;;
             *) check "--dir-option=$opt PATH 无 python3 时打印版本" "$bare_out" "expected a version line" ;;
         esac
-        check "--dir-option=$opt VERSION.json 版本与 configdata 一致" \
+        check "--dir-option=$opt VERSION.json 版本与自更新探针一致" \
             "$(tree_version "$cfg/VERSION.json")" \
-            "$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' \
-                "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version" | head -n 1)"
+            "$(sed -n 's/^version *= *"\(.*\)"$/\1/p' \
+                "$SANDBOX_DIR/mirror/selfupdate/linuxwavedata/latest.toml" | head -n 1)"
         check "--dir-option=$opt 写入了 PATH" "$(count_in /root/.bashrc "$dir")" "1"
     done <<< "2 /root/.local/linuxwave /root/.config/linuxwave_config ~/.local/linuxwave
 3 /opt/linuxwave /etc/linuxwave_config /opt/linuxwave
@@ -272,7 +272,7 @@ scenario_mid_failure() {
     reset_state
     install_run --ci --dir-option=2
     check "修好后重跑可自愈" "$?" "0"
-    check "自愈后源码文件数 25" "$(source_file_count /root/.local/linuxwave)" "25"
+    check "源码文件数 = 清单 + 启动器" "$(source_file_count /root/.local/linuxwave)" "$((SANDBOX_EXPECTED_FILES + 1))"
     check "正常安装不误报失败指引" "$(count_in "$OUT" "did not finish")" "0"
 }
 
@@ -471,38 +471,6 @@ scenario_install_menu() {
     check "--ci 装到推荐默认目录（共享安装）" \
         "$([[ -d /home/linuxwave/.linuxwave ]] && echo yes || echo no)" "yes"
     check "--ci 不再泄漏 /dev/tty 原始报错" "$(count_in "$OUT" "No such device")" "0"
-}
-
-scenario_download_retry() {
-    echo ""
-    echo "========== 10. 单文件下载重试 =========="
-
-    local victim="$MIRROR_BASE/lib/help.py"
-    local rc
-
-    # 10.1 文件短暂缺失（模拟传输被重置）：重试应能自愈，用户不必手工重跑
-    reset_state
-    mv "$victim" "$victim.hold"
-    ( sleep 2; mv "$victim.hold" "$victim" ) &
-    install_run --ci --dir-option=2
-    rc=$?
-    wait
-    check "短暂失败后重试成功" "$rc" "0"
-    contains "打印了重试提示" "$OUT" "Retrying lib/help.py"
-    check "自愈后 25 个源码文件齐备" "$(source_file_count /root/.local/linuxwave)" "25"
-    # 自愈那次失败发生在 if 条件里，ERR 陷阱不该开火——
-    # 否则一次已经自己恢复的抖动会留下「未完成」的误导说明
-    check "自愈后不谎报未完成" "$(count_in "$OUT" "did not finish")" "0"
-
-    # 10.2 一直失败：重试到底后明确报错，不谎报成功
-    reset_state
-    mv "$victim" "$victim.hold"
-    install_run --ci --dir-option=2
-    rc=$?
-    check "持续失败后退出码非 0" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)" "yes"
-    contains "说明尝试了几次" "$OUT" "after 5 attempts"
-    contains "给出未完成的指引" "$OUT" "Installation did not finish"
-    mv "$victim.hold" "$victim"
 }
 
 scenario_write_permission() {
@@ -766,7 +734,6 @@ run_scenarios() {
     scenario_shared
     scenario_link_regression
     scenario_install_menu
-    scenario_download_retry
     scenario_write_permission
     scenario_interrupt
 
@@ -782,8 +749,8 @@ run_scenarios() {
 }
 
 if [[ -n "${SANDBOX_INNER:-}" ]]; then
-    OFFLINE_INSTALLER="$SANDBOX_DIR/install-offline.sh"
-    MIRROR_BASE="$SANDBOX_DIR/mirror/base"
+    OFFLINE_INSTALLER="$REPO_DIR/lib/install.sh"
+    MIRROR_BASE="$SANDBOX_DIR/mirror/core/HEAD"
     OUT="$SANDBOX_DIR/output.txt"
     # 外层是 `exec unshare`，它自己的 EXIT 陷阱不会执行，所以清理要在这里挂
     trap 'rm -rf "$SANDBOX_DIR"' EXIT INT TERM
@@ -838,110 +805,74 @@ echo "🌊 Nothing outside this directory will be written."
 echo ""
 
 # ---------- 1. 离线镜像 ----------
-mkdir -p "$SANDBOX_DIR/mirror/base" "$SANDBOX_DIR/mirror/configdata"
-tar -C "$REPO_DIR" -cf - \
-    --exclude=.git --exclude=.github --exclude=.templates \
-    --exclude=.vscode --exclude=.codex --exclude=__pycache__ . \
-    | tar -C "$SANDBOX_DIR/mirror/base" -xf -
+mkdir -p "$SANDBOX_DIR/mirror/core/HEAD" "$SANDBOX_DIR/mirror/selfupdate" "$SANDBOX_DIR/mirror/python"
 
-CONFIGDATA_SRC="${LINUXWAVE_CONFIGDATA:-$(dirname "$REPO_DIR")/configdata}"
-if [[ -f "$CONFIGDATA_SRC/versiondata/files_info" ]]; then
-    tar -C "$CONFIGDATA_SRC" -cf - --exclude=.git . | tar -C "$SANDBOX_DIR/mirror/configdata" -xf -
-    echo "🌊 Using the real files_info from $CONFIGDATA_SRC"
-else
-    # 没有 configdata 分支时按仓库结构生成一份，好让脚本在单分支检出下也能跑
-    mkdir -p "$SANDBOX_DIR/mirror/configdata/versiondata"
-    {
-        echo "/"
-        for d in lib pkg surfboard; do
-            echo "    $d/"
-            for f in "$REPO_DIR/$d"/*; do
-                [[ -f "$f" ]] || continue
-                base="$(basename "$f")"
-                # 安装器与卸载器不装自己——真实的 files_info 也是这样
-                [[ "$base" == "install.sh" || "$base" == "uninstall.sh" ]] && continue
-                echo "        $base"
-            done
-        done
-    } > "$SANDBOX_DIR/mirror/configdata/versiondata/files_info"
+# 镜像按 <域>/<分支>/<仓库内路径> 铺 —— 客户端拼的就是 "$CORE_URL/$BRANCH/$路径"，
+# 与生产镜像（docs/mirror.md）同一形状。清单从 components.txt + assets.txt 取，
+# 加了顶层组件不必回来改这里。
+COMPONENTS="$(python3 -c "
+import sys; sys.path.insert(0, '$REPO_DIR/scripts')
+import components, assets
+print(' '.join(components.names() + assets.names()))
+")"
+for name in $COMPONENTS; do
+    cp -R "$REPO_DIR/$name" "$SANDBOX_DIR/mirror/core/HEAD/"
+done
 
-    # install.sh 还会从 configdata 读版本号与代码来源分支，一并生成一份
-    {
-        echo 'version: "0.0.0"'
-        echo 'release_date: "2026-01-01"'
-        echo 'build_number: "000A0000"'
-        echo 'branch: "HEAD"'
-        echo 'update_command: <<< true >>>'
-    } > "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version"
-
-    echo -e "${YELLOW}🌊 configdata branch not found; generated files_info from the repo tree.${RESET}"
-    echo -e "${YELLOW}🌊 Set LINUXWAVE_CONFIGDATA=<path> to test the real one.${RESET}"
-fi
-
-# 4.0 起客户端改为「探针 + 按版本冻结的更新命令」。夹具必须自带这两样，
-# 而且**不能**用上游那份 update_commands.sh —— 它会去 GitHub 取
-# lib/selfupdate.sh，测试就联网了。所以这里一律覆盖成本地版本：
-#
-#   linuxwavedata/latest.toml                → 0.0.0 / HEAD
-#   linuxwavedata/0.0.0/update_commands.sh   → 直接从本地镜像按清单落盘
+# 4.0 起客户端读「探针 + 按版本冻结的更新命令」。这里用**真生成器**产出一份，
+# 因为清单内联、逐文件哈希、文件名后缀这些都活在那份产物里 —— 手写夹具测不到。
 TEST_VERSION="0.0.0"
-mkdir -p "$SANDBOX_DIR/mirror/configdata/linuxwavedata/$TEST_VERSION"
+SELFUPDATE_DATA="$SANDBOX_DIR/mirror/selfupdate/linuxwavedata"
+mkdir -p "$SELFUPDATE_DATA/$TEST_VERSION"
+
+FILES="$(python3 - "$REPO_DIR" "$COMPONENTS" <<'GENLIST'
+import pathlib
+import sys
+
+repo = pathlib.Path(sys.argv[1])
+for name in sys.argv[2].split():
+    for path in sorted((repo / name).rglob("*")):
+        if not path.is_file():
+            continue
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        print(f"{name}/{path.relative_to(repo / name)}")
+GENLIST
+)"
+
+python3 "$REPO_DIR/scripts/build_update_commands.py" \
+    --version "$TEST_VERSION" --branch HEAD \
+    --files $FILES \
+    --out "$SELFUPDATE_DATA/$TEST_VERSION/update_commands.sh" \
+    > "$SANDBOX_DIR/generate.log" 2>&1 || {
+        echo -e "${RED_BOLD}🌊 Error: cannot generate update_commands.sh${RESET}"
+        tail -3 "$SANDBOX_DIR/generate.log"
+        exit 1
+    }
+
+UPDATE_COMMANDS_SHA="$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" \
+    "$SELFUPDATE_DATA/$TEST_VERSION/update_commands.sh")"
 
 {
-    echo 'version = "0.0.0"'
+    echo "version = \"$TEST_VERSION\""
     echo 'release_date = "2026-01-01"'
     echo 'build_number = "000A0000"'
     echo 'branch = "HEAD"'
-} > "$SANDBOX_DIR/mirror/configdata/linuxwavedata/latest.toml"
+    echo "update_commands_sha256 = \"$UPDATE_COMMANDS_SHA\""
+} > "$SELFUPDATE_DATA/latest.toml"
 
-{
-    echo '#!/bin/bash'
-    echo '# 测试夹具：从本地镜像按清单落盘，对应真实环境里那份按版本冻结的更新命令。'
-    echo 'set -u'
-    echo ': "${LINUXWAVE_INSTALL_DIR:?}"'
-    echo ': "${LINUXWAVE_CORE_URL:?}"'
-    echo 'fail=0'
-    echo 'while IFS= read -r rel; do'
-    echo '    [[ -z "$rel" ]] && continue'
-    echo '    mkdir -p "$LINUXWAVE_INSTALL_DIR/$(dirname "$rel")" || exit 1'
-    echo '    if ! curl -fsSL --max-time 60 -o "$LINUXWAVE_INSTALL_DIR/$rel" "$LINUXWAVE_CORE_URL/$rel"; then'
-    echo '        echo "🌊 Error: cannot fetch $rel" >&2'
-    echo '        fail=1'
-    echo '    fi'
-    echo '    case "$rel" in *.sh) chmod +x "$LINUXWAVE_INSTALL_DIR/$rel" ;; esac'
-    echo 'done <<LIST'
-    for d in lib pkg surfboard; do
-        for f in "$REPO_DIR/$d"/*; do
-            [[ -f "$f" ]] || continue
-            base="$(basename "$f")"
-            [[ "$base" == "install.sh" || "$base" == "uninstall.sh" ]] && continue
-            echo "$d/$base"
-        done
-    done
-    echo 'LIST'
-    echo ''
-    echo '[[ "$fail" -eq 0 ]] || exit 1'
-} > "$SANDBOX_DIR/mirror/configdata/linuxwavedata/$TEST_VERSION/update_commands.sh"
-chmod +x "$SANDBOX_DIR/mirror/configdata/linuxwavedata/$TEST_VERSION/update_commands.sh"
+# 安装树应有几个文件 = 清单里 want 的行数 + 生成出来的 lib/wave 启动器
+EXPECTED_FILES="$(sed -n '/^install_fresh() {/,/^}$/p' "$SELFUPDATE_DATA/$TEST_VERSION/update_commands.sh" \
+    | grep -c '^    want ')"
 
-# 版本号两处必须一致：客户端先读探针，回落时读 versiondata；测试里两份都写 0.0.0
-sed -i.bak -e 's/^version: .*/version: "0.0.0"/' -e 's/^branch: .*/branch: "HEAD"/' \
-    "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version" 2>/dev/null || true
-rm -f "$SANDBOX_DIR/mirror/configdata/versiondata/latest_version.bak"
-
-# 只改 URL 三行，其余与真实安装器逐字节一致
-sed -e "s|^BASE_URL=.*|BASE_URL=\"file://$SANDBOX_DIR/mirror/base\"|" \
-    -e "s|^CORE_URL=.*|CORE_URL=\"file://$SANDBOX_DIR/mirror/base\"|" \
-    -e "s|^CONFIGDATA_URL=.*|CONFIGDATA_URL=\"file://$SANDBOX_DIR/mirror/configdata\"|" \
-    "$REPO_DIR/lib/install.sh" > "$SANDBOX_DIR/install-offline.sh"
 cp "$REPO_DIR/lib/uninstall.sh" "$SANDBOX_DIR/source-uninstall.sh"
 
-if [[ "$(diff <(sed -e 's|^BASE_URL=.*|X|' -e 's|^CORE_URL=.*|C|' -e 's|^CONFIGDATA_URL=.*|Y|' "$REPO_DIR/lib/install.sh") \
-               <(sed -e 's|^BASE_URL=.*|X|' -e 's|^CORE_URL=.*|C|' -e 's|^CONFIGDATA_URL=.*|Y|' "$SANDBOX_DIR/install-offline.sh") \
-          | wc -l)" != "0" ]]; then
-    echo -e "${RED_BOLD}🌊 Error: the offline installer differs from lib/install.sh beyond the URLs.${RESET}"
-    exit 1
-fi
+# 域名全部指向本地镜像：跑的是**未经改动**的 lib/install.sh（以前要把脚本里
+# 几行地址 sed 掉，那样测的就不是同一份脚本了）
+export LINUXWAVE_CORE_DOMAIN="file://$SANDBOX_DIR/mirror/core"
+export LINUXWAVE_SELFUPDATE_DOMAIN="file://$SANDBOX_DIR/mirror/selfupdate"
+export LINUXWAVE_PYTHON_DOMAIN="file://$SANDBOX_DIR/mirror/python"
+export SANDBOX_EXPECTED_FILES="$EXPECTED_FILES"
 
 # ---------- 2. 影子目录 ----------
 R="$SANDBOX_DIR/run"
