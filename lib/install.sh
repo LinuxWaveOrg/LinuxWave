@@ -531,7 +531,7 @@ CORE_URL="$(lw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://ra
 CORE_DEFAULT_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave"
 SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 PYTHON_DATA_URL="$(lw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
-# pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
+# pip 的索引：只影响「装 requests/packaging/urllib3/rich」这一次调用，不参与「从哪儿取文件」
 PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
 
 # ==========================================
@@ -1843,7 +1843,7 @@ fi
 
 deps_ok() {
     [ -x "$1" ] || return 1
-    "$1" -c 'import requests, packaging, rich' >/dev/null 2>&1
+    "$1" -c 'import requests, packaging, urllib3, rich' >/dev/null 2>&1
 }
 
 # 1. 私有 venv（正常情况下就是它）
@@ -1929,10 +1929,15 @@ else
         "${YELLOW}🌊 警告：无法创建私有 venv，直接使用 ${PYTHON_SOURCE} 解释器。${RESET}"
 fi
 
+# 运行时依赖的唯一清单（pyproject.toml 是事实来源，scripts/depsync_test.sh
+# 断言两边一致）。urllib3 不是可有可无的：net/tls.py 用它抑制 --skip-ssl 下的
+# InsecureRequestWarning，缺了它整个 TLS 策略模块都 import 不起来。
+PIP_DEPS=(requests packaging urllib3 rich)
+
 deps_present() {
-    # 判断一个解释器是否真的能 import 到三个依赖（启动器用的是同一条判据）
+    # 判断一个解释器是否真的能 import 到每一个依赖（启动器用的是同一条判据）
     [[ -n "$1" ]] || return 1
-    "$1" -c 'import requests, packaging, rich' >/dev/null 2>&1
+    "$1" -c 'import requests, packaging, urllib3, rich' >/dev/null 2>&1
 }
 
 if [[ -n "$VENV_PY" && -x "$VENV_PY" ]]; then
@@ -1941,7 +1946,7 @@ if [[ -n "$VENV_PY" && -x "$VENV_PY" ]]; then
     # --timeout/--retries 收小：离线环境里让 pip 尽快失败，好走到下面的降级分支，
     # 而不是死等默认的长超时（隔离测试根里每次安装都会走一遍）。
     run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 --upgrade pip >/dev/null 2>&1 || true
-    run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 requests packaging rich >/dev/null 2>&1 || true
+    run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 "${PIP_DEPS[@]}" >/dev/null 2>&1 || true
 
     if deps_present "$VENV_PY"; then
         :
@@ -1970,11 +1975,11 @@ fi
 
 # 最后一道判据：选定解释器必须真的能 import。给不出可用的解释器就不要谎报安装成功。
 if ! deps_present "$VENV_PY" && ! deps_present "$PYTHON_BIN"; then
-    lw_say_err "${RED_BOLD}🌊 Error: no Python interpreter with requests/packaging/rich is available.${RESET}" \
-        "${RED_BOLD}🌊 错误：没有哪个 Python 解释器能 import requests/packaging/rich。${RESET}"
+    lw_say_err "${RED_BOLD}🌊 Error: no Python interpreter with requests/packaging/urllib3/rich is available.${RESET}" \
+        "${RED_BOLD}🌊 错误：没有哪个 Python 解释器能 import requests/packaging/urllib3/rich。${RESET}"
     lw_say_err "${RED_BOLD}🌊 Install them for one interpreter and re-run, or retry when the network is up.${RESET}" \
         "${RED_BOLD}🌊 请给其中一个解释器装上这三个包后重跑，或等网络恢复再试。${RESET}"
-    lw_say_err "${RED_BOLD}🌊   python3 -m pip install requests packaging rich${RESET}"
+    lw_say_err "${RED_BOLD}🌊   python3 -m pip install requests packaging urllib3 rich${RESET}"
     exit 1
 fi
 

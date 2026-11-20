@@ -65,15 +65,15 @@ TEST_ROOT="$WORK/root"
 # 用 LINUXWAVE_TEST 把 /opt 映射到测试根下。
 #
 # 不这么做的后果（CI 上真实发生过）：config_dir_candidates() 是**系统级优先**，
-# 而 CI 的 workflow 为了跑别的测试预先写过 /opt/linuxwave_config/config.json，
+# 而 CI 的 workflow 为了跑别的测试预先写过 /etc/linuxwave_config/config.json，
 # 于是 load_base_dir() 读到那一份、返回 /tmp/linuxwave-test，本测试安装的包
 # 一个都认不出来，12 项断言全挂 —— 而本地没有那个文件，所以本地一直是绿的。
 export LINUXWAVE_TEST="$TEST_ROOT"
-mkdir -p "$TEST_ROOT/opt/linuxwave_config" "$HOME_DIR/.config/linuxwave_config" "$BASE"
+mkdir -p "$TEST_ROOT/etc/linuxwave_config" "$HOME_DIR/.config/linuxwave_config" "$BASE"
 copy_components "$BASE/"
 printf '{"version": "4.1.0"}\n' > "$BASE/VERSION.json"
 # 两处都写：系统级是首选，用户级兜底
-printf '{"base_dir": "%s"}\n' "$BASE" > "$TEST_ROOT/opt/linuxwave_config/config.json"
+printf '{"base_dir": "%s"}\n' "$BASE" > "$TEST_ROOT/etc/linuxwave_config/config.json"
 printf '{"base_dir": "%s"}\n' "$BASE" > "$HOME_DIR/.config/linuxwave_config/config.json"
 
 ARCH=$(python3 -c 'import platform; m=platform.machine().lower(); print("arm64" if m in ("arm64","aarch64") else "amd64")')
@@ -118,11 +118,14 @@ USER_SITE=$(python3 -c 'import site; print(site.getusersitepackages())')
 [[ -d "$USER_SITE" ]] && export PYTHONPATH="$USER_SITE"
 
 wave() {
-    env -u LINUXWAVE_BOTTLE_DOMAIN -u LINUXWAVE_DEPS_DOMAIN \
+    # 必须在 $WORK 里执行：configerror 的「git 检出」检测跑的是 `git rev-parse`，
+    # 而它看的是**当前工作目录**，不是脚本所在目录 —— 在仓库里跑会被误判成
+    # shallow clone（本地必红，CI 上反而绿，正好和真问题相反）。
+    ( cd "$WORK" && env -u LINUXWAVE_BOTTLE_DOMAIN -u LINUXWAVE_DEPS_DOMAIN \
         HOME="$HOME_DIR" \
         LINUXWAVE_TEST="$TEST_ROOT" \
         LINUXWAVE_API_DOMAIN="http://127.0.0.1:$PORT" \
-        python3 "$BASE/lib/wave.py" "$@"
+        python3 "$BASE/lib/wave.py" "$@" )
 }
 
 # 诊断：CI 上出现过「索引读得到、已装包却一个都不认」，本地复现不出。
@@ -133,7 +136,7 @@ echo "BASE       = $BASE"
 echo "ARCH       = $ARCH"
 echo "索引端口   = $PORT"
 echo -n "BASE_DIR 解析 = "
-HOME="$HOME_DIR" LINUXWAVE_API_DOMAIN="http://127.0.0.1:$PORT" \
+HOME="$HOME_DIR" LINUXWAVE_TEST="$TEST_ROOT" LINUXWAVE_API_DOMAIN="http://127.0.0.1:$PORT" \
   python3 -c "
 import os, sys
 sys.path[:0] = ['$BASE/' + name for name in os.environ['LINUXWAVE_COMPONENT_NAMES'].split()]
@@ -199,8 +202,8 @@ mkdir -p "$WORK/empty/base" "$WORK/empty/home/.config/linuxwave_config"
 copy_components "$WORK/empty/base/"
 # 这个用例要一个「什么都没装」的根，必须与主沙箱分开：LINUXWAVE_TEST 是全局导出的，
 # 沿用主沙箱的测试根就会读到主沙箱那份 config.json，三条包记录全被认成已安装。
-mkdir -p "$WORK/empty/root/opt/linuxwave_config"
-printf '{"base_dir": "%s"}\n' "$WORK/empty/base" > "$WORK/empty/root/opt/linuxwave_config/config.json"
+mkdir -p "$WORK/empty/root/etc/linuxwave_config"
+printf '{"base_dir": "%s"}\n' "$WORK/empty/base" > "$WORK/empty/root/etc/linuxwave_config/config.json"
 out=$(env HOME="$WORK/empty/home" LINUXWAVE_TEST="$WORK/empty/root" \
       LINUXWAVE_API_DOMAIN="http://127.0.0.1:$PORT" \
       PYTHONPATH="$USER_SITE" python3 "$WORK/empty/base/lib/wave.py" latest --all 2>&1)

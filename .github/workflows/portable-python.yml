@@ -114,8 +114,8 @@ jobs:
           echo "--- venv + dependencies ---"
           "$py" -m venv /tmp/bundled-venv
           /tmp/bundled-venv/bin/python3 -m pip install --quiet --upgrade pip
-          /tmp/bundled-venv/bin/python3 -m pip install --quiet requests packaging rich
-          /tmp/bundled-venv/bin/python3 -c 'import requests, packaging, rich; print("three dependencies OK")'
+          /tmp/bundled-venv/bin/python3 -m pip install --quiet requests packaging urllib3 rich
+          /tmp/bundled-venv/bin/python3 -c 'import requests, packaging, urllib3, rich; print("four dependencies OK")'
           /tmp/bundled-venv/bin/python3 -c 'from compression import zstd; print("zstd still OK in venv")'
 
           echo "--- run the real code under it ---"

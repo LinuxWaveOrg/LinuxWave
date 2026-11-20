@@ -167,7 +167,7 @@ CORE_URL="$(lw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://ra
 CORE_DEFAULT_URL="https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave"
 SELFUPDATE_URL="$(lw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
 PYTHON_DATA_URL="$(lw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
-# pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
+# pip 的索引：只影响「装 requests/packaging/urllib3/rich」这一次调用，不参与「从哪儿取文件」
 PIP_INDEX_URL="$(lw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
 
 # ==========================================
@@ -1004,7 +1004,7 @@ entry="$lib_dir/wave.py"
 
 deps_ok() {
     [ -x "$1" ] || return 1
-    "$1" -c 'import requests, packaging, rich' >/dev/null 2>&1
+    "$1" -c 'import requests, packaging, urllib3, rich' >/dev/null 2>&1
 }
 
 # 1. 私有 venv（正常情况下就是它）
@@ -1079,7 +1079,7 @@ fi
 
 deps_present() {
     [[ -n "$1" ]] || return 1
-    "$1" -c 'import requests, packaging, rich' >/dev/null 2>&1
+    "$1" -c 'import requests, packaging, urllib3, rich' >/dev/null 2>&1
 }
 
 # venv 已存在就复用（自更新不该每次重建 32MB 的环境）；不存在或坏了才重建。
@@ -1111,7 +1111,7 @@ if [[ -n "$VENV_PY" && -x "$VENV_PY" ]] && ! deps_present "$VENV_PY"; then
     run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 \
         --upgrade pip >/dev/null 2>&1 || true
     run_cmd "$VENV_PY" -m pip install --quiet --timeout 10 --retries 1 \
-        requests packaging rich >/dev/null 2>&1 || true
+        requests packaging urllib3 rich >/dev/null 2>&1 || true
 
     if ! deps_present "$VENV_PY"; then
         # 拿不到 PyPI 时退回「继承父解释器 site-packages」的 venv（与 install.sh 一致）
@@ -1135,7 +1135,7 @@ fi
 if ! deps_present "$VENV_PY" && ! deps_present "$PYTHON_BIN"; then
     echo -e "${RED_BOLD}🌊 Error: no Python interpreter with requests/packaging/rich is available.${RESET}"
     echo -e "${RED_BOLD}🌊 The code files are already updated, but 'wave' cannot start until this is fixed.${RESET}"
-    echo -e "${RED_BOLD}🌊   python3 -m pip install requests packaging rich${RESET}"
+    echo -e "${RED_BOLD}🌊   python3 -m pip install requests packaging urllib3 rich${RESET}"
     exit 1
 fi
 

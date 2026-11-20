@@ -70,7 +70,7 @@ jobs:
           python3 -c 'import sys; v = "%d.%d" % sys.version_info[:2]; assert v == "${{ matrix.python-version }}", v'
 
       - name: Install Python dependencies
-        run: python3 -m pip install requests packaging rich
+        run: python3 -m pip install requests packaging urllib3 rich
 
       - name: Setup LinuxWave config
         run: |
@@ -165,6 +165,26 @@ jobs:
       - name: Run suggestion test
         run: |
           bash scripts/suggest_test.sh
+
+      # 传输层契约：每个请求点都必须经过 net/tls.py（--skip-ssl / CACERT 才生效）
+      - name: Run transport policy test
+        run: |
+          bash scripts/net_policy_test.sh
+
+      # 证书失败的分诊：python 侧 tls.explain 与 shell 侧 curl_hint 同结论
+      - name: Run TLS diagnostics test
+        run: |
+          bash scripts/tls_test.sh
+
+      # wave latest：三种比较结果、清单缺失、包名打错、--all 汇总（离线假索引）
+      - name: Run latest test
+        run: |
+          bash scripts/latest_test.sh
+
+      # 依赖声明：pyproject.toml 与各安装脚本 / CI 必须说同一件事
+      - name: Run dependency sync test
+        run: |
+          bash scripts/depsync_test.sh
 
       # --max-time 的时长解析与传导（畸形值必须报错，不能静默用默认值）
       - name: Run timeout test

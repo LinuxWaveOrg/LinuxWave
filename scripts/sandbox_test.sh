@@ -157,7 +157,7 @@ scenario_install_dirs() {
         check "--dir-option=$opt 仍是 python 源码（不是副本）" \
             "$(head -n 1 "$dir/lib/wave.py" 2>/dev/null | cut -c1-12)" "#!/usr/bin/e"
         check "--dir-option=$opt 私有环境能 import 依赖" \
-            "$("$dir/venv/bin/python3" -c 'import requests, packaging, rich' >/dev/null 2>&1 && echo yes || echo no)" "yes"
+            "$("$dir/venv/bin/python3" -c 'import requests, packaging, urllib3, rich' >/dev/null 2>&1 && echo yes || echo no)" "yes"
         # 最关键的一条：入口不再依赖 PATH 上的 python3 —— 把 PATH 清空也能起来
         local bare_rc bare_out
         bare_out="$(env -i HOME=/root PATH=/nonexistent "$dir/lib/wave" -V 2>&1)"

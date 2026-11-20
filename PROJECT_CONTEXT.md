@@ -272,7 +272,7 @@ amd64_url / amd64_sha256
 - **换成非 stripped 版没有意义**：那只是多了调试符号，Linux 上是 58MB / 76MB。
 - 校验值取自 GitHub 对该资产声明的 digest；两个架构由
   `.github/workflows/portable-python.yml` **下载后重新计算**并比对，同时确认包里真有
-  那个解释器路径、native 架构能建 venv、能 `import requests, packaging, rich`、
+  那个解释器路径、native 架构能建 venv、能 `import requests, packaging, urllib3, rich`、
   `compression.zstd` 可用（`.conda` 包必需）。**上游删 tag 是这套方案唯一的静默失效点**，
   所以那个工作流每月跑一次。
 - 两个 URL 留空时安装器只警告并回退系统 `python3`，安装不会中断。
