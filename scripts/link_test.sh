@@ -148,11 +148,16 @@ check "--unlink 后仍指向 2.0" "$(python3 "$WAVE_BIN" linkquery "$PKG")" "�
 
 echo ""
 echo "========== 6. 安装器接受 --unlink（离线）=========="
+# 白名单只有一处事实：cli/flags.py 的 COMMAND_FLAGS（4.0 把各命令的自写白名单
+# 收进去了），所以这里问的是 flags 与 common.allowed_for，而不是 pkginstaller 的
+# 模块属性 —— 后者早就不存在了。
 FLAG_CHECK=$(cd "$BASE_DIR" && python3 -c "
 import sys
-sys.path[:0] = ['lib', 'pkg', 'surfboard']
-import pkginstaller as p
-ok = '--unlink' in p.ALLOWED_FLAGS and '--unlink' in p.parse_flags('wave install test_bin_zip@1.0 --unlink')
+sys.path[:0] = ['cli', 'config', 'lib', 'net', 'pkg', 'surfboard']
+import common
+import flags
+allowed = common.allowed_for('install')
+ok = '--unlink' in allowed and flags.ALIASES.get('--unlink') == '--no-link'
 print('yes' if ok else 'no')
 ")
 check "6.1 --unlink 是合法安装参数" "$FLAG_CHECK" "yes"
