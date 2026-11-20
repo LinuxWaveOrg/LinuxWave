@@ -322,3 +322,43 @@ def check_allowed(input_string, command, shown=None):
                      extra=_pointer(text, flag), hint=hint, usage=True)
 
     return found
+
+
+# -------------------- 三档超时交给 shell --------------------
+
+# 旗标名 → 传给 shell 脚本的环境变量。**传原始文本**，让脚本自己再解析一次：
+# 换算规则只有 net/timeouts.py 一份，脚本那边（lib/install.sh / lib/selfupdate.sh）
+# 只负责把它变成 curl 的旗标。若这里先算成秒，「1min 是多少秒」就有了两份实现。
+TIMEOUT_ENV = {
+    "--max-time": "LINUXWAVE_MAX_TIME",
+    "--connect-timeout": "LINUXWAVE_CONNECT_TIMEOUT",
+    "--content-time": "LINUXWAVE_CONTENT_TIME",
+}
+
+
+def export_timeouts(options, environ=None):
+    """把命令行上给了的那几档超时写进环境变量；没给的就不设。
+
+    不设而不是清空：脚本按自己的默认值走（元数据 30 秒、单个文件 60/180 秒），
+    与「用户没写这个旗标」是同一件事。
+    """
+    target = os.environ if environ is None else environ
+    for flag, name in TIMEOUT_ENV.items():
+        raw = options.timeout_raws.get(flag)
+        if raw:
+            target[name] = raw
+        else:
+            target.pop(name, None)
+
+
+def curl_limit_args(options):
+    """把三档超时翻成 curl 的旗标（本层自己发请求时用）。
+
+    curl 侧一一对应：握手是 --connect-timeout，总额是 --max-time；
+    「连上了多久收不到数据算失败」没有同名旗标，用 --speed-limit 1 --speed-time N
+    表达 —— 阈值压到 1 字节/秒，等价于「只要还在收数据就不算超时」。
+    """
+    budget = options.timeouts
+    return ["--max-time", str(max(1, int(round(budget.total)))),
+            "--connect-timeout", str(max(1, int(round(budget.connect)))),
+            "--speed-limit", "1", "--speed-time", str(max(1, int(round(budget.content))))]

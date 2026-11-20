@@ -315,6 +315,76 @@ else
 fi
 
 echo ""
+echo "========== 4. 三档超时：环境变量与 curl 旗标 =========="
+
+collect < <(python3 - "$REPO_DIR" <<'PY'
+import sys
+
+repo = sys.argv[1]
+sys.path.insert(0, f"{repo}/scripts")
+import components
+components.add_to_sys_path(repo)
+
+import common
+
+
+def report(ok, text):
+    print(("PASS|" if ok else "FAIL|") + text)
+
+
+options = common.parse("wave selfupdate --max-time=2min --connect-timeout=10s --content-time=15s")
+env = {}
+common.export_timeouts(options, env)
+report(env.get("LINUXWAVE_MAX_TIME") == "2min", "三条超时按原始文本交给脚本（--max-time）")
+report(env.get("LINUXWAVE_CONNECT_TIMEOUT") == "10s", "按原始文本交给脚本（--connect-timeout）")
+report(env.get("LINUXWAVE_CONTENT_TIME") == "15s", "按原始文本交给脚本（--content-time）")
+
+args = common.curl_limit_args(options)
+joined = " ".join(args)
+report("--max-time 120" in joined, "curl 的 --max-time 是 120 秒（2min）")
+report("--connect-timeout 10" in joined, "curl 的 --connect-timeout 是 10 秒")
+report("--speed-limit 1 --speed-time 15" in joined, "「收不到数据」用 --speed-limit/--speed-time 表达")
+
+# 没给的那一档不设：脚本按自己的默认值走，旧值不该残留
+stale = {"LINUXWAVE_MAX_TIME": "stale"}
+common.export_timeouts(common.parse("wave selfupdate"), stale)
+report("LINUXWAVE_MAX_TIME" not in stale, "没给那一档时清掉旧值（由脚本用自己的默认）")
+PY
+)
+
+# shell 侧 lw_seconds 与 Python 侧 parse_duration 必须同结论 —— 一份文本两处解析，
+# 走散的症状是「命令行写了 1min，curl 拿到 60 或 1」这种没法一眼看出的偏差。
+SHELL_SECONDS="$(sed -n '/^lw_seconds() {/,/^}$/p' "$REPO_DIR/lib/selfupdate.sh")"
+if [[ -z "$SHELL_SECONDS" ]]; then
+    fail "lib/selfupdate.sh 里找不到 lw_seconds()"
+else
+    MISMATCH="$(python3 - "$REPO_DIR" <<'PY'
+import sys
+
+repo = sys.argv[1]
+sys.path.insert(0, f"{repo}/net")
+sys.path.insert(0, f"{repo}/lib")
+import domains
+
+for raw in ("40", "40s", "1min", "1min20s", "2h", "250ms", "1.5m"):
+    print(f"{raw} {domains.parse_duration(raw)}")
+PY
+)"
+    if [[ -z "$MISMATCH" ]]; then
+        # 基线为空 = 被测的 Python 侧一段都没产出（崩了），不能当成「全部一致」
+        fail "两侧换算的基准数据没生成（Python 侧崩了？）"
+    else
+        BAD=""
+        while read -r raw expected; do
+            got="$(printf '%s\n' "$SHELL_SECONDS" "lw_seconds '$raw'" | bash)"
+            [[ "$got" == "$expected" ]] || BAD="${BAD}${raw}: shell=${got} python=${expected}; "
+        done <<< "$MISMATCH"
+        [[ -z "$BAD" ]] && pass "lw_seconds 与 parse_duration 同结论（7 组写法）" \
+            || fail "两侧换算不一致：$BAD"
+    fi
+fi
+
+echo ""
 echo "=========================================="
 if [[ "$FAILED" -gt 0 ]]; then
     echo -e "${RED_BOLD}🌊 selfupdate layout tests failed: $FAILED${RESET}"

@@ -22,6 +22,7 @@ RESET = '\033[0m'
 
 # -------------------- 常量 --------------------
 
+import common
 import domains
 import silent
 from configpaths import VERSION_FILE_NAME, config_dir_candidates, find_config_dir, load_base_dir
@@ -160,38 +161,19 @@ def installed_version():
 
 # -------------------- 主流程 --------------------
 
-def _apply_max_time(input_string):
-    """把命令行上的 --max-time 换成秒，并写进环境变量给 selfupdate.sh。
+def _apply_timeouts(input_string):
+    """三档超时：本层留一份预算，同时把原始文本交给 selfupdate.sh。
 
-    `wave.py` 不为 selfupdate 解析旗标（自更新要能把参数原样交给脚本），
-    所以这里自己扫一遍：`--max-time 2min` 与 `--max-time=2min` 都认。
+    `wave.py` 已经把公共旗标解析过一次，但 selfupdate 的 handler 拿到的是原始
+    命令行（自更新要能把参数原样交给脚本），所以这里用同一个入口再解析一次 ——
+    common.parse() 是幂等的，报错文案与退出码也就只有一套。
     """
     global FETCH_TIMEOUT
-    words = input_string.split()
-    raw = None
-    for index, word in enumerate(words):
-        if word == "--max-time":
-            raw = words[index + 1] if index + 1 < len(words) else ""
-        elif word.startswith("--max-time="):
-            raw = word.split("=", 1)[1]
+    options = common.parse(input_string or "")
+    common.export_timeouts(options)
 
-    if raw is None:
-        return
-
-    if raw == "":
-        print(f"{RED_BOLD}🌊 Error: Missing time after --max-time "
-              f"(e.g. --max-time=2min, --max-time=40).{RESET}")
-        sys.exit(1)
-
-    try:
-        seconds = domains.parse_duration(raw)
-    except ValueError:
-        print(f"{RED_BOLD}🌊 Error: Cannot parse --max-time '{raw}'.{RESET}")
-        print(f"{RED_BOLD}🌊 Use seconds or a unit: 40, 40s, 1min, 1min20s, 2h.{RESET}")
-        sys.exit(1)
-
-    FETCH_TIMEOUT = seconds
-    os.environ[domains.MAX_TIME_ENV] = str(seconds)
+    # 本层取版本数据用同一个预算；脚本那边自己解析文本，不读这个数
+    FETCH_TIMEOUT = options.timeouts.total
 
 
 def _wants_dry_run(input_string):
@@ -215,7 +197,7 @@ def _apply_python_source(input_string):
 
 
 def handle_selfupdate(input_string=""):
-    _apply_max_time(input_string)
+    _apply_timeouts(input_string)
     _apply_python_source(input_string)
 
     if find_config_dir() is None:

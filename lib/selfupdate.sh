@@ -256,7 +256,7 @@ lw_verify_latest_signature() {
     tmp="$(mktemp)"
     sig="$(mktemp)"
     printf '%s\n' "$data" > "$tmp"
-    curl -fsSL --max-time 30 -o "$sig" "$url.sig" 2>/dev/null || status=$?
+    curl -fsSL --max-time 30 ${CURL_LIMITS:-} -o "$sig" "$url.sig" 2>/dev/null || status=$?
     if [[ "$status" -ne 0 ]]; then
         lw_signature_note "🌊 No signature for the self-update data (this release predates signing)." \
             "🌊 这份自更新数据没有签名（早于签名制度，属正常情况）。"
@@ -436,13 +436,83 @@ RETRY_DELAY=2
 # 180 秒足够，又不会让一个真挂住的连接把整轮更新拖死。
 FILE_TIMEOUT=180
 
-# `--max-time` 由 selfupdate.py 以**秒**传下来（命令行上写 `1min20s` 也在这里变成 80）。
-# 给了就统一覆盖：取元数据与下单个文件用同一个上限；没给则保留上面按场景调好的默认。
+# 三档超时都由 selfupdate.py 以**原始文本**传下来（`1min20s` 原样，不先算成秒）：
+# 换算规则只有 net/timeouts.py 一份，这里只负责把它变成 curl 的旗标。
+# 没给的那一档不设，按下面按场景调好的默认值走。
+lw_seconds() {
+    # 与 net/timeouts.py 的 parse_duration 同一套规则：40 / 40s / 1min /
+    # 1min20s / 2h / 250ms 都行，无单位按秒。成功打印整数秒（向上取整，至少 1）。
+    awk -v raw="$1" 'BEGIN {
+        text = tolower(raw)
+        gsub(/[ \t]/, "", text)
+        if (text == "") exit 1
+        total = 0
+        while (length(text) > 0) {
+            # 单位必须长优先：`1min` 若先匹配到单字母 `m`，剩下的 `in` 就无解了
+            if (!match(text, /^[0-9]+(\.[0-9]+)?/)) exit 1
+            number = substr(text, 1, RLENGTH)
+            text = substr(text, RLENGTH + 1)
+            if (match(text, /^(hrs|hr|h|mins|min|ms|secs|sec|s|m)/)) {
+                unit = substr(text, 1, RLENGTH)
+                text = substr(text, RLENGTH + 1)
+            } else {
+                unit = ""
+            }
+            if (unit == "" || unit == "s" || unit == "sec" || unit == "secs") factor = 1
+            else if (unit == "m" || unit == "min" || unit == "mins") factor = 60
+            else if (unit == "h" || unit == "hr" || unit == "hrs") factor = 3600
+            else if (unit == "ms") factor = 0.001
+            else exit 1
+            total += number * factor
+        }
+        if (total <= 0) exit 1
+        seconds = int(total)
+        if (seconds < total) seconds++
+        if (seconds < 1) seconds = 1
+        printf "%d\n", seconds
+    }'
+}
+
 if [[ -n "${LINUXWAVE_MAX_TIME:-}" ]]; then
-    META_TIMEOUT="$LINUXWAVE_MAX_TIME"
-    FILE_TIMEOUT="$LINUXWAVE_MAX_TIME"
+    if ! _user_timeout="$(lw_seconds "$LINUXWAVE_MAX_TIME")"; then
+        echo -e "${RED_BOLD}🌊 Error: cannot parse --max-time value '$LINUXWAVE_MAX_TIME'.${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 Use a number of seconds or a suffix like 40s, 1min, 1min20s, 2h.${RESET}" >&2
+        exit 1
+    fi
+    META_TIMEOUT="$_user_timeout"
+    FILE_TIMEOUT="$_user_timeout"
 else
     META_TIMEOUT=30
+fi
+
+CONNECT_TIMEOUT=""
+if [[ -n "${LINUXWAVE_CONNECT_TIMEOUT:-}" ]]; then
+    if ! CONNECT_TIMEOUT="$(lw_seconds "$LINUXWAVE_CONNECT_TIMEOUT")"; then
+        echo -e "${RED_BOLD}🌊 Error: cannot parse --connect-timeout value '$LINUXWAVE_CONNECT_TIMEOUT'.${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 Use a number of seconds or a suffix like 40s, 1min, 1min20s, 2h.${RESET}" >&2
+        exit 1
+    fi
+fi
+
+CONTENT_TIME=""
+if [[ -n "${LINUXWAVE_CONTENT_TIME:-}" ]]; then
+    if ! CONTENT_TIME="$(lw_seconds "$LINUXWAVE_CONTENT_TIME")"; then
+        echo -e "${RED_BOLD}🌊 Error: cannot parse --content-time value '$LINUXWAVE_CONTENT_TIME'.${RESET}" >&2
+        echo -e "${RED_BOLD}🌊 Use a number of seconds or a suffix like 40s, 1min, 1min20s, 2h.${RESET}" >&2
+        exit 1
+    fi
+fi
+
+# 除 --max-time 之外的限制，拼成一段附加参数给每个 curl 用。
+#   --connect-timeout          握手多久算失败
+#   --speed-limit 1 --speed-time N   连上之后 N 秒收不到数据算失败
+# 只有整数，所以按空格拆开用是安全的。
+CURL_LIMITS=""
+if [[ -n "$CONNECT_TIMEOUT" ]]; then
+    CURL_LIMITS="${CURL_LIMITS:-} --connect-timeout $CONNECT_TIMEOUT"
+fi
+if [[ -n "$CONTENT_TIME" ]]; then
+    CURL_LIMITS="${CURL_LIMITS:-} --speed-limit 1 --speed-time $CONTENT_TIME"
 fi
 
 fetch_to_file() {
@@ -463,7 +533,7 @@ fetch_to_file() {
         # 同时取 HTTP 状态码：curl 的退出码并不总能反映「404」。
         # raw.githubusercontent 在 404 时常常报 (56) 收数据失败而不是 (22)，
         # 只看退出码会把「这个文件不存在」当成网络抖动重试三次。
-        code="$("$runner" curl -fsSL --max-time "$timeout" -w '%{http_code}' \
+        code="$("$runner" curl -fsSL --max-time "$timeout" ${CURL_LIMITS:-} -w '%{http_code}' \
             -o "$partial" "$url" 2>/dev/null)" || status=$?
         if [[ "$status" -eq 0 ]]; then
             "$runner" mv -f "$partial" "$destination"
@@ -781,7 +851,7 @@ ensure_portable_python() {
         # 默认先试我们自己托管的 `pythondata/<版本>/<文件名>`；没有或取不到就回落到上游地址。
         # 路径形状由 net/domains.py 的 python_archive_url 定义，scripts/python_source_test.sh 会比对。
         if [[ -z "${LINUXWAVE_PYTHON_FROM_SOURCE:-}" ]]; then
-            if ! run_cmd curl -fsSL --connect-timeout 20 --max-time 600 -o "$archive" \
+            if ! run_cmd curl -fsSL --connect-timeout 20 --max-time 600 ${CURL_LIMITS:-} -o "$archive" \
                      "$PYTHON_DATA_URL/pythondata/$version/$(basename "$url")" 2>/dev/null; then
                 run_cmd rm -f "$archive" 2>/dev/null || true
                 echo -e "${YELLOW}🌊 No hosted copy of the bundled Python; using the upstream URL.${RESET}" >&2

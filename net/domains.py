@@ -476,6 +476,7 @@ MAX_TIME_ENV = "LINUXWAVE_MAX_TIME"
 
 _UNIT_SECONDS = {
     "": 1, "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1,
+    "ms": 0.001,
     "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60,
     "h": 3600, "hr": 3600, "hrs": 3600, "hour": 3600, "hours": 3600,
     "d": 86400, "day": 86400, "days": 86400,
@@ -511,7 +512,13 @@ def parse_duration(text):
 
     if total <= 0:
         raise ValueError(f"duration must be positive: {text!r}")
-    return int(total) if total == int(total) else total
+    # 向上取整到整秒、至少 1 秒：curl 的 --max-time 只收整数，
+    # `250ms` 若截断成 0 就成了「不限时」。lib/*.sh 里的 lw_seconds 同一条规则，
+    # scripts/selfupdate_layout_test.sh 逐组比对两边。
+    seconds = int(total)
+    if seconds < total:
+        seconds += 1
+    return max(1, seconds)
 
 
 def timeout_from_env(default=DEFAULT_TIMEOUT):
