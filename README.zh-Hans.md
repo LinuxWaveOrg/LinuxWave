@@ -247,6 +247,7 @@ ncdu          by Yoran Heling
 palera1n      by palera1n Team
 pandoc        by John MacFarlane
 rg            by Andrew Gallant
+robinsing     by Sha0huaZhang
 tmux          by Nicholas Marriott and contributors
 tree          by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro
 trollrestore  by JJTech (@JJTech0130)
