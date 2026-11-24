@@ -263,6 +263,7 @@ when that would leave the link pointing at the version you are removing.
 (Listed in alphabetical order)
 
 ```
+
 bat           by David Peter
 btop          by Aristocratos
 columbula     by Sha0huaZhang
@@ -271,6 +272,7 @@ eza           by Christina Sørensen and the eza community
 fd            by David Peter
 ffmpeg        by FFmpeg Team
 fzf           by Junegunn Choi
+gwget         by GNU Project
 htop          by Hisham Muhammad and the htop team
 ipsw          by blacktop
 jq            by Stephen Dolan, Nicolas Williams, William Langford, Owen Ou, itchyny, Mattias Wadman, Emanuele Torre, Asaf Meizner, avid Korczynski, et al.
@@ -284,7 +286,6 @@ robinsing     by Sha0huaZhang
 tmux          by Nicholas Marriott and contributors
 tree          by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro
 trollrestore  by JJTech (@JJTech0130)
-wget          by GNU Project
 yq            by Mike Farah
 zoxide        by Ajeet D'Souza
 ```
