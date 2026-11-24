@@ -306,6 +306,12 @@ jobs:
         run: |
           bash scripts/lock_test.sh
 
+      # wave doctor：报得准（坏树逐条报出 + 给修复命令；好树全绿）、note 不计入
+      # 退出码、--raw 可 grep、判断不了时不误报，以及「跑完一个字节都没改」
+      - name: Run doctor test
+        run: |
+          bash scripts/doctor_test.sh
+
       # -s 什么都不输出、-sS 只留错误且不带 🌊、只读命令上给 -s 要报错
       - name: Run quiet-mode test
         run: |

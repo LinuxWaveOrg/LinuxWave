@@ -35,11 +35,22 @@ RESET='\033[0m'
 
 # -------------------- 参数与检查 --------------------
 
+CHECK_ONLY=0
+if [[ "${1:-}" == "--check" ]]; then
+    # --check：只读核对，不改一个字节，也不需要 patchelf 的写能力。
+    # 退出码三态，给 `wave doctor` 用：
+    #   0 = RPATH/RUNPATH 全是 $ORIGIN 相对形式（或根本没有）
+    #   1 = 还有绝对路径
+    #   2 = 判断不了（没有 patchelf 也没有 readelf，或不是 ELF）
+    CHECK_ONLY=1
+    shift
+fi
+
 TARGET_DIR="$1"
 BASE_DIR="$2"
 SHARED_INDEX_DIR="${3:-${LINUXWAVE_SHARED_INDEX:-}}"
 
-if [[ -z "$TARGET_DIR" || -z "$BASE_DIR" ]]; then
+if [[ -z "${TARGET_DIR:-}" || -z "${BASE_DIR:-}" ]]; then
     echo -e "${RED_BOLD}🌊 Error: Missing target directory or base directory.${RESET}"
     exit 1
 fi
@@ -48,6 +59,54 @@ if [[ ! -d "$TARGET_DIR" ]]; then
     echo -e "${RED_BOLD}🌊 Error: Target directory not found: $TARGET_DIR${RESET}"
     exit 1
 fi
+
+# -------------------- 只读核对 --------------------
+
+if [[ "$CHECK_ONLY" -eq 1 ]]; then
+    # 读 RPATH 的两条路：patchelf 最稳；没有它就用 readelf（binutils 一般都在）。
+    if command -v patchelf >/dev/null 2>&1; then
+        lw_read_rpath() { patchelf --print-rpath "$1" 2>/dev/null; }
+    elif command -v readelf >/dev/null 2>&1; then
+        lw_read_rpath() {
+            readelf -d "$1" 2>/dev/null \
+                | awk '/\((RUNPATH|RPATH)\)/ { print }' \
+                | sed -e 's/.*\[//' -e 's/\].*//'
+        }
+    elif command -v objdump >/dev/null 2>&1; then
+        # 最后一条路：objdump 的 Dynamic Section。没有 readelf 的精简系统上常见
+        # （binutils 只装了 objdump 的那种）。输出里 RUNPATH/RPATH 后面跟的就是冒号分隔的路径。
+        lw_read_rpath() {
+            objdump -p "$1" 2>/dev/null \
+                | awk '$1 == "RUNPATH" || $1 == "RPATH" { print $2; exit }'
+        }
+    else
+        echo -e "${YELLOW}🌊 Note: none of 'patchelf', 'readelf', 'objdump' is available, cannot inspect ELF.${RESET}"
+        exit 2
+    fi
+
+    ABSOLUTE=0
+    while IFS= read -r candidate; do
+        [[ -z "$candidate" ]] && continue
+        # 只看 ELF：魔数不对的直接跳过（脚本、文本、数据文件）
+        [[ "$(head -c 4 "$candidate" 2>/dev/null | od -An -tx1 | tr -d ' \n')" == "7f454c46" ]] || continue
+        rpath="$(lw_read_rpath "$candidate")"
+        [[ -z "$rpath" ]] && continue
+        while IFS= read -r entry; do
+            case "$entry" in
+                /*)
+                    echo "$candidate: $entry"
+                    ABSOLUTE=1
+                    ;;
+            esac
+        done < <(printf '%s' "$rpath" | tr ':' '\n')
+        [[ "$ABSOLUTE" -eq 1 ]] && break
+    done < <(find "$TARGET_DIR" -type f 2>/dev/null)
+
+    [[ "$ABSOLUTE" -eq 1 ]] && exit 1
+    exit 0
+fi
+
+# -------------------- 改写 --------------------
 
 if ! command -v patchelf >/dev/null 2>&1; then
     echo -e "${YELLOW}🌊 Warning: 'patchelf' not found, skipping path transfer.${RESET}"

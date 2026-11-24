@@ -56,6 +56,12 @@ LinuxWave 把每个软件包装进安装根目录下、带版本号的独立目�
 打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。家目录里的
 路径显示成 ~；--raw 只输出绝对路径。
 .TP
+.B doctor
+只读体检：找出已经坏了、但平时不容易发现的地方 —— 版本目录里没有可执行文
+件、悬空的链接、装了却没链接的包、没人引用的依赖树、RPATH 里还写着绝对路
+径的 ELF。什么都不会改动，每条发现都附上该跑哪条命令；退出码是发现的问题
+数。
+.TP
 .B shellenv
 打印一段把 LinuxWave 的目录加到 PATH 前面的 shell 代码。在 shell 配置里
 eval 一次即可；它自己什么也不改。
@@ -127,6 +133,7 @@ wave linkquery jq
 wave mirror
 wave latest jq
 wave basedir
+wave doctor
 eval "$(~/.local/linuxwave/lib/wave shellenv)"
 wave version
 wave manual

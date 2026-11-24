@@ -28,6 +28,10 @@ LinuxWave 把每个软件包装进安装根目录下、带版本号的独立目�
 * latest::	将本机已装的版本与索引里的最新版本比较，不下载。
 * basedir::	打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。
         家目录里的路径显示成 ~；--raw 只输出绝对路径。
+* doctor::	只读体检：找出已经坏了、但平时不容易发现的地方 —— 版本目录里
+        没有可执行文件、悬空的链接、装了却没链接的包、没人引用的依赖
+        树、RPATH 里还写着绝对路径的 ELF。什么都不会改动，每条发现都
+        附上该跑哪条命令；退出码是发现的问题数。
 * shellenv::	打印一段把 LinuxWave 的目录加到 PATH 前面的 shell 代码。在
         shell 配置里 eval 一次即可；它自己什么也不改。
 * version::	打印当前安装的 LinuxWave 版本。
@@ -389,7 +393,7 @@ Examples:
      wave latest -a --max-time=1min
 
 
-File: wave-zh.info, Node: basedir, Next: shellenv, Prev: latest, Up: Top
+File: wave-zh.info, Node: basedir, Next: doctor, Prev: latest, Up: Top
 
 
 打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。家目录里的
@@ -405,7 +409,29 @@ Examples:
      cd "$(wave basedir --raw)"
 
 
-File: wave-zh.info, Node: shellenv, Next: version, Prev: basedir, Up: Top
+File: wave-zh.info, Node: doctor, Next: shellenv, Prev: basedir, Up: Top
+
+
+只读体检：找出已经坏了、但平时不容易发现的地方 —— 版本目录里没有可执行文
+件、悬空的链接、装了却没链接的包、没人引用的依赖树、RPATH 里还写着绝对路
+径的 ELF。什么都不会改动，每条发现都附上该跑哪条命令；退出码是发现的问题
+数。
+
+  --raw
+      机器可读：每条发现一行「严重程度<TAB>检查项<TAB>说明」
+
+  --list-checks
+      列出所有检查项及其检查内容
+
+Examples:
+
+     wave doctor
+     wave doctor links
+     wave doctor --raw
+     wave doctor --list-checks
+
+
+File: wave-zh.info, Node: shellenv, Next: version, Prev: doctor, Up: Top
 
 
 打印一段把 LinuxWave 的目录加到 PATH 前面的 shell 代码。在 shell 配置里

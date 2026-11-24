@@ -1,0 +1,29 @@
+.TH WAVE-DOCTOR 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-doctor \- Look for things that are already broken but rarely noticed: a version directory without its executable, a dangling link, a package that was never linked, an orphaned dependency tree, an ELF file whose RPATH still names an absolute path. Nothing is changed; every finding comes with the command that fixes it. The exit status is the number of problems found.
+.SH SYNOPSIS
+.B wave doctor [check ...] [\-\-raw] [\-\-list\-checks]
+.SH DESCRIPTION
+Look for things that are already broken but rarely noticed: a version
+directory without its executable, a dangling link, a package that was
+never linked, an orphaned dependency tree, an ELF file whose RPATH still
+names an absolute path. Nothing is changed; every finding comes with the
+command that fixes it. The exit status is the number of problems found.
+.SH OPTIONS
+.TP
+.B \-\-raw
+Machine-readable: one 'severity<TAB>check<TAB>detail' line per finding
+.TP
+.B \-\-list\-checks
+List the check names and what each one looks at
+
+.SH EXAMPLES
+.nf
+wave doctor
+wave doctor links
+wave doctor --raw
+wave doctor --list-checks
+.fi
+.SH SEE ALSO
+wave(1)

@@ -89,6 +89,7 @@ mirror = {"--show-password", "--hide-user", "--only-set", "--raw"}
 # basedir 的 --raw 是「只打值」，与 mirror 同义；它不接 -s/--silent（见 lib/basedir.py）
 basedir = {"--raw"}
 # manual 的 --color 只给手册上色；--zh 在 EARLY 里（它不参与分发）。
+doctor = {"--raw", "--list-checks"}
 manual = {"--color"}
 
 COMMAND_FLAGS = {
@@ -104,6 +105,7 @@ COMMAND_FLAGS = {
     "info": info,
     "mirror": mirror,
     "basedir": basedir,
+    "doctor": doctor,
     "manual": manual,
 }
 

@@ -45,6 +45,13 @@ nothing is compiled on the user's machine.
         dependencies live. A path under your home directory is shown
         with ~. With --raw it prints the absolute path as-is and
         nothing else.
+* doctor::	Look for things that are already broken but rarely noticed:
+        a version directory without its executable, a dangling link,
+        a package that was never linked, an orphaned dependency
+        tree, an ELF file whose RPATH still names an absolute path.
+        Nothing is changed; every finding comes with the command
+        that fixes it. The exit status is the number of problems
+        found.
 * shellenv::	Print the shell code that prepends LinuxWave's directories
         to PATH. You eval it once from your shell profile; it does
         nothing on its own.
@@ -437,7 +444,7 @@ Examples:
      wave latest -a --max-time=1min
 
 
-File: wave.info, Node: basedir, Next: shellenv, Prev: latest, Up: Top
+File: wave.info, Node: basedir, Next: doctor, Prev: latest, Up: Top
 
 
 Print LinuxWave's install root -- the base_dir in config.json, which is
@@ -456,7 +463,31 @@ Examples:
      cd "$(wave basedir --raw)"
 
 
-File: wave.info, Node: shellenv, Next: version, Prev: basedir, Up: Top
+File: wave.info, Node: doctor, Next: shellenv, Prev: basedir, Up: Top
+
+
+Look for things that are already broken but rarely noticed: a version
+directory without its executable, a dangling link, a package that was
+never linked, an orphaned dependency tree, an ELF file whose RPATH still
+names an absolute path. Nothing is changed; every finding comes with the
+command that fixes it. The exit status is the number of problems found.
+
+  --raw
+      Machine-readable: one 'severity<TAB>check<TAB>detail' line per
+      finding
+
+  --list-checks
+      List the check names and what each one looks at
+
+Examples:
+
+     wave doctor
+     wave doctor links
+     wave doctor --raw
+     wave doctor --list-checks
+
+
+File: wave.info, Node: shellenv, Next: version, Prev: doctor, Up: Top
 
 
 Print the shell code that prepends LinuxWave's directories to PATH. You
