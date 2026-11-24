@@ -74,6 +74,13 @@ COMMANDS_ZH = {
                 "eval 一次即可；它自己什么也不改。",
         "flags": {},
     },
+    "basedir": {
+        "desc": "打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。"
+                "家目录里的路径显示成 ~；--raw 只输出绝对路径。",
+        "flags": {
+            "--raw": "原样输出绝对路径，不带 🌊、不带颜色（给脚本用）",
+        },
+    },
     "mirror": {
         "desc": "显示每一类数据实际获取地址，包括仍在使用内置默认值的项。",
         "flags": {
@@ -191,7 +198,8 @@ OVERVIEW_DESC = {
         "linkquery": "查看不带版本号的链接指向哪个版本",
         "mirror": "显示各类数据实际从哪个地址取",
         "latest": "显示哪些软件包有新版本",
-        "shellenv": "打印把 LinuxWave 加进 PATH 的 shell 代码",
+        "basedir": "打印 LinuxWave 的安装根目录（config.json 里的 base_dir）",
+    "shellenv": "打印把 LinuxWave 加进 PATH 的 shell 代码",
         "manual": "显示完整手册（与 man、info 里的是同一份）",
     },
     "flags": {

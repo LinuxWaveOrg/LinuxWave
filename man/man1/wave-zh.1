@@ -50,6 +50,10 @@ LinuxWave 把每个软件包装进安装根目录下、带版本号的独立目�
 .B latest
 将本机已装的版本与索引里的最新版本比较，不下载。
 .TP
+.B basedir
+打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。家目录里的
+路径显示成 ~；--raw 只输出绝对路径。
+.TP
 .B shellenv
 打印一段把 LinuxWave 的目录加到 PATH 前面的 shell 代码。在 shell 配置里
 eval 一次即可；它自己什么也不改。
@@ -120,6 +124,7 @@ wave unlink jq
 wave linkquery jq
 wave mirror
 wave latest jq
+wave basedir
 eval "$(~/.local/linuxwave/lib/wave shellenv)"
 wave version
 wave manual

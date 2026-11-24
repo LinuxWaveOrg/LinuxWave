@@ -23,6 +23,8 @@ LinuxWave 把每个软件包装进安装根目录下、带版本号的独立目�
 * linkquery::	显示那个不带版本号的快捷方式指向哪个版本。
 * mirror::	显示每一类数据实际获取地址，包括仍在使用内置默认值的项。
 * latest::	将本机已装的版本与索引里的最新版本比较，不下载。
+* basedir::	打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。
+        家目录里的路径显示成 ~；--raw 只输出绝对路径。
 * shellenv::	打印一段把 LinuxWave 的目录加到 PATH 前面的 shell 代码。在
         shell 配置里 eval 一次即可；它自己什么也不改。
 * version::	打印当前安装的 LinuxWave 版本。
@@ -343,7 +345,7 @@ Examples:
      wave mirror --show-password
 
 
-File: wave-zh.info, Node: latest, Next: shellenv, Prev: mirror, Up: Top
+File: wave-zh.info, Node: latest, Next: basedir, Prev: mirror, Up: Top
 
 
 将本机已装的版本与索引里的最新版本比较，不下载。
@@ -370,7 +372,23 @@ Examples:
      wave latest -a --max-time=1min
 
 
-File: wave-zh.info, Node: shellenv, Next: version, Prev: latest, Up: Top
+File: wave-zh.info, Node: basedir, Next: shellenv, Prev: latest, Up: Top
+
+
+打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。家目录里的
+路径显示成 ~；--raw 只输出绝对路径。
+
+  --raw
+      原样输出绝对路径，不带 🌊、不带颜色（给脚本用）
+
+Examples:
+
+     wave basedir
+     wave basedir --raw
+     cd "$(wave basedir --raw)"
+
+
+File: wave-zh.info, Node: shellenv, Next: version, Prev: basedir, Up: Top
 
 
 打印一段把 LinuxWave 的目录加到 PATH 前面的 shell 代码。在 shell 配置里

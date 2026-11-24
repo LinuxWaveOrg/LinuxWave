@@ -104,6 +104,22 @@ def find_config_dir():
     return None
 
 
+def to_tilde(path):
+    # 家目录里的路径显示成 ~/…，其余原样返回。
+    # 边界必须按「整段」判断：只写 startswith(home) 会把 /home/you2 折成 ~2。
+    # 先按字面比一次；不一致再比 realpath —— /tmp/... 可能被解析成 /private/tmp/...
+    # 之类的形式，字面比对会漏掉。
+    home = os.path.expanduser("~").rstrip("/")
+    path = str(path)
+    for prefix, candidate in ((home, path),
+                             (os.path.realpath(home), os.path.realpath(path))):
+        if candidate == prefix:
+            return "~"
+        if candidate.startswith(prefix + "/"):
+            return "~" + candidate[len(prefix):]
+    return path
+
+
 def load_base_dir():
     # 按系统级 → 用户级的顺序读取 base_dir，读到就返回
     for directory in config_dir_candidates():
