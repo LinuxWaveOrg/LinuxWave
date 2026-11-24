@@ -38,11 +38,16 @@ import sys
 repo = pathlib.Path(sys.argv[1])
 
 # 早期伪代码、个人草稿、模板目录：不是给读者看的文档
+# release-* 是 build_release_assets.sh 的产物（平铺的副本），里面的相对链接
+# 本来就不成立，不该拿仓库内文档的标准去判它。
 SKIP_PARTS = {".Pseudocode", "notes", ".templates", ".git", "node_modules"}
+SKIP_GLOBS = ("release-*",)
 
 files = sorted(
     p for p in repo.rglob("*.md")
     if not (set(p.relative_to(repo).parts) & SKIP_PARTS)
+    and not any(p.relative_to(repo).parts[0].startswith(g.rstrip("*"))
+                for g in SKIP_GLOBS if g.endswith("*"))
 )
 
 problems = []
