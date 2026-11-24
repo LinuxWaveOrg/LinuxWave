@@ -280,6 +280,7 @@ htop          by Hisham Muhammad and the htop team
 ipsw          by blacktop
 jq            by Stephen Dolan, Nicolas Williams, William Langford, Owen Ou, itchyny, Mattias Wadman, Emanuele Torre, Asaf Meizner, avid Korczynski, et al.
 ldid          by Jay Freeman (saurik) / Procursus Team
+linuxwave     by Orhun Parmaksız
 lsd           by Abin Simon
 ncdu          by Yoran Heling
 palera1n      by palera1n Team
