@@ -306,6 +306,11 @@ jobs:
         run: |
           bash scripts/lock_test.sh
 
+      # wave reinstall：按已装的版本重来一遍（选版本、错误话术、--all、多包汇总）
+      - name: Run reinstall test
+        run: |
+          bash scripts/reinstall_test.sh
+
       # wave doctor：报得准（坏树逐条报出 + 给修复命令；好树全绿）、note 不计入
       # 退出码、--raw 可 grep、判断不了时不误报，以及「跑完一个字节都没改」
       - name: Run doctor test

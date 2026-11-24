@@ -37,7 +37,7 @@ INFO_DIR = REPO_DIR / "info"
 # 手册里的命令顺序。与 `wave -h` 的 Commands 一段保持一致，`manual` 排在最后
 # （它是看手册的命令，本身没什么可讲的）。COMMAND_HELP 里出现而这里没列的命令
 # 会让下面 assert 直接失败 —— 加命令忘了改这里，比生成一份缺章节的手册好。
-ORDER = ["install", "upgrade", "uninstall", "list", "search", "info",
+ORDER = ["install", "upgrade", "reinstall", "uninstall", "list", "search", "info",
          "selfupdate", "link", "unlink", "linkquery", "mirror", "latest",
          "basedir", "doctor", "shellenv", "version", "manual"]
 

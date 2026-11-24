@@ -179,6 +179,7 @@ Usage:
 Commands:
   install     Install a package (latest version)
   upgrade     Install a package at the latest version
+  reinstall   Reinstall the version(s) already installed
   uninstall   Uninstall a package
   list        List installed packages
   search      Search for a package in the index

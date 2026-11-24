@@ -50,11 +50,13 @@ import flags
 #
 # **这份名单是权威**，flags.COMMAND_FLAGS 里那份是给它做提示文案用的副本；
 # scripts/flags_test.sh 比对两边。加一条能静默的命令时，两处都要改。
-SILENT_COMMANDS = {"install", "upgrade", "uninstall", "link", "unlink", "selfupdate"}
+SILENT_COMMANDS = {"install", "reinstall", "upgrade", "uninstall", "link",
+                   "unlink", "selfupdate"}
 
 # `--raw` 由本模块接管的命令（`--raw` 在别的命令上含义完全不同，见下面
 # RAW_OWNED_ELSEWHERE）。它只对「有下载进度、输出要进日志」的命令有意义。
-RAW_COMMANDS = {"install", "upgrade"}
+# reinstall 也是「装一遍」：日志里要的是同样的无 emoji、井号刻度进度条。
+RAW_COMMANDS = {"install", "reinstall", "upgrade"}
 
 # 这几个命令自己也接受 --raw，但含义不是「机器可读的安装日志」：info 是「按存储
 # 原样打印」，mirror 是「只打值」。它们的解析在各自模块里，这里碰都不碰。

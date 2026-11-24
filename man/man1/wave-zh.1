@@ -19,6 +19,11 @@ LinuxWave 把每个软件包装进安装根目录下、带版本号的独立目�
 把软件包升级到最新版本；使用 --all 可升级所有已装包，旧版本会被保留。使
 用 -X, --remove-old-versions 可升级同时移除旧版。
 .TP
+.B reinstall
+把已经装着的那个版本重新下载、重新校验、重新落盘。适合同一个版本号下重出
+过产物（sha256 变了）、安装树被改坏，或者想把包按回已装的版本而不是升级
+的时候。依赖不会被重装，只按当前索引检查/补齐。
+.TP
 .B uninstall
 卸载某个包的一个或多个版本，或它的全部版本。多个包可用逗号或空格分隔，同
 一个包可以用 @ 连写多个版本（ffmpeg@6.1@6.0）。不带版本号的链接会自动退
@@ -122,6 +127,7 @@ HTTP/HTTPS 代理（例如 http://127.0.0.1:8080）
 .nf
 wave install jq
 wave upgrade jq
+wave reinstall jq
 wave uninstall jq
 wave list
 wave search json

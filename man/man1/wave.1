@@ -23,6 +23,12 @@ Upgrade a package to its latest version; with --all, every installed
 package. Old versions are kept — -X, --remove-old-versions removes them
 in the same run.
 .TP
+.B reinstall
+Download and install the same version again, replacing what is on disk.
+Useful when a package was rebuilt under the same version number, when
+files were damaged (it is the fix `wave doctor` suggests), or to pin a
+package back to the version already installed instead of upgrading.
+.TP
 .B uninstall
 Uninstall one package version, several of them, or every version.
 Packages can be listed with commas or spaces, and one package can name
@@ -141,6 +147,7 @@ inspection or a private-CA mirror (unset = system trust store)
 .nf
 wave install jq
 wave upgrade jq
+wave reinstall jq
 wave uninstall jq
 wave list
 wave search json

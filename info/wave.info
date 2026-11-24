@@ -17,6 +17,11 @@ nothing is compiled on the user's machine.
 * upgrade::	Upgrade a package to its latest version; with --all, every
         installed package. Old versions are kept — -X,
         --remove-old-versions removes them in the same run.
+* reinstall::	Download and install the same version again, replacing what
+        is on disk. Useful when a package was rebuilt under the same
+        version number, when files were damaged (it is the fix `wave
+        doctor` suggests), or to pin a package back to the version
+        already installed instead of upgrading.
 * uninstall::	Uninstall one package version, several of them, or every
         version. Packages can be listed with commas or spaces, and
         one package can name several versions (ffmpeg@6.1@6.0). The
@@ -173,7 +178,7 @@ Examples:
      wave install jq --max-time=1min
 
 
-File: wave.info, Node: upgrade, Next: uninstall, Prev: install, Up: Top
+File: wave.info, Node: upgrade, Next: reinstall, Prev: install, Up: Top
 
 
 Upgrade a package to its latest version; with --all, every installed
@@ -228,7 +233,61 @@ Examples:
      wave upgrade jq --remove-old-versions --max-time=2min
 
 
-File: wave.info, Node: uninstall, Next: list, Prev: upgrade, Up: Top
+File: wave.info, Node: reinstall, Next: uninstall, Prev: upgrade, Up: Top
+
+
+Download and install the same version again, replacing what is on disk.
+Useful when a package was rebuilt under the same version number, when
+files were damaged (it is the fix `wave doctor` suggests), or to pin a
+package back to the version already installed instead of upgrading.
+
+  -a, --all
+      Reinstall every installed package
+
+  -C, --continue
+      Resume an interrupted download
+
+  --proxy <string>
+      HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)
+
+  --skip-ssl
+      Skip SSL certificate verification (insecure)
+
+  --limit-rate <string>
+      Limit download speed (e.g. 200K, 1M, 5M; a bare number means
+      bytes)
+
+  --max-time <string>
+      Maximum total time for one request (40s, 1min, 1min20s, 2h; a bare
+      number means seconds)
+
+  --connect-timeout <string>
+      Maximum time for the handshake
+
+  --content-time <string>
+      Maximum time to receive data
+
+  --no-link
+      Do not touch the unversioned link (the old name --unlink still
+      works)
+
+  -F, --force
+      Install anyway when the running system is older than the package
+      declares
+
+  --raw
+      Plain output for logs and scripts: no emoji, no colours, ASCII
+      progress bar
+
+Examples:
+
+     wave reinstall jq
+     wave reinstall jq@1.8.2
+     wave reinstall jq, yq
+     wave reinstall --all
+
+
+File: wave.info, Node: uninstall, Next: list, Prev: reinstall, Up: Top
 
 
 Uninstall one package version, several of them, or every version.
