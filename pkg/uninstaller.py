@@ -235,6 +235,12 @@ def remove_one(pkg_name, version, installed):
         if link_path.is_symlink() or link_path.exists():
             link_path.unlink()
 
+    # 整树包的自带命令各有一条 links/{命令名}@{版本}（git-upload-pack 这种），
+    # 链接名不是包名，只能靠目标路径认领，见 linker.remove_versioned_links。
+    linker = _import_linker()
+    if linker is not None:
+        linker.remove_versioned_links(pkg_name, version)
+
     # 只有记录版本与删除版本一致时才移除记录，避免误删其他版本
     if record and record.get("version") == version:
         del installed[pkg_name]

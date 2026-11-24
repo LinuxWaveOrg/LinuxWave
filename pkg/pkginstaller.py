@@ -691,6 +691,56 @@ INSTALL_STEPS = [
 ]
 
 
+def confirm_min_client_version(record_text, pkg_name, pkg_version, force=False):
+    """版本记录声明了 min_client_version 且本机 LinuxWave 更旧时中止安装。
+
+    与 min_os 不是一回事：min_os 是「构建时声明的最低系统，可能偏保守」，问一句由
+    用户决定；min_client_version 说的是「这个包要求客户端具备某种安装形态」——
+    旧客户端不是「装得勉强」，而是**一定装坏**。
+
+    实际例子：`git` 声明 install: "tree"（整树包）。不认识这个字段的客户端会按单文件
+    装，只取一个 `bin/git`：`git --version` 还能跑，但 `--exec-path` / `runtime/` 全缺，
+    依赖系统装的那个 git 提供 helper。所以默认硬拦，只有 -F/--force 越过。
+
+    字段缺失时静默跳过；本机版本读不到（VERSION.json 不存在）时也跳过 —— 猜不出就
+    别拦人。
+    """
+    match = re.search(r'min_client_version:\s*"([^"]*)"', record_text)
+    if not match:
+        return True
+
+    required_text = match.group(1).strip()
+    if not required_text:
+        return True
+
+    running_text = get_version()
+    if running_text in ("", "unknown"):
+        steplog.detail("min_client_version declared but the client version is unreadable, ignored")
+        return True
+
+    from versioncompare import version as parse_version
+    try:
+        required = parse_version(required_text)
+        running = parse_version(running_text)
+    except Exception:
+        steplog.detail(f"min_client_version {required_text!r} is not a version, ignored")
+        return True
+
+    if running >= required:
+        return True
+
+    steplog.detail(f"min_client_version {required_text} > running {running_text}")
+
+    if force:
+        if not silent.is_silent():
+            print(f"{YELLOW}🌊 Warning: {pkg_name}@{pkg_version} needs LinuxWave "
+                  f"{required_text} or later, this is {running_text}; installing anyway "
+                  f"because of --force.{RESET}")
+        return True
+
+    return False
+
+
 def handle_install(input_string):
     steplog.plan(INSTALL_STEPS)
 
@@ -833,7 +883,32 @@ def handle_install(input_string):
         payload_filename_hint = payload["filename"]
 
     # 5.1 解析 deps 字段（写在版本文件里，可能多行），缺失视为无依赖
-    dep_refs = get_deps(parse_common_fields(resp.text))
+    record_fields = parse_common_fields(resp.text)
+    dep_refs = get_deps(record_fields)
+
+    # 5.2 安装形态：缺省 binary（只取一个可执行文件），tree 表示整树软件包。
+    #     两种形态都落在 bin/{名}@{版本}/，区别只在于整棵树是否保留。
+    install_fields = record_fields.get("install") or ["binary"]
+    install_mode = str(install_fields[0]).strip() or "binary"
+    if install_mode not in ("binary", "tree"):
+        steplog.fail(
+            f"the version record for {ParsePkgName}@{ParsePkgVersion} has an unknown "
+            f"install field",
+            extra=f"got {install_mode!r}",
+            hint=['expected "binary" (the default) or "tree"; this is an index data '
+                  'defect, please report it to the administrator'])
+
+    # 5.3 客户端门槛：tree 包在旧客户端上一定装坏（旧客户端不认识 install 字段，
+    #     会按单文件装，只取一个 bin/{name} —— --exec-path / runtime 全缺）。
+    #     与 min_os 不是一回事：后者是「可能不兼容」，这是「一定装坏」。
+    if not confirm_min_client_version(resp.text, ParsePkgName, ParsePkgVersion,
+                                      config["force"]):
+        steplog.fail(
+            f"not installing {ParsePkgName}@{ParsePkgVersion}: it needs a newer LinuxWave",
+            request=pkg_version_url,
+            hint=["nothing was downloaded or installed",
+                  "run `wave selfupdate` to get the current LinuxWave, then try again",
+                  "add --force to install it anyway (the result will most likely be broken)"])
 
     # 6. 地址策略已经由步骤 4.1 定完了：走镜像时地址是 domains 拼出来的，
     # 走 --install-from-source 时 resolve_payload 已经拒绝过非 https 的 url。
@@ -876,6 +951,7 @@ def handle_install(input_string):
         bin_name,
         "",
         original_filename,
+        install_mode,
     ])
     deps_string = "\n".join(dep_refs)
 

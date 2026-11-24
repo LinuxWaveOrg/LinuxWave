@@ -34,8 +34,10 @@ DEPS_STR="$2"
 
 # -------------------- 安装软件包本体 --------------------
 
-# 软件包只取一个可执行文件；依赖走 tree 模式（见 surfboard/depsinstaller.sh）
-lw_install_artifact "$INPUT_STR" "$DEPS_STR" "binary"
+# 安装形态由索引记录里的 install 字段决定（长字符串第 9 行），缺省 binary；
+# 第 4 个参数说明"这是软件包"，整树时才会写 .is_a_tree 并只链 bin/ 下的命令。
+# 依赖走 tree 模式，见 surfboard/depsinstaller.sh（那边不传 package）。
+lw_install_artifact "$INPUT_STR" "$DEPS_STR" "" "package"
 
 # -------------------- 写入 installed.json --------------------
 

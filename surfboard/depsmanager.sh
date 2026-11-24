@@ -48,6 +48,7 @@ LW_DEPENDER=""
 LW_RELATIVE_DIR=""
 LW_LINK_PATH=""
 LW_ORIGINAL_NAME=""
+LW_INSTALL_MODE="binary"
 
 # -------------------- 拆解长字符串 --------------------
 
@@ -72,6 +73,12 @@ lw_parse_info() {
     LW_BIN_NAME="${lines[5]}"
     LW_DEPENDER="${lines[6]}"
     LW_ORIGINAL_NAME="${lines[7]}"
+    # 第 9 行：索引里的 install 字段（binary / tree）。缺省 binary ——
+    # 4.5 之前的所有记录都没有这一行，行为必须与以前完全一致。
+    LW_INSTALL_MODE="${lines[8]:-binary}"
+    if [[ -z "$LW_INSTALL_MODE" ]]; then
+        LW_INSTALL_MODE="binary"
+    fi
 
     if [[ -z "$LW_NAME" || -z "$LW_VERSION" || -z "$LW_TARGET_DIR" || -z "$LW_BASE_DIR" || -z "$LW_BIN_NAME" ]]; then
         echo -e "${RED_BOLD}🌊 Error: Incomplete install info.${RESET}"
@@ -454,15 +461,61 @@ lw_assert_no_escaping_links() {
 
 # -------------------- 通用安装流程 --------------------
 
+lw_install_package_tree() {
+    # 整树软件包：整棵目录原样落到 bin/{名称}@{版本}/ 下，并留下 .is_a_tree 标记
+    # （给安装之后的逻辑看：链接目标怎么拼、卸载要摘哪些链接）。
+    # 索引里对应 install: "tree"。
+    #
+    # bin/ 下的**每个可执行文件**都要链出去，不只 bin_name：dtc 的 fdtget/fdtput、
+    # testdisk 的 photorec 都是同一个包里必须一起用的命令，只链一个等于把包装残。
+    # 主命令（bin_name）必须存在，否则直接失败 —— 声明成 tree 却拿不出主命令，
+    # 装上去也只是个谁也调不到的目录。
+    local tree_dir="$1"
+
+    # 先查再落地：装完才发现没主命令，就等于在安装目录里留一个谁也调不到的
+    # 半成品（卸载能清掉，但它会出现在 `wave list` 里）。
+    if [[ ! -f "$tree_dir/bin/$LW_BIN_NAME" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: This is a tree package but it has no bin/${LW_BIN_NAME}.${RESET}" >&2
+        echo -e "${YELLOW}🌊 A record declared install: \"tree\" must ship bin/${LW_BIN_NAME}.${RESET}" >&2
+        exit 1
+    fi
+
+    lw_install_tree "$tree_dir" "$LW_TARGET_DIR" "$LW_BIN_NAME"
+    : > "$LW_TARGET_DIR/.is_a_tree"
+
+    LW_LINK_PATH="$(lw_create_link "$LW_BASE_DIR" "$LW_RELATIVE_DIR/bin" "$LW_BIN_NAME" "$LW_BIN_NAME" "$LW_VERSION")"
+
+    local entry name
+    for entry in "$LW_TARGET_DIR/bin"/*; do
+        [[ -f "$entry" && -x "$entry" ]] || continue
+        name="$(basename "$entry")"
+        [[ "$name" == "$LW_BIN_NAME" ]] && continue
+        lw_create_link "$LW_BASE_DIR" "$LW_RELATIVE_DIR/bin" "$name" "$name" "$LW_VERSION" >/dev/null
+    done
+}
+
 lw_install_artifact() {
     # 软件包与依赖共用的安装流程，区别只在安装形态：
-    #   binary：只取一个可执行文件（软件包）
-    #   tree  ：保留整棵解压目录，并把 bin/ 下的可执行文件软链到 links/（依赖）
+    #   binary：只取一个可执行文件
+    #   tree  ：保留整棵解压目录
+    #            - 软件包（kind=package）：整树落在 bin/{名}@{版本}/，bin/ 下每个
+    #              可执行文件各链一条，并写 .is_a_tree
+    #            - 依赖（kind=dependency）：整树落在 deps/...，bin/ 下每个文件链到 links/
     local info_str="$1"
     local deps_str="$2"
-    local install_mode="${3:-binary}"
+    local install_mode="${3:-}"
+    local artifact_kind="${4:-dependency}"
 
     lw_parse_info "$info_str"
+    # 调用方没指定形态时，以索引记录里的 install 字段为准（缺省 binary）
+    if [[ -z "$install_mode" ]]; then
+        install_mode="$LW_INSTALL_MODE"
+    fi
+    if [[ "$install_mode" != "binary" && "$install_mode" != "tree" ]]; then
+        echo -e "${RED_BOLD}🌊 Error: Unknown install mode \"${install_mode}\".${RESET}" >&2
+        echo -e "${YELLOW}🌊 Expected \"binary\" or \"tree\" in the version record.${RESET}" >&2
+        exit 1
+    fi
     lw_assert_inside "$LW_TARGET_DIR"
 
     local unzip_script="$LW_BASE_DIR/pkg/pkgunzip.sh"
@@ -485,8 +538,12 @@ lw_install_artifact() {
         local tree_dir
         tree_dir="$(lw_extract_all "$original_file" "$extract_dir" "$unzip_script")"
         lw_assert_no_escaping_links "$tree_dir" "$extract_dir"
-        lw_install_tree "$tree_dir" "$LW_TARGET_DIR" "$LW_BIN_NAME"
-        lw_link_tree_binaries "$LW_BASE_DIR" "$LW_RELATIVE_DIR" "$LW_VERSION" "$LW_TARGET_DIR"
+        if [[ "$artifact_kind" == "package" ]]; then
+            lw_install_package_tree "$tree_dir"
+        else
+            lw_install_tree "$tree_dir" "$LW_TARGET_DIR" "$LW_BIN_NAME"
+            lw_link_tree_binaries "$LW_BASE_DIR" "$LW_RELATIVE_DIR" "$LW_VERSION" "$LW_TARGET_DIR"
+        fi
     else
         local bin_file
         bin_file="$(lw_extract_binary "$original_file" "$extract_dir" "$unzip_script" "$LW_BIN_NAME")"
