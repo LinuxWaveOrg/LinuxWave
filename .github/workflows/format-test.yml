@@ -301,6 +301,11 @@ jobs:
         run: |
           bash scripts/downloads_test.sh
 
+      # 安装树互斥锁：竞争时立即失败并说明是谁在跑、异常结束由内核释放、可重入
+      - name: Run install lock test
+        run: |
+          bash scripts/lock_test.sh
+
       # -s 什么都不输出、-sS 只留错误且不带 🌊、只读命令上给 -s 要报错
       - name: Run quiet-mode test
         run: |

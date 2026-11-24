@@ -110,7 +110,8 @@ BASE_DIR/bin/{可执行文件名}@{版本}/            软件包：二进制 + _
 BASE_DIR/deps/{引用名}/{引用名}@{版本}/        依赖：整棵解压目录 + _DEPS + .depped_* 标记
 BASE_DIR/links/{名字}@{版本}                   软链接，此目录已加入 PATH
 BASE_DIR/pkg/installed.json                   已安装软件包记录
-BASE_DIR/downloads/tmp/                       下载临时目录（*.partial 表示未下载完）
+BASE_DIR/downloads/tmp/                       下载临时目录（*.partial 表示未下载完；7 天以上的由 install/uninstall 顺手清掉）
+BASE_DIR/var/lock/wave.lock                   安装树互斥锁（flock；进程结束由内核释放，别手删）
 BASE_DIR/{cli,config,lib,net,pkg,surfboard}/  程序文件自身（清单见 scripts/components.txt）
 BASE_DIR/python/{版本}/                       自带解释器（3.1.0 起；current 符号链接指向在用版本）
 BASE_DIR/venv/                                私有 Python 环境（requests / packaging / rich）

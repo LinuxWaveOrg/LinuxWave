@@ -845,10 +845,18 @@ def _install_single(input_string):
     steplog.reset()
     steplog.plan(INSTALL_STEPS)
 
-    # 顺手打扫 downloads/tmp：另一个 wave 正在写的 .partial 不存在（LinuxWave 还没有
-    # 安装树互斥锁），而放太久的那些既不在 `wave list` 里、也不在任何卸载路径上。
-    from downloads import sweep_stale_partials
-    sweep_stale_partials()
+    # 装包会写 bin/、links/、.depped_* 与 downloads/tmp，整段都要独占安装树
+    # （见 lib/lock.py）。可重入，所以 upgrade --all / 多包装到同一个包时不会自锁。
+    from lock import tree_lock
+    with tree_lock("install"):
+        # 拿到锁才敢打扫：downloads/tmp 里可能有另一个 wave 正在写的 .partial。
+        # 放在下载之前，顺手腾出的空间正好给这次用。
+        from downloads import sweep_stale_partials
+        sweep_stale_partials()
+        return _install_single_locked(input_string)
+
+
+def _install_single_locked(input_string):
 
     # 参数解析
     config = handle_download_args(input_string)

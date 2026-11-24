@@ -412,8 +412,12 @@ def handle_selfupdate(input_string=""):
     else:
         silent.say(f"{YELLOW}🌊 No installed version found, updating to {latest}...{RESET}")
 
+    # 自更新会替换安装树里的程序文件：与装包/卸载互斥，否则两边同时写 pkg/ 与 lib/。
+    # 只护 run_script 这一段：前面取探针、问协议都是只读的，不必占着锁。
+    from lock import tree_lock
     try:
-        result = run_script(environment, UPDATE_TIMEOUT)
+        with tree_lock("selfupdate"):
+            result = run_script(environment, UPDATE_TIMEOUT)
     except subprocess.TimeoutExpired:
         print(f"{RED_BOLD}🌊 Error: The update timed out.{RESET}")
         sys.exit(1)

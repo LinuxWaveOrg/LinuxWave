@@ -302,17 +302,19 @@ def uninstall_versions(pkg_name, versions, keep_link=False):
             print(f"{RED_BOLD}🌊 Drop --unlink (the link then falls back to the next installed version), or run 'wave unlink {pkg_name}' first.{RESET}")
             sys.exit(1)
 
-    # 卸载不下载，但它是用户清空间的时刻：顺手把放太久的 .partial 收掉，
-    # 免得「我明明卸了那么多包，磁盘怎么还是满的」。
-    from downloads import sweep_stale_partials
-    sweep_stale_partials()
+    # 卸载改的是同一棵树（bin/、links/、.depped_*、installed.json），与装包互斥。
+    # 顺带在锁内打扫 downloads/tmp：这里也是用户清空间的时刻。
+    from lock import tree_lock
+    with tree_lock(f"uninstall {pkg_name}"):
+        from downloads import sweep_stale_partials
+        sweep_stale_partials()
 
-    installed = load_installed()
-    changed = False
-    for version in versions:
-        changed = remove_one(pkg_name, version, installed) or changed
-    if changed:
-        save_installed(installed)
+        installed = load_installed()
+        changed = False
+        for version in versions:
+            changed = remove_one(pkg_name, version, installed) or changed
+        if changed:
+            save_installed(installed)
     if keep_link:
         silent.say(f"🌊 Left the unversioned link for {pkg_name} untouched")
     else:

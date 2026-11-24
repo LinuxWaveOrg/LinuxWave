@@ -1598,6 +1598,9 @@ run_cmd mkdir -p "$MAN_DIR/man1"
 run_cmd mkdir -p "$INFO_DIR"
 run_cmd mkdir -p "$DEPS_DIR"
 run_cmd mkdir -p "$DOWNLOAD_DIR"
+# 安装树互斥锁的位置（见 lib/lock.py）：按注释约定放 var/lock，跟 Downloads/python/venv
+# 一样属于运行期目录，不属于 update_commands.sh 的清单。
+run_cmd mkdir -p "$BASE_DIR/var/lock"
 run_cmd mkdir -p "$CONFIG_DIR"
 run_cmd chmod 755 "$CONFIG_DIR"
 
