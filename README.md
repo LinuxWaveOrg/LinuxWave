@@ -267,31 +267,100 @@ when that would leave the link pointing at the version you are removing.
 
 ```
 
-bat           by David Peter
-btop          by Aristocratos
-columbula     by Sha0huaZhang
-dust          by bootandy
-eza           by Christina Sørensen and the eza community
-fd            by David Peter
-ffmpeg        by FFmpeg Team
-fzf           by Junegunn Choi
-gwget         by GNU Project
-htop          by Hisham Muhammad and the htop team
-ipsw          by blacktop
-jq            by Stephen Dolan, Nicolas Williams, William Langford, Owen Ou, itchyny, Mattias Wadman, Emanuele Torre, Asaf Meizner, avid Korczynski, et al.
-ldid          by Jay Freeman (saurik) / Procursus Team
-linuxwave     by Orhun Parmaksız
-lsd           by Abin Simon
-ncdu          by Yoran Heling
-palera1n      by palera1n Team
-pandoc        by John MacFarlane
-rg            by Andrew Gallant
-robinsing     by Sha0huaZhang
-tmux          by Nicholas Marriott and contributors
-tree          by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro
-trollrestore  by JJTech (@JJTech0130)
-yq            by Mike Farah
-zoxide        by Ajeet D'Souza
+7zz              by Igor Pavlov
+act              by nektos
+actionlint       by rhysd
+age              by FiloSottile
+atuin            by atuinsh
+bat              by David Peter
+btm              by Clement Tsang
+btop             by Aristocratos
+chezmoi          by twpayne
+circleci         by CircleCI
+cloudflared      by cloudflare
+columbula        by Sha0huaZhang
+cosign           by Sigstore
+delta            by dandavison
+difft            by Wilfred Hughes
+direnv           by direnv
+docker-compose   by Docker
+doggo            by mr-karan
+duckdb           by duckdb
+dust             by bootandy
+eza              by Christina Sørensen and the eza community
+fd               by David Peter
+ffmpeg           by FFmpeg Team
+flyctl           by superfly
+fx               by antonmedv
+fzf              by Junegunn Choi
+gh               by cli
+git-lfs          by git-lfs
+gitleaks         by gitleaks
+glow             by charmbracelet
+golangci-lint    by golangci
+gping            by orf
+grpcurl          by fullstorydev
+gwget            by GNU Project
+hadolint         by Hadolint
+htop             by Hisham Muhammad and the htop team
+hyperfine        by sharkdp
+ipsw             by blacktop
+jj               by Jujutsu contributors
+jless            by Paul Julius Martinez
+jq               by Stephen Dolan, Nicolas Williams, William Langford, Owen Ou, itchyny, Mattias Wadman, Emanuele Torre, Asaf Meizner, avid Korczynski, et al.
+just             by Casey Rodarmor
+k9s              by derailed
+kind             by Kubernetes SIG Testing
+kubecolor        by kubecolor
+kubeconform      by yannh
+kubectx          by ahmetb
+kustomize        by Kubernetes SIG CLI
+lazydocker       by Jesse Duffield
+lazygit          by jesseduffield
+ldid             by Jay Freeman (saurik) / Procursus Team
+lefthook         by Evil Martians
+linuxwave        by Orhun Parmaksız
+lsd              by Abin Simon
+mise             by jdx
+mkcert           by FiloSottile
+ncdu             by Yoran Heling
+nvim             by neovim
+ollama           by ollama
+palera1n         by palera1n Team
+pandoc           by John MacFarlane
+rclone           by rclone
+restic           by restic
+rg               by Andrew Gallant
+robinsing        by Sha0huaZhang
+ruff             by astral-sh
+scc              by Ben Boyter
+shellcheck       by koalaman
+shfmt            by mvdan
+sk               by skim-rs
+sops             by getsops
+spf              by yorukot
+starship         by starship
+stern            by stern
+syncthing        by Syncthing contributors
+taskwarrior-tui  by kdheepak
+tldr             by tealdeer-rs
+tmux             by Nicholas Marriott and contributors
+tofu             by opentofu
+tree             by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro
+trivy            by aquasecurity
+trollrestore     by JJTech (@JJTech0130)
+ty               by Astral
+typst            by typst
+uv               by astral-sh
+vhs              by charmbracelet
+watchexec        by Watchexec contributors
+websocat         by vi
+xh               by ducaale
+yazi             by sxyazi
+yq               by Mike Farah
+yt-dlp           by yt-dlp
+zellij           by zellij-org
+zoxide           by Ajeet D'Souza
 ```
 ## 🌊 License
 
