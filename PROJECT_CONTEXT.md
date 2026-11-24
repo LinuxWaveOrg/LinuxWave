@@ -239,6 +239,24 @@ linuxwavedata/<版本>/update_commands.sh    那一版具体怎么装（发版�
 记下的却是旧标识，下次再问一遍。三处口径必须一致：两份 README 的「许可证」一节、
 `NOTICE`、本节。
 
+### `basedir --set`（4.6，待实现）的三个前提 —— 已核实
+
+搬家（`wave basedir --set <新路径>`）不是「复制一棵树再改配置」那么简单，Linux 这边
+有三处必须先想清楚，**已经实测过**：
+
+| 部件 | 会不会因搬家失效 | 依据 |
+| --- | --- | --- |
+| `lib/wave` 启动器 | **不会** | 它从 `$0` 反推 `self_dir → lib_dir → root_dir`，venv / 自带解释器 / `wave.py` 全按 `root_dir` 拼，整棵树搬走照样跑 |
+| `venv/` | **可能** | `pyvenv.cfg` 的 `home` / `executable` 指向解释器（搬家无碍），但**从树内 `python/current` 建出来的 venv 会把旧安装根写进 `home`**；`venv/bin/` 里 console script 的 shebang 同样是绝对路径。做法：搬完用「已存在就复用、缺了才建」的幂等逻辑重建 venv，而不是去改 `pyvenv.cfg` |
+| rc 文件里的 `eval "$(<安装根>/lib/wave shellenv)"` | **会** | 那一行写死了安装根。只搬树、不替用户改 shell 配置（与 MacWave 一致），但必须把新行原样打印出来 |
+
+实现顺序：① `cli/confirm.py` + `lib/basedir.py` 的 `--set` / `-n, --dry-run` 骨架
+（`cp -a` 搬树、改写 `config.json`、重建 venv、打印 rc 新行；**不自动删旧树**，
+留一份可回退）→ ② `scripts/basedir_set_test.sh`（pty 驱动三段确认：红字 `Yes`、
+完整旧路径、逐字句子；输错不继续、dry-run 不落地、搬完 venv 仍可用、配置指向新路径、
+旧树还在）→ ③ `doctor` 的 `base-dir` 增加「配置指向的目录与 `VERSION.json` 所在树
+不一致」这种半搬状态。
+
 ### 分支与合并：成块的工作走独立分支，合并时保留历史
 
 一次性改动直接落 `main` 没问题；**成块的工作（新命令、新布局、跨多个文件的移植）必须开独立分支**，
