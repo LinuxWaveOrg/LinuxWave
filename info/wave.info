@@ -10,13 +10,18 @@ nothing is compiled on the user's machine.
 
 * Menu:
 
-* install::	Install a package, or one specific version of it.
+* install::	Install a package, or one specific version of it. Several
+        packages can be given at once, separated by commas or
+        spaces; each one is installed on its own, so a failure does
+        not stop the rest.
 * upgrade::	Upgrade a package to its latest version; with --all, every
         installed package. Old versions are kept — -X,
         --remove-old-versions removes them in the same run.
-* uninstall::	Uninstall a package version. The unversioned link falls back
-        to the highest remaining version, and goes away with the
-        last one.
+* uninstall::	Uninstall one package version, several of them, or every
+        version. Packages can be listed with commas or spaces, and
+        one package can name several versions (ffmpeg@6.1@6.0). The
+        unversioned link falls back to the highest remaining
+        version, and goes away with the last one.
 * list::	List the packages you have installed, with their versions.
 * search::	Search the online package index.
 * info::	Show author, description, homepage and the installed /
@@ -108,7 +113,9 @@ File: wave.info, Node: GLOBAL FLAGS, Up: Top
 File: wave.info, Node: install, Next: upgrade, Up: Top
 
 
-Install a package, or one specific version of it.
+Install a package, or one specific version of it. Several packages can
+be given at once, separated by commas or spaces; each one is installed
+on its own, so a failure does not stop the rest.
 
   -C, --continue
       Resume an interrupted download
@@ -152,6 +159,8 @@ Examples:
 
      wave install jq
      wave install ffmpeg@6.1
+     wave install jq, yq
+     wave install jq yq fx@40.0.2
      wave install jq --limit-rate 1M
      wave install jq --max-time=1min
 
@@ -214,17 +223,26 @@ Examples:
 File: wave.info, Node: uninstall, Next: list, Prev: upgrade, Up: Top
 
 
-Uninstall a package version. The unversioned link falls back to the
-highest remaining version, and goes away with the last one.
+Uninstall one package version, several of them, or every version.
+Packages can be listed with commas or spaces, and one package can name
+several versions (ffmpeg@6.1@6.0). The unversioned link falls back to
+the highest remaining version, and goes away with the last one.
 
   --no-link
       Do not touch the unversioned link (the old name --unlink still
       works)
 
+  -a, --all
+      Uninstall every installed version of the package (the same as
+      @all)
+
 Examples:
 
      wave uninstall jq
      wave uninstall ffmpeg@6.1
+     wave uninstall ffmpeg@6.1@6.0
+     wave uninstall jq, yq
+     wave uninstall ffmpeg -a
 
 
 File: wave.info, Node: list, Next: search, Prev: uninstall, Up: Top

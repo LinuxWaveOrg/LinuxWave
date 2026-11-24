@@ -64,8 +64,8 @@ COMMANDS = (
         takes_input=True,
         listed=True,
         summary="Install a package (latest version)",
-        usage="wave install <package>[@<version>] [flags]",
-        desc="Install a package, or one specific version of it.",
+        usage="wave install <package>[@<version>], ... [flags]",
+        desc="Install a package, or one specific version of it. Several packages can be given at once, separated by commas or spaces; each one is installed on its own, so a failure does not stop the rest.",
         flags=[
             ("-C, --continue", "Resume an interrupted download"),
             ("--proxy <string>", "HTTP/HTTPS proxy (e.g. http://127.0.0.1:8080)"),
@@ -83,6 +83,8 @@ COMMANDS = (
         examples=[
             "wave install jq",
             "wave install ffmpeg@6.1",
+            "wave install jq, yq",
+            "wave install jq yq fx@40.0.2",
             "wave install jq --limit-rate 1M",
             "wave install jq --max-time=1min",
         ],
@@ -124,15 +126,20 @@ COMMANDS = (
         takes_input=True,
         listed=True,
         summary="Uninstall a package",
-        usage="wave uninstall <package>[@<version>] [flags]",
-        desc="Uninstall a package version. The unversioned link falls back to the highest remaining version, and goes away with the last one.",
+        usage="wave uninstall <package>[@<version>|@all], ... [flags]",
+        desc="Uninstall one package version, several of them, or every version. Packages can be listed with commas or spaces, and one package can name several versions (ffmpeg@6.1@6.0). The unversioned link falls back to the highest remaining version, and goes away with the last one.",
         flags=[
             ("--no-link", "Do not touch the unversioned link (the old name --unlink "
                           "still works)"),
+            ("-a, --all", "Uninstall every installed version of the package "
+                          "(the same as @all)"),
         ],
         examples=[
             "wave uninstall jq",
             "wave uninstall ffmpeg@6.1",
+            "wave uninstall ffmpeg@6.1@6.0",
+            "wave uninstall jq, yq",
+            "wave uninstall ffmpeg -a",
         ],
     ),
     Command(

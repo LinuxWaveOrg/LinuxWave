@@ -36,7 +36,8 @@ GLOBAL_FLAGS_ZH = {
 # 与 help.COMMAND_HELP 一一对应：命令 → {desc, flags:{旗标写法: 说明}}
 COMMANDS_ZH = {
     "install": {
-        "desc": "安装一个软件包，或它的某个指定版本。",
+        "desc": "安装一个软件包，或它的某个指定版本。一次可以给多个包（逗号或空格分隔），"
+                "每个包单独安装，某一个失败不影响其余。",
         "flags": {
             "-C, --continue": "断点续传",
             "--proxy <string>": "HTTP/HTTPS 代理（例如 http://127.0.0.1:8080）",
@@ -105,10 +106,12 @@ COMMANDS_ZH = {
         },
     },
     "uninstall": {
-        "desc": "卸载某个包的一个版本。不带版本号的链接会自动退到剩下的最高版本，"
-                "并在最后一个版本被卸载时一起消失。",
+        "desc": "卸载某个包的一个或多个版本，或它的全部版本。多个包可用逗号或空格分隔，"
+                "同一个包可以用 @ 连写多个版本（ffmpeg@6.1@6.0）。"
+                "不带版本号的链接会自动退到剩下的最高版本，并在最后一个版本被卸载时一起消失。",
         "flags": {
             "--no-link": "不动此软件包不带版本号的软链接（旧写法 --unlink 仍然可用）",
+            "-a, --all": "卸载这个包的全部版本（等价于 @all）",
         },
     },
     "list": {
@@ -209,9 +212,12 @@ OVERVIEW_DESC = {
     },
     "special": {
         "wave install <pkgname>@<version>": "下载某个指定版本的软件包",
+        "wave install jq, yq": "一次装多个包（逗号或空格分隔）",
+        "wave uninstall jq@all": "卸载 jq 的全部版本（等价于 -a）",
         "--no-link": "不动此软件包不带版本号的软链接（旧写法 --unlink 仍然可用）",
         "-X, --remove-old-versions": "升级同时移除旧版",
-        "--all, -a": "对所有已装包生效（upgrade / link / unlink / linkquery）",
+        "--all, -a": "对所有已装包生效（upgrade / link / unlink / linkquery）；"
+                     "在 uninstall 上是「这个包的全部版本」",
     },
     "links": {
         "wave link <name>": "把软件包链接到它已装的最高版本",

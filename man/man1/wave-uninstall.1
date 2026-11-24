@@ -1,21 +1,29 @@
 .TH WAVE-UNINSTALL 1 "" "LinuxWave" "LinuxWave Manual"
 
 .SH NAME
-wave-uninstall \- Uninstall a package version. The unversioned link falls back to the highest remaining version, and goes away with the last one.
+wave-uninstall \- Uninstall one package version, several of them, or every version. Packages can be listed with commas or spaces, and one package can name several versions (ffmpeg@6.1@6.0). The unversioned link falls back to the highest remaining version, and goes away with the last one.
 .SH SYNOPSIS
-.B wave uninstall <package>[@<version>] [flags]
+.B wave uninstall <package>[@<version>|@all], ... [flags]
 .SH DESCRIPTION
-Uninstall a package version. The unversioned link falls back to the
-highest remaining version, and goes away with the last one.
+Uninstall one package version, several of them, or every version.
+Packages can be listed with commas or spaces, and one package can name
+several versions (ffmpeg@6.1@6.0). The unversioned link falls back to
+the highest remaining version, and goes away with the last one.
 .SH OPTIONS
 .TP
 .B \-\-no\-link
 Do not touch the unversioned link (the old name --unlink still works)
+.TP
+.B \-a, \-\-all
+Uninstall every installed version of the package (the same as @all)
 
 .SH EXAMPLES
 .nf
 wave uninstall jq
 wave uninstall ffmpeg@6.1
+wave uninstall ffmpeg@6.1@6.0
+wave uninstall jq, yq
+wave uninstall ffmpeg -a
 .fi
 .SH SEE ALSO
 wave(1)

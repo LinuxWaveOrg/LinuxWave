@@ -227,6 +227,47 @@ def apply_proxy(options):
     return options.proxy
 
 
+# -------------------- 位置参数拆分 --------------------
+
+# 全角逗号长得像分隔符，实际不是 —— 中文输入法下最容易踩这个坑
+FULLWIDTH_COMMAS = (
+    "\uff0c",   # U+FF0C FULLWIDTH COMMA
+    "\u3001",   # U+3001 IDEOGRAPHIC COMMA（日文的顿号）
+    "\ufe50",   # U+FE50 SMALL COMMA
+    "\uff64",   # U+FF64 HALFWIDTH IDEOGRAPHIC COMMA
+)
+
+
+def reject_fullwidth_comma(input_string):
+    """输入里出现全角逗号就停下，并把正确的写法直接给出来。
+
+    位置在解析包名之前：让它变成一个「一眼能改」的错误，而不是一个找不到包的谜。
+    """
+    for mark in FULLWIDTH_COMMAS:
+        if mark not in input_string:
+            continue
+        fixed = input_string.replace(mark, ",")
+        print(f"{RED_BOLD}🌊 Error: that is a full-width comma '{mark}' "
+              f"(U+{ord(mark):04X}), not a separator.{RESET}")
+        print(f"{RED_BOLD}🌊 Use the ASCII comma ',' (U+002C) between packages.{RESET}")
+        print(f"{RED_BOLD}🌊 Try: {fixed}{RESET}")
+        sys.exit(1)
+
+
+def split_operands(tokens):
+    """把位置参数按逗号切成条目：去过空、去重，保留输入顺序。
+
+    `a, b` 与 `a,b` 在 shell 里是不同的 argv 形态（两个词 vs 一个词），两种都认。
+    """
+    out = []
+    for token in tokens:
+        for part in token.split(","):
+            part = part.strip()
+            if part and part not in out:
+                out.append(part)
+    return out
+
+
 # -------------------- 旗标白名单校验 --------------------
 #
 # 「这条命令认哪些旗标」的唯一判定处。各 handler 不再各写一遍词法循环与报错文案 ——

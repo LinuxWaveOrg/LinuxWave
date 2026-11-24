@@ -68,7 +68,8 @@ silent = {"-s", "--silent", "-S", "--show-error"}
 # 各自由自己的模块解析。同一个名字出现在两组里不是笔误，是同一个旗标在不同命令
 # 下做不同的事 —— 就像 -a 在 upgrade 与 link 上都是「所有」。
 install = {"-F", "--force", "--raw", "--ver"} | set(NO_LINK) | silent
-uninstall = set(NO_LINK) | silent
+# -a/--all：「这个包的全部版本」，与 upgrade/link 上的 -a 同义
+uninstall = set(NO_LINK) | {"-a", "--all"} | silent
 upgrade = {"-X", "--remove-old-version", "--remove-old-versions", "--rov",
            "-a", "--all", "-F", "--force", "--raw"} | silent
 link = {"-a", "--all"} | silent

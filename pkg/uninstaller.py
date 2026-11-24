@@ -302,6 +302,11 @@ def uninstall_versions(pkg_name, versions, keep_link=False):
             print(f"{RED_BOLD}🌊 Drop --unlink (the link then falls back to the next installed version), or run 'wave unlink {pkg_name}' first.{RESET}")
             sys.exit(1)
 
+    # 卸载不下载，但它是用户清空间的时刻：顺手把放太久的 .partial 收掉，
+    # 免得「我明明卸了那么多包，磁盘怎么还是满的」。
+    from downloads import sweep_stale_partials
+    sweep_stale_partials()
+
     installed = load_installed()
     changed = False
     for version in versions:
@@ -350,29 +355,18 @@ def select_versions(pkg_name, versions):
 
 # -------------------- 命令入口 --------------------
 
-def handle_uninstall(input_string):
-    parts = input_string.split()
-
-    # 旗标白名单交给 cli/common.py：`--no-link`（旧名 --unlink）表示「不动这个包
-    # 不带版本号的链接」，其余旗标一律按「这条命令不认」报错 —— 以前是打一行
-    # 警告然后忽略，用户以为生效了，链接照样被改。
-    found = common.check_allowed(input_string, "uninstall")
-    operands = [word for word in parts[2:] if not word.startswith("-")]
-    keep_link = any(flag in common.flags.NO_LINK for flag in found)
-
-    if not operands:
-        print(f"{RED_BOLD}🌊 Error: Missing package name.{RESET}")
-        sys.exit(1)
-
-    raw_pkg = operands[0]
-
+def _uninstall_spec(spec, keep_link, all_versions):
+    """卸掉一个条目：`名字`、`名字@版本`、`名字@版本@版本`，或 `名字@all`。"""
     # 1. 不带 @：只有一个版本就直接卸，多个版本才让用户选
-    if '@' not in raw_pkg:
-        pkg_name = raw_pkg
+    if '@' not in spec:
+        pkg_name = spec
         versions = find_installed_versions(pkg_name)
         if not versions:
             print(f"{RED_BOLD}🌊 Error: Package '{pkg_name}' is not installed.{RESET}")
             sys.exit(1)
+        if all_versions:
+            uninstall_versions(pkg_name, versions, keep_link)
+            return
         if len(versions) == 1:
             uninstall_versions(pkg_name, versions, keep_link)
             return
@@ -380,15 +374,17 @@ def handle_uninstall(input_string):
         return
 
     # 2. 带 @：拆分包名与版本号
-    pkg_name, *raw_versions = raw_pkg.split('@')
-    raw_versions = [v for v in raw_versions if v]
+    pkg_name, *raw_versions = spec.split('@')
+    raw_versions = [version for version in raw_versions if version]
 
     if not raw_versions:
         print(f"{RED_BOLD}🌊 Error: Missing version number.{RESET}")
+        print(f"{RED_BOLD}🌊 Try: wave uninstall {pkg_name}@<version>, "
+              f"or wave uninstall {pkg_name} -a to remove every version.{RESET}")
         sys.exit(1)
 
-    # 2.1 通配符 *：卸载所有版本
-    if raw_versions == ['*']:
+    # 2.1 `@all` 是 4.5 起的主写法；`@*` 是它以前的名字，继续认
+    if all(version in ("all", "*") for version in raw_versions):
         versions = find_installed_versions(pkg_name)
         if not versions:
             print(f"{RED_BOLD}🌊 Error: Package '{pkg_name}' is not installed.{RESET}")
@@ -398,8 +394,8 @@ def handle_uninstall(input_string):
 
     # 2.2 指定一个或多个版本：批量删除
     installed_versions = find_installed_versions(pkg_name)
-    targets = [v for v in raw_versions if v in installed_versions]
-    missing = [v for v in raw_versions if v not in installed_versions]
+    targets = [version for version in raw_versions if version in installed_versions]
+    missing = [version for version in raw_versions if version not in installed_versions]
 
     if not targets:
         print(f"{RED_BOLD}🌊 Error: Package '{pkg_name}' is not installed.{RESET}")
@@ -409,6 +405,75 @@ def handle_uninstall(input_string):
         silent.say(f"{YELLOW}🌊 Warning: {pkg_name}@{version} is not installed, skipping.{RESET}")
 
     uninstall_versions(pkg_name, targets, keep_link)
+
+
+def handle_uninstall(input_string):
+    parts = input_string.split()
+
+    # 旗标白名单交给 cli/common.py：`--no-link`（旧名 --unlink）表示「不动这个包
+    # 不带版本号的链接」，`-a/--all` 表示「这个包的全部版本」，
+    # 其余旗标一律按「这条命令不认」报错。
+    found = common.check_allowed(input_string, "uninstall")
+    operands = [word for word in parts[2:] if not word.startswith("-")]
+    keep_link = any(flag in common.flags.NO_LINK for flag in found)
+    all_versions = any(flag in ("-a", "--all") for flag in found)
+
+    # 全角逗号在解析包名之前拦下：放过去只会得到「找不到包 jq，yq」这种
+    # 看不出毛病的报错。
+    common.reject_fullwidth_comma(input_string)
+    specs = common.split_operands(operands)
+
+    if not specs:
+        print(f"{RED_BOLD}🌊 Error: Missing package name.{RESET}")
+        print(f"{RED_BOLD}🌊 Try: wave uninstall <package>, or "
+              f"wave uninstall <package>, <package>.{RESET}")
+        sys.exit(1)
+
+    # -a 与显式版本说不清谁说了算，直接拒绝，别猜。
+    if all_versions:
+        conflicting = [spec for spec in specs if "@" in spec]
+        if conflicting:
+            print(f"{RED_BOLD}🌊 Error: -a/--all cannot be combined with a version "
+                  f"({', '.join(conflicting)}).{RESET}")
+            print(f"{RED_BOLD}🌊 Use wave uninstall <package> -a for every version, "
+                  f"or name the versions one by one.{RESET}")
+            sys.exit(1)
+
+    total = len(specs)
+    removed = []
+    failed = []
+
+    for index, spec in enumerate(specs, 1):
+        if total > 1:
+            silent.say(f"🌊 [{index}/{total}] {spec}")
+        try:
+            _uninstall_spec(spec, keep_link, all_versions)
+            removed.append(spec)
+        except SystemExit as exit_error:
+            code = exit_error.code
+            if code in (None, 0):
+                removed.append(spec)
+            else:
+                failed.append(spec)
+
+    if total == 1:
+        # 单个条目时不需要汇总，但失败必须让退出码说出来：
+        # 上面把 SystemExit 接住了，错误码就只剩这一个出口。
+        if failed:
+            sys.exit(1)
+        return
+
+    silent.say(f"🌊 Uninstalled {len(removed)} of {total} package(s)")
+    for spec in removed:
+        silent.say(f"🌊   ok     {spec}")
+    for spec in failed:
+        silent.say(f"🌊   failed {spec}")
+
+    if failed:
+        print(f"{RED_BOLD}🌊 Error: {len(failed)} of {total} package(s) could not be "
+              f"uninstalled: {', '.join(failed)}{RESET}")
+        print(f"{RED_BOLD}🌊 The ones marked ok above are already gone.{RESET}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
