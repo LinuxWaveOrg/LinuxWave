@@ -132,6 +132,17 @@ fi
 SYSTEM_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 USER_CONFIG_DIR="$HOME/.config/linuxwave_config"
 
+mw_write_probe() {
+    # mw_write_probe <目录>：真去写一个临时文件（权限位、ACL、只读挂载都会骗过 [[ -w ]]）
+    local probe="$1/.linuxwave-write-probe.$$"
+    if ( : > "$probe" ) 2>/dev/null; then
+        rm -f "$probe" 2>/dev/null
+        return 0
+    fi
+    rm -f "$probe" 2>/dev/null
+    return 1
+}
+
 resolve_config_dir() {
     CONFIG_DIR=""
     for candidate in "$SYSTEM_CONFIG_DIR" "$USER_CONFIG_DIR"; do
@@ -150,7 +161,9 @@ resolve_config_dir() {
     CONFIG_FILE="$CONFIG_DIR/config.json"
     VERSION_FILE="$CONFIG_DIR/VERSION.json"
 
-    if [[ "$CONFIG_DIR" == "$HOME"* ]]; then
+    # 同样用写探测：共享安装的配置目录交给 linuxwave 组（2775），组员写得动，
+    # 自更新就不该再要密码；真写不动（root:root 的老安装）才退回 sudo。
+    if mw_write_probe "$CONFIG_DIR"; then
         CONFIG_NEED_SUDO=false
     else
         CONFIG_NEED_SUDO=true
@@ -188,7 +201,13 @@ TREE_GROUP="$(stat -c '%G' "$BASE_DIR" 2>/dev/null)"
 
 CURRENT_USER=$(whoami)
 
-if [[ "$BASE_DIR" == "$HOME"* ]]; then
+# 判据是「写不写得动」，不是「在不在 $HOME 下」。
+#
+# 共享安装（/home/linuxwave/.linuxwave）的树是 linuxwave 组可写的，组成员装包
+# 本来就不需要 sudo；可原来这条 HOME 判据一律把它当成要提权，于是每次
+# `wave selfupdate` 都要一次密码。同理，配置目录（/etc/linuxwave_config）现在也
+# 交给同一个组、组可写，写探测就能给出正确答案。
+if mw_write_probe "$BASE_DIR"; then
     NEED_SUDO=false
 else
     NEED_SUDO=true

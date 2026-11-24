@@ -706,17 +706,30 @@ if [[ "$NEED_SUDO" == "true" ]]; then
     fi
 fi
 
-# 共享安装的配置保持 root:root 644：全体用户可读，但只有 root 能改
+# 共享安装的配置：属主 root、属组 linuxwave、目录 2775、文件 664。
+#
+# 以前是 root:root 644（"全体可读，只有 root 能改"）。可自更新要写的就是这个目录里的
+# VERSION.json —— 组员能把整棵树写穿，却写不了这份记录，于是 `wave selfupdate`
+# 每次都退回去要密码。把组写位打开不扩大权限面：组员本来就能改 lib/wave 本体。
 if [[ "$NEED_SUDO" == "true" ]]; then
     if [[ "$SHARED_INSTALL" == "true" ]]; then
-        sudo chown -R root:root "$CONFIG_DIR"
+        sudo chown -R "root:$SHARED_USER" "$CONFIG_DIR"
+        sudo chmod 2775 "$CONFIG_DIR"
     else
         sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
+        run_cmd chmod 755 "$CONFIG_DIR"
     fi
+else
+    run_cmd chmod 755 "$CONFIG_DIR"
 fi
-run_cmd chmod 755 "$CONFIG_DIR"
-run_cmd chmod 644 "$CONFIG_FILE"
-run_cmd chmod 644 "$VERSION_FILE"
+
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    run_cmd chmod 664 "$CONFIG_FILE"
+    run_cmd chmod 664 "$VERSION_FILE"
+else
+    run_cmd chmod 644 "$CONFIG_FILE"
+    run_cmd chmod 644 "$VERSION_FILE"
+fi
 
 echo "🌊 Configuration saved to $CONFIG_FILE"
 echo "🌊 Version saved to $VERSION_FILE"
