@@ -58,7 +58,7 @@ PROJECT_CONTEXT.md 本文件：项目结构与关键机制
 | 文件 | 作用 |
 | --- | --- |
 | `pkginstaller.py` | **软件包安装编排**。解析参数（包名取第一个非 flag 的 token，`--limit-rate` / `--proxy` 的值会被跳过）与架构 → 定版本（`@版本`、`--ver` 或远程取最高）→ 拉 `_包名@common` 取 `bin_name` → 拉版本文件取 `url` / `sha256` / `deps` → 下载（rich 进度条、断点续传、限速、代理、30 秒超时+重试询问）→ 调 `pkginstaller.sh` → 通过 `depsinstaller` 递归安装依赖 → 最后调 `linker.link_package()` 把不带版本号的软链接指到刚装好的版本（`--unlink` 可跳过）。**2.6.1 起**：`ensure_install_writable()` 在**联网取版本之前**预检 `downloads/tmp` 与 `bin/` 能否写入，不可写就打印 `print_write_permission_advice()`（给出 `sudo <BASE_DIR>/lib/wave install <package>` 这条能跑通的全路径命令；树的属组不是 `root` 时再补一条 `sudo usermod -aG <组> <你>`，并点明「刚入组但还没重登」是最常见的原因——组名按 gid 反查，gid 0 的 `root:root` 树故意不提组，免得建议用户去加入 `root` 组）并 `exit 1`；落盘两步与 `download_file` 也各自捕获 `PermissionError`（注意 `except PermissionError` 必须写在 `except Exception` **之前**，否则永远轮不到它）；重试提示里的 `KeyboardInterrupt` **原样抛出**交给顶层报成 interrupted——把它当成「不重试」会把用户自己按的 Ctrl-C 谎报成下载失败，只有 `EOFError` 才算不重试 |
-| `pkginstaller.sh` | **软件包安装入口（binary 模式）**：组装长字符串，调用通用安装核心 `depsmanager.sh` 的 `lw_install_artifact`，写 `installed.json`，输出安装结果 |
+| `pkginstaller.sh` | **软件包安装入口**：组装 9 行长字符串，调用通用安装核心 `depsmanager.sh` 的 `lw_install_artifact`，输出安装结果。**4.6 起不再写 `pkg/installed.json`** —— 已装记录完全可以从 `bin/<名>@<版本>/` 推导，多存一份只是多一处会与磁盘不一致的地方（读-改-写还得加锁） |
 | `reinstaller.py` | **`wave reinstall`（移植自 MacWave 4.6）**：把**已经装着的版本**重新下载、重新校验、重新落盘 —— `wave install` 要求你知道版本号，而且不区分「本来没装」与「装过要刷新」。三个用途：产物重出但版本号没变、安装树被改坏（`wave doctor` 报「版本目录里没有可执行文件」时给的就是这条命令）、把包按回已装版本而不升级。版本来自磁盘（不接受 `--ver`）；`-a/--all` 与包名互斥；多包先整体校验再动手，一条「根本没装」就整批拒绝并点名 |
 | `transferrer.py` | **`wave transfer`（移植自 MacWave 4.6）**：给**已经装着**的产物补一遍重定位 —— 安装时那次因为缺 patchelf 被跳过、或从更早版本升上来的包，RPATH 里可能还留着绝对路径，于是「搬走整棵树」不成立。每个目标先跑 `transfer.sh --check`（只读）：0 跳过、1 改写、2 算失败并如实说明。点名的包用到的依赖（含依赖的依赖）一起改，否则白改；`-a/--all` 覆盖全树；`-n/--dry-run` 只报告。改写会重写 ELF 字节，所以全程持锁。`LINUXWAVE_TRANSFER_SCRIPT` 只给测试用（macOS 造不出真 ELF，测试用假脚本验 Python 层） |
 | `doctor.py` | **`wave doctor`（移植自 MacWave 4.6）**：只读体检，七项 —— `base-dir`（安装根存在可写）、`tree`（六个组件目录齐不齐）、`installed`（版本目录里有没有可执行文件、有没有中断留下的 `.bak`）、`links`（悬空链接、装了却没链接的包）、`dependencies`（一个 `.depped_*` 都没有的孤儿树）、`downloads`（没下完的 `.partial`，note）、`position`（RPATH/RUNPATH 里还有没有绝对路径，由 `transfer.sh --check` 的三态判定）。**只读**，每条发现都给该跑哪条命令；**退出码 = 问题数**（note 不计）；拿不准记 note 而不是把包报成坏的；`--raw` 一行一条可 grep；`--list-checks` 列出检查项 |
@@ -112,7 +112,7 @@ PROJECT_CONTEXT.md 本文件：项目结构与关键机制
 BASE_DIR/bin/{可执行文件名}@{版本}/            软件包：二进制 + _DEPS
 BASE_DIR/deps/{引用名}/{引用名}@{版本}/        依赖：整棵解压目录 + _DEPS + .depped_* 标记
 BASE_DIR/links/{名字}@{版本}                   软链接，此目录已加入 PATH
-BASE_DIR/pkg/installed.json                   已安装软件包记录
+（4.6 起没有 pkg/installed.json：已装记录由 bin/ 下的目录本身表示）
 BASE_DIR/downloads/tmp/                       下载临时目录（*.partial 表示未下载完；7 天以上的由 install/uninstall 顺手清掉）
 BASE_DIR/var/lock/wave.lock                   安装树互斥锁（flock；进程结束由内核释放，别手删）
 BASE_DIR/{cli,config,lib,net,pkg,surfboard}/  程序文件自身（清单见 scripts/components.txt）
@@ -441,7 +441,7 @@ macOS 的 SIP —— 所以清单只留系统库目录，**绝不放宽到 `/opt
 | 6 | `pkg/pkginstaller.py` | `download_file()` 下载到 `downloads/tmp/`（rich 进度条、`.partial` + 断点续传、限速、代理、30 秒超时后询问重试），完成后去掉 `.partial` 后缀 |
 | 7 | `pkg/pkginstaller.py` → `pkg/pkginstaller.sh` | 传 8 行长字符串（含目标目录 `bin/wget@1.25.0`）与依赖列表，`pkginstaller.sh` 用 `binary` 模式安装 wget 本体 |
 | 8 | `surfboard/depsmanager.sh` | `lw_install_artifact`：定位原文件 → SHA256 校验 → 解压 → **检查产物里的符号链接**（`lw_assert_no_escaping_links`，越界即拒绝，见 7.6）→ 取一个可执行文件（同名优先，否则取第一个并打警告）→ `chmod 755` → 建软链接 `links/wget@1.25.0` → 写 `_DEPS`（7 行依赖） |
-| 9 | `pkg/pkginstaller.sh` | 写 `pkg/installed.json`（带 `fcntl` 文件锁），打印安装结果 |
+| 9 | `pkg/pkginstaller.sh` | 打印安装结果（4.6 起不再写 `pkg/installed.json`） |
 | 10 | `pkg/pkginstaller.py` | 调 `depsinstaller.install_dependencies()`，逐个安装 7 个依赖 |
 | 11 | `surfboard/depsinstaller.py` | 每个依赖 `ensure_dependency()`：校验引用格式 → `querier.is_installed()` 判断是否已装 |
 | 12 | `surfboard/depsinstaller.py` | 未装时：拉 `_依赖名@common` 取 `dep_name`、拉 `_依赖名@版本号` 取 `url` / `sha256` / `deps`；找不到则报 `Dependency '…' not found in depsinfo.` 并退出 |

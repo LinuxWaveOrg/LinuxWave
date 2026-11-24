@@ -22,57 +22,22 @@ RESET = '\033[0m'
 
 import common
 import silent
-from configpaths import assert_inside, assert_inside_entry, load_base_dir, require_safe_token
+from configpaths import (assert_inside, assert_inside_entry, load_base_dir,
+                         require_safe_token, to_tilde)
 
 
 BASE_DIR = load_base_dir()
 BIN_DIR = BASE_DIR / "bin"
 LINKS_DIR = BASE_DIR / "links"
-INSTALLED_DB = BASE_DIR / "pkg" / "installed.json"
-TAGGER_SCRIPT = Path(__file__).resolve().parent.parent / "surfboard" / "tagger.sh"
 
 
-# -------------------- 依赖库检查 --------------------
+# -------------------- 版本库 --------------------
 
 try:
-    from versioncompare import get_max_version, sort_versions
+    from versioncompare import sort_versions
 except ImportError:
     print(f"{RED_BOLD}🌊 Error: 'versioncompare' module is not available.{RESET}")
     sys.exit(1)
-
-try:
-    from querier import parse_dep_ref
-    from querier import dep_dir
-except ImportError as error:
-    print(f"{RED_BOLD}🌊 Error: 'surfboard' module is not available ({error}).{RESET}")
-    sys.exit(1)
-
-
-# -------------------- 辅助函数 --------------------
-
-def to_tilde(path):
-    # 把 $HOME 前缀显示成 ~
-    home = os.path.expanduser("~")
-    path = str(path)
-    if path.startswith(home):
-        return "~" + path[len(home):]
-    return path
-
-
-def load_installed():
-    if INSTALLED_DB.exists():
-        try:
-            with open(INSTALLED_DB, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
-
-
-def save_installed(installed):
-    INSTALLED_DB.parent.mkdir(parents=True, exist_ok=True)
-    with open(INSTALLED_DB, 'w') as f:
-        json.dump(installed, f, indent=2)
 
 
 def find_installed_versions(pkg_name):
@@ -191,9 +156,8 @@ def remove_dependency(artifact_dir, depender_kind, depender_name, depender_versi
             owner_dir.rmdir()
 
 
-def remove_one(pkg_name, version, installed):
+def remove_one(pkg_name, version):
     # 删除单个 <包名>@<版本号>（bin 下的目录 + links 下的软链接，含 .bak），
-    # 并同步 installed.json
     pkg_name = require_safe_token(pkg_name, "package name")
     version = require_safe_token(version, "package version")
 
@@ -210,11 +174,8 @@ def remove_one(pkg_name, version, installed):
     for path, root in ((link, LINKS_DIR), (backup_link, LINKS_DIR)):
         assert_inside_entry(path, root, "uninstall path")
 
-    record = installed.get(pkg_name)
-    if record and record.get("version") == version and record.get("binary_path"):
-        display_path = record["binary_path"]
-    else:
-        display_path = target
+    # 显示路径就是安装目录本身：4.6 起不再有 installed.json 提供 binary_path
+    display_path = target
 
     silent.say(f"🌊 Deleting {to_tilde(display_path)}...")
 
@@ -241,11 +202,7 @@ def remove_one(pkg_name, version, installed):
     if linker is not None:
         linker.remove_versioned_links(pkg_name, version)
 
-    # 只有记录版本与删除版本一致时才移除记录，避免误删其他版本
-    if record and record.get("version") == version:
-        del installed[pkg_name]
-        return True
-    return False
+    return True
 
 
 # -------------------- 软件包链接联动 --------------------
@@ -302,19 +259,16 @@ def uninstall_versions(pkg_name, versions, keep_link=False):
             print(f"{RED_BOLD}🌊 Drop --unlink (the link then falls back to the next installed version), or run 'wave unlink {pkg_name}' first.{RESET}")
             sys.exit(1)
 
-    # 卸载改的是同一棵树（bin/、links/、.depped_*、installed.json），与装包互斥。
+    # 卸载改的是同一棵树（bin/、links/、.depped_*），与装包互斥。
     # 顺带在锁内打扫 downloads/tmp：这里也是用户清空间的时刻。
     from lock import tree_lock
     with tree_lock(f"uninstall {pkg_name}"):
         from downloads import sweep_stale_partials
         sweep_stale_partials()
 
-        installed = load_installed()
         changed = False
         for version in versions:
-            changed = remove_one(pkg_name, version, installed) or changed
-        if changed:
-            save_installed(installed)
+            changed = remove_one(pkg_name, version) or changed
     if keep_link:
         silent.say(f"🌊 Left the unversioned link for {pkg_name} untouched")
     else:

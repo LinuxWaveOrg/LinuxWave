@@ -3,7 +3,7 @@
 # pkginstaller.sh
 # 软件包安装入口：接收 pkginstaller.py 传来的长字符串与依赖列表，
 # 把软件包安装到 BASE_DIR/bin/{可执行文件名}@{版本号}/，
-# 创建软链接、写入 _DEPS，并写入 installed.json。
+# 创建软链接、写入 _DEPS。已装记录不另存文件，见下面第 4 段。
 # 具体安装动作复用 surfboard/depsmanager.sh（与依赖安装共用同一套逻辑）。
 
 set -e
@@ -39,42 +39,8 @@ DEPS_STR="$2"
 # 依赖走 tree 模式，见 surfboard/depsinstaller.sh（那边不传 package）。
 lw_install_artifact "$INPUT_STR" "$DEPS_STR" "" "package"
 
-# -------------------- 写入 installed.json --------------------
-
-INSTALLED_DB="$LW_BASE_DIR/pkg/installed.json"
-mkdir -p "$(dirname "$INSTALLED_DB")"
-
-python3 - "$INSTALLED_DB" "$LW_NAME" "$LW_VERSION" "$LW_TARGET_DIR" << 'PYEOF'
-import sys
-import json
-import fcntl
-import time
-from pathlib import Path
-
-db_path = Path(sys.argv[1])
-pkg_name = sys.argv[2]
-pkg_version = sys.argv[3]
-binary_path = sys.argv[4]
-
-db_path.parent.mkdir(parents=True, exist_ok=True)
-
-with open(db_path, 'a+') as f:
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-    f.seek(0)
-    try:
-        content = f.read()
-        installed = json.loads(content) if content else {}
-    except json.JSONDecodeError:
-        installed = {}
-    installed[pkg_name] = {
-        "version": pkg_version,
-        "binary_path": binary_path,
-        "installed_at": time.time()
-    }
-    f.seek(0)
-    f.truncate()
-    json.dump(installed, f, indent=2)
-PYEOF
+# 4.6 起不再写 pkg/installed.json：里面有哪条记录完全可以从 bin/<名>@<版本>/
+# 推导出来，多存一份就多一处会与磁盘不一致的地方（读-改-写还要锁）。
 
 # -------------------- 输出成功 --------------------
 
