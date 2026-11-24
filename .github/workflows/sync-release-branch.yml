@@ -29,7 +29,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CONFIGDATA_URL: https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main
+  CONFIGDATA_URL: https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD
 
 jobs:
   sync:

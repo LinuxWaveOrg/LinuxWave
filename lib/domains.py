@@ -58,8 +58,17 @@ DESCRIPTION = {
     "sourcecode": "package source code (reserved)",
 }
 
+# 默认分支一律写 HEAD，不写字面量分支名。HEAD 是「默认分支」的符号引用，
+# 日后把默认分支从 main 改成 3.1（或别的名字）时，客户端与数据两侧不会脱节：
+# 写死 main 的那份会在改名当天开始 404，而它自己不会报错，只表现为「取不到」。
+# raw.githubusercontent.com 与 GitHub contents API 都接受 HEAD。
+#
+# DEFAULTS 里的三个地址仍写整条字面量（不套 REF）：scripts/check_domain_defaults.py
+# 用正则逐行读这张表，f-string 会让它读不到值。
+REF = "HEAD"
+
 DEFAULTS = {
-    "api":        "https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main",
+    "api":        "https://raw.githubusercontent.com/LinuxWaveOrg/infosource/HEAD",
     # 默认指向 GitHub Releases：它的下载路径 /<tag>/<资产> 与静态镜像的 /<包名>/<文件> 同形，
     # 所以国内镜像站只要 rsync 出同一棵树即可。指向仓库文件会被 git 的 100 MiB 硬限拦住。
     # LinuxWave 目前仍按索引里的 url 从各上游取产物，尚未自持存储。
@@ -72,8 +81,8 @@ DEFAULTS = {
     # 解释器与自更新数据暂时仍在 configdata 里：独立仓库（Python / Selfupdate）
     # 尚未建立，写一个不存在的地址会让 3.1.0 的自带解释器下载直接 404。
     # 等仓库建好、数据搬过去，只改这两行即可（客户端代码不用动）。
-    "python":     "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main",
-    "selfupdate": "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main",
+    "python":     "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD",
+    "selfupdate": "https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD",
     # 预留：源码包的位置定了以后再接上
     "sourcecode": "",
 }
@@ -209,7 +218,7 @@ def index_list_url(arch, package_name=None):
         steplog.detail(f"listing source: mirror-provided {redact_url(url)}")
         return url
 
-    url = f"https://api.github.com/repos/LinuxWaveOrg/infosource/contents/{path}?ref=main"
+    url = f"https://api.github.com/repos/LinuxWaveOrg/infosource/contents/{path}?ref={REF}"
     steplog.detail("listing source: GitHub API (LINUXWAVE_API_DOMAIN not set)")
     return url
 

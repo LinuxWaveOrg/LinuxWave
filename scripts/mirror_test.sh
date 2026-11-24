@@ -48,7 +48,7 @@ echo "========== defaults are printed, nothing is blank =========="
 OUT="$(run_mirror 2>&1)"
 # LinuxWave 尚未自持存储，bottle / deps 的默认值是空的；
 # 这里改为断言「确实存在的默认值」被打印出来，以及空的那两项显示占位符。
-if [[ "$OUT" == *"https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main"* ]]; then
+if [[ "$OUT" == *"https://raw.githubusercontent.com/LinuxWaveOrg/infosource/HEAD"* ]]; then
     pass "built-in default for api is shown"
 else
     fail "default for api missing"

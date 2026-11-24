@@ -37,7 +37,7 @@ jobs:
       - name: Fetch pythondata/latest_python
         run: |
           set -euo pipefail
-          url="https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main/pythondata/latest_python"
+          url="https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD/pythondata/latest_python"
           curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 --max-time 60 -o /tmp/latest_python "$url"
           echo "--- /tmp/latest_python ---"
           grep -vE '^\s*(#|$)' /tmp/latest_python
