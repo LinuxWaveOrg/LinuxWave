@@ -149,12 +149,15 @@ COMMANDS = (
         takes_input=True,
         listed=True,
         summary="List installed packages",
-        usage="wave list",
-        desc="List the packages you have installed, with their versions.",
+        usage="wave list [--raw]",
+        desc="List the packages you have installed, with their versions, in two "
+             "columns.",
         flags=[
+            ("--raw", "Plain output for scripts: one name per line, no emoji, no columns"),
         ],
         examples=[
             "wave list",
+            "wave list --raw",
         ],
     ),
     Command(

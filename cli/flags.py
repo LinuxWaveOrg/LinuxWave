@@ -82,6 +82,8 @@ selfupdate = {"--dry-run"} | silent
 # 这两组混在一起时，`wave install jq --json` 会被提示成「--json 也适用于 latest」，
 # 而 latest 其实会直接拒绝 --json。
 latest = {"--all", "-a"}
+# list 的 --raw 是「一行一个名字、无 🌊、不补宽」（给脚本），由 pkginfohelper 自己解析
+list_cmd = {"--raw"}
 info = {"--json", "--yaml", "--toml", "--raw"}
 mirror = {"--show-password", "--hide-user", "--only-set", "--raw"}
 # basedir 的 --raw 是「只打值」，与 mirror 同义；它不接 -s/--silent（见 lib/basedir.py）
@@ -98,6 +100,7 @@ COMMAND_FLAGS = {
     "linkquery": linkquery,
     "selfupdate": selfupdate,
     "latest": latest,
+    "list": list_cmd,
     "info": info,
     "mirror": mirror,
     "basedir": basedir,

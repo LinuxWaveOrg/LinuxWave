@@ -18,6 +18,7 @@ RESET = '\033[0m'
 
 # -------------------- 配置加载 --------------------
 
+import common
 import domains
 import flags
 import steplog
@@ -144,22 +145,34 @@ def explain_unreachable_name_list(api_url, status=None):
                  hint=domains.unreachable_hint(api_url, status))
 
 
-def handle_list(budget=None):
-    
+# 两列：与 `brew list`、`ls` 的竖排习惯一致
+LIST_COLUMNS = 2
+
+
+def handle_list(budget=None, raw=False):
+
     # 直接扫描 BASE_DIR/bin 目录下的子目录，列出所有已安装的包
     # （2.2 起每个包是一个 <包名>@<版本号> 目录）。
-    
-    if not BIN_DIR.exists():
-        print("🌊 No packages installed yet.")
+    #
+    # --raw 是给脚本用的：一行一个、不带 🌊、不做竖列对齐。
+    # 空列表时它也一个字符都不输出 ——「没有包」由退出码和空输出表达，
+    # 插入一行说明文字会让 `wave list --raw | xargs` 拿到一个假包名。
+
+    entries = []
+    if BIN_DIR.exists():
+        entries = sorted([f.name for f in BIN_DIR.iterdir() if f.is_dir()])
+
+    if raw:
+        for name in entries:
+            print(name)
         return
 
-    entries = sorted([f.name for f in BIN_DIR.iterdir() if f.is_dir()])
     if not entries:
         print("🌊 No packages installed yet.")
         return
 
-    for name in entries:
-        print(f"🌊 - {name}")
+    for line in common.list_columns(entries, columns=LIST_COLUMNS):
+        print(f"🌊 {line}")
 
 
 # -------------------- search --------------------
@@ -406,7 +419,10 @@ def handle_info_command(input_string):
     budget = _budget(input_string)
 
     if subcommand == "list":
-        handle_list(budget)
+        # 旗标白名单与其他命令一致：`wave list --raww` 必须报出来，而不是
+        # 一声不响地按默认格式输出（那会让人以为旗标生效了）。
+        common.check_allowed(input_string, "list")
+        handle_list(budget, raw="--raw" in words)
     elif subcommand == "search":
         if len(words) < 3:
             print(f"{RED_BOLD}🌊 Error: Missing search query.{RESET}")

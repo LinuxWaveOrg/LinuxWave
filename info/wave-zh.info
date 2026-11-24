@@ -16,7 +16,7 @@ LinuxWave 把每个软件包装进安装根目录下、带版本号的独立目�
         空格分隔，同一个包可以用 @ 连写多个版本（ffmpeg@6.1@6.0）。
         不带版本号的链接会自动退到剩下的最高版本，并在最后一个版本被
         卸载时一起消失。
-* list::	列出已安装的软件包及其版本。
+* list::	列出已安装的软件包及其版本，排成两竖列。
 * search::	在软件包索引（线上）里搜索。
 * info::	显示作者、简介、主页，以及已安装版本与索引里的可用版本。
 * selfupdate::	把 LinuxWave 自身更新到自更新仓库里发布的版本。
@@ -212,11 +212,15 @@ Examples:
 File: wave-zh.info, Node: list, Next: search, Prev: uninstall, Up: Top
 
 
-列出已安装的软件包及其版本。
+列出已安装的软件包及其版本，排成两竖列。
+
+  --raw
+      给脚本用的输出：一行一个名字、不带 🌊、不排竖列
 
 Examples:
 
      wave list
+     wave list --raw
 
 
 File: wave-zh.info, Node: search, Next: info, Prev: list, Up: Top

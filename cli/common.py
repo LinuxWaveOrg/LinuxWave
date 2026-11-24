@@ -28,6 +28,7 @@
 import difflib
 import os
 import re
+import shutil
 import sys
 
 import flags
@@ -225,6 +226,43 @@ def apply_proxy(options):
     for name in PROXY_ENV_VARS:
         os.environ[name] = options.proxy
     return options.proxy
+
+
+# -------------------- 竖列排版 --------------------
+
+# `wave list` 要把若干短条目排成竖列。规则只有一份：列优先（自上而下填满一列再换
+# 下一列，与 `brew list`、`ls` 一致），行尾不补空格。
+#
+# 🌊 在终端占两列宽，但 len("🌊 ") 是 2 —— 宽度计算按 3 列算，别用 len()。
+
+def terminal_width(fallback=80):
+    """当前终端宽度（列）。非 tty 时 shutil 先看 COLUMNS，再回落到 fallback。"""
+    return shutil.get_terminal_size((fallback, 24)).columns
+
+
+def list_columns(entries, columns=2, gap=4):
+    """把条目排成竖列，返回按行切好的字符串（不含行首的 🌊）。"""
+    if not entries:
+        return []
+    columns = max(1, columns)
+    rows = -(-len(entries) // columns)
+    grid = [entries[index * rows:(index + 1) * rows] for index in range(columns)]
+    widths = [max((len(cell) for cell in column), default=0) for column in grid]
+
+    lines = []
+    for row in range(rows):
+        cells = [column[row] if row < len(column) else None for column in grid]
+        parts = []
+        for index, cell in enumerate(cells):
+            if cell is None:
+                continue
+            # 只有后面还有内容才补宽，否则就是行尾空格。
+            if all(later is None for later in cells[index + 1:]):
+                parts.append(cell)
+            else:
+                parts.append(cell.ljust(widths[index] + gap))
+        lines.append("".join(parts).rstrip())
+    return lines
 
 
 # -------------------- 位置参数拆分 --------------------

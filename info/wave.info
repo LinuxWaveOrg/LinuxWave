@@ -22,7 +22,8 @@ nothing is compiled on the user's machine.
         one package can name several versions (ffmpeg@6.1@6.0). The
         unversioned link falls back to the highest remaining
         version, and goes away with the last one.
-* list::	List the packages you have installed, with their versions.
+* list::	List the packages you have installed, with their versions,
+        in two columns.
 * search::	Search the online package index.
 * info::	Show author, description, homepage and the installed /
         available versions.
@@ -248,11 +249,16 @@ Examples:
 File: wave.info, Node: list, Next: search, Prev: uninstall, Up: Top
 
 
-List the packages you have installed, with their versions.
+List the packages you have installed, with their versions, in two
+columns.
+
+  --raw
+      Plain output for scripts: one name per line, no emoji, no columns
 
 Examples:
 
      wave list
+     wave list --raw
 
 
 File: wave.info, Node: search, Next: info, Prev: list, Up: Top

@@ -290,6 +290,11 @@ jobs:
         run: |
           bash scripts/multi_package_test.sh
 
+      # wave list 的两竖列（列优先、行尾无空格、每行一个 🌊）与 --raw
+      - name: Run list format test
+        run: |
+          bash scripts/list_format_test.sh
+
       # downloads/tmp 里 7 天以上的 .partial 在 install / uninstall 时被清掉，
       # 并且明说清掉了什么（无感但告知）
       - name: Run downloads test
