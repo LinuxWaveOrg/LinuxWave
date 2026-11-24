@@ -187,10 +187,17 @@ def _copy_tree(source, target):
     返回 "cloned" / "copied"；失败返回 None。`cp` 失败时可能已经建了半个目录，
     先删掉再回退，否则 copytree 会因为目标已存在而失败。
     """
+    try:
+        os.makedirs(target, exist_ok=True)
+    except OSError:
+        return None
+
     result = subprocess.run(["cp", "-a", source + "/.", target],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if result.returncode == 0:
         return "copied"
+    # 失败原因要留下来：多半是权限或跨文件系统，静默只说「copy failed」等于没说
+    sys.stderr.write((result.stdout or "").strip() + "\n")
     shutil.rmtree(target, ignore_errors=True)
 
     try:
