@@ -1,16 +1,24 @@
 .TH WAVE-BASEDIR-ZH 1 "" "LinuxWave" "LinuxWave Manual"
 
 .SH 名称
-wave-basedir-zh \- 打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。家目录里的路径显示成 ~；--raw 只输出绝对路径。
+wave-basedir-zh \- 打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。家目录里的路径显示成 ~；--raw 只输出绝对路径。--set 会把整棵树搬到新位置并改写 base_dir：需要三段逐字确认，而且每个已装产物必须已经是位置无关的（先跑 wave transfer --all）。
 .SH 用法
-.B wave basedir [\-\-raw]
+.B wave basedir [\-\-raw] | wave basedir \-\-set <path>
 .SH 说明
 打印 LinuxWave 的安装根目录 —— 二进制、链接与依赖都在它下面。家目录里的
-路径显示成 ~；--raw 只输出绝对路径。
+路径显示成 ~；--raw 只输出绝对路径。--set 会把整棵树搬到新位置并改写
+base_dir：需要三段逐字确认，而且每个已装产物必须已经是位置无关的（先跑
+wave transfer --all）。
 .SH 选项
 .TP
 .B \-\-raw
 原样输出绝对路径，不带 🌊、不带颜色（给脚本用）
+.TP
+.B \-\-set <path>
+把整棵安装树搬到 <path> 并改写 base_dir
+.TP
+.B \-n, \-\-dry\-run
+配合 --set：只报告会拷什么、会改哪个配置文件，然后停
 
 .SH 示例
 .nf

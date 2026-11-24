@@ -543,6 +543,13 @@ path as-is and nothing else.
       Print the absolute path as-is, with no emoji or colour (for
       scripts)
 
+  --set <path>
+      Move the whole install tree to <path> and update base_dir
+
+  -n, --dry-run
+      With --set: report what would be copied and which config file
+      would change, then stop
+
 Examples:
 
      wave basedir

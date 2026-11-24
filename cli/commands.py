@@ -403,13 +403,16 @@ COMMANDS = (
         takes_input=True,
         listed=True,
         summary="Print the directory LinuxWave is installed into",
-        usage="wave basedir [--raw]",
+        usage="wave basedir [--raw] | wave basedir --set <path>",
         desc="Print LinuxWave's install root -- the base_dir in config.json, which is "
              "where the binaries, the links and the dependencies live. A path under your "
              "home directory is shown with ~. With --raw it prints the absolute path as-is "
              "and nothing else.",
         flags=[
             ("--raw", "Print the absolute path as-is, with no emoji or colour (for scripts)"),
+            ("--set <path>", "Move the whole install tree to <path> and update base_dir"),
+            ("-n, --dry-run", "With --set: report what would be copied and which "
+                              "config file would change, then stop"),
         ],
         examples=[
             "wave basedir",
