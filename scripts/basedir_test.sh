@@ -63,10 +63,10 @@ RAW="$(run_wave basedir --raw 2>&1)"
 echo "========== 3. 拒绝 =========="
 
 OUT="$(run_wave basedir -s 2>&1)"; RC=$?
-[[ "$RC" -ne 0 ]] && pass "-s 被拒绝" || fail "-s 被接受了（rc=$RC）"
+[[ "$RC" -ne 0 ]] && pass "-s 被拒绝" || fail "-s 被接受了（rc=${RC}）"
 OUT="$(run_wave basedir --bogus 2>&1)"; RC=$?
 [[ "$RC" -ne 0 && "$OUT" == *"--help"* ]] \
-    && pass "未知旗标被拒绝并指向 --help" || fail "未知旗标：rc=$RC $(printf '%.160s' "$OUT")"
+    && pass "未知旗标被拒绝并指向 --help" || fail "未知旗标：rc=${RC} $(printf '%.160s' "$OUT")"
 
 echo
 echo "=========================================="

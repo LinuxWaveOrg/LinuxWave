@@ -94,7 +94,7 @@ RC=$?
 if [[ "$RC" -eq 0 ]]; then
     pass "整树软件包安装成功"
 else
-    fail "整树软件包安装失败（rc=$RC）：$(printf '%.300s' "$OUT")"
+    fail "整树软件包安装失败（rc=${RC}）：$(printf '%.300s' "$OUT")"
 fi
 [[ -f "$BASE/bin/demo@1.0/.is_a_tree" ]] && pass "写下了 .is_a_tree 标记" \
     || fail "没有 .is_a_tree 标记（linker 会把整树包当单文件处理）"
@@ -151,7 +151,7 @@ RC=$?
 if [[ "$RC" -eq 0 ]]; then
     pass "老记录（无第 9 行）按 binary 装成功"
 else
-    fail "老记录装不上（rc=$RC）：$(printf '%.300s' "$OUT")"
+    fail "老记录装不上（rc=${RC}）：$(printf '%.300s' "$OUT")"
 fi
 [[ -f "$BASE/bin/solo@1.0/solo" && ! -f "$BASE/bin/solo@1.0/.is_a_tree" ]] \
     && pass "落成单文件、没有树标记" || fail "老记录的形态变了（$(ls -A "$BASE/bin/solo@1.0" | tr '\n' ' ')）"
@@ -233,7 +233,7 @@ RC=$?
 if [[ "$RC" -eq 0 ]]; then
     pass "linker 段跑完"
 else
-    fail "linker 段异常退出（rc=$RC）：$(printf '%.300s' "$OUT")"
+    fail "linker 段异常退出（rc=${RC}）：$(printf '%.300s' "$OUT")"
 fi
 while IFS='|' read -r tag label detail; do
     [[ -n "$tag" ]] || continue
@@ -260,7 +260,7 @@ RC=$?
 if [[ "$RC" -eq 0 ]]; then
     pass "整树包卸载成功"
 else
-    fail "整树包卸载失败（rc=$RC）：$(printf '%.300s' "$OUT")"
+    fail "整树包卸载失败（rc=${RC}）：$(printf '%.300s' "$OUT")"
 fi
 [[ -d "$BASE/bin/demo@1.0" ]] && fail "安装目录还在" || pass "安装目录已删除"
 LEFT="$(ls -A "$BASE/links" 2>/dev/null | tr '\n' ' ')"

@@ -132,7 +132,7 @@ aged "$BASE/downloads/tmp/fresh-${ARCH}.tar.gz.partial" 2
 
 out=$(wave install alpha 2>&1); RC=$?
 [[ "$RC" -eq 0 ]] && pass "装包本身照常成功" \
-    || fail "装包失败（rc=$RC）：$(printf '%.300s' "$out")"
+    || fail "装包失败（rc=${RC}）：$(printf '%.300s' "$out")"
 [[ ! -e "$BASE/downloads/tmp/old-${ARCH}.tar.gz.partial" ]] \
     && pass "9 天前的 .partial 被顺手清掉" || fail "9 天前的 .partial 还在"
 [[ -e "$BASE/downloads/tmp/fresh-${ARCH}.tar.gz.partial" ]] \
@@ -147,7 +147,7 @@ echo "========== 1. install：逗号带空格 / 不带空格 / 空格分隔 ====
 
 out=$(wave install "alpha, beta" 2>&1); RC=$?
 [[ "$RC" -eq 0 ]] && pass "install alpha, beta 成功" \
-    || fail "install alpha, beta 失败（rc=$RC）：$(printf '%.300s' "$out")"
+    || fail "install alpha, beta 失败（rc=${RC}）：$(printf '%.300s' "$out")"
 [[ -x "$BASE/bin/alpha@1.0/alpha" ]] && pass "第一个包装上了" || fail "第一个包没装上"
 [[ -x "$BASE/bin/beta@1.0/beta" ]] && pass "第二个包装上了" || fail "第二个包没装上"
 ok "逐个报告进度" "$(strip_ansi "$out")" "[1/2] alpha"
@@ -156,14 +156,14 @@ wave uninstall alpha, beta >/dev/null 2>&1
 
 out=$(wave install alpha,beta 2>&1); RC=$?
 [[ "$RC" -eq 0 && -x "$BASE/bin/beta@1.0/beta" ]] && pass "逗号后不带空格也认" \
-    || fail "alpha,beta 没装上两个（rc=$RC）：$(printf '%.300s' "$out")"
+    || fail "alpha,beta 没装上两个（rc=${RC}）：$(printf '%.300s' "$out")"
 
 wave uninstall alpha, beta >/dev/null 2>&1
 
 out=$(wave install alpha beta 2>&1); RC=$?
 [[ "$RC" -eq 0 && -x "$BASE/bin/alpha@1.0/alpha" && -x "$BASE/bin/beta@1.0/beta" ]] \
     && pass "空格分隔也认（以前第二个被静默丢掉）" \
-    || fail "空格式安装失败（rc=$RC）：$(printf '%.300s' "$out")"
+    || fail "空格式安装失败（rc=${RC}）：$(printf '%.300s' "$out")"
 
 echo
 echo "========== 2. install：一个失败不拖垮其余 =========="
@@ -185,7 +185,7 @@ ok "拒绝时说明怎么改" "$(strip_ansi "$out")" "wave install jq@1.8.2"
 
 out=$(wave install alpha --ver 1.0 2>&1); RC=$?
 [[ "$RC" -eq 0 ]] && pass "单包 + --ver 照旧可用" \
-    || fail "单包 + --ver 坏了（rc=$RC）：$(printf '%.300s' "$out")"
+    || fail "单包 + --ver 坏了（rc=${RC}）：$(printf '%.300s' "$out")"
 
 echo
 echo "========== 4. 单包老写法不变 =========="
@@ -216,7 +216,7 @@ cp -R "$BASE/bin/alpha@1.0" "$BASE/bin/beta@1.0" 2>/dev/null
 
 out=$(wave uninstall "alpha@2.0@1.0" 2>&1); RC=$?
 [[ "$RC" -eq 0 ]] && pass "同一个包连写多个版本能卸" \
-    || fail "连写版本卸载失败（rc=$RC）：$(printf '%.300s' "$out")"
+    || fail "连写版本卸载失败（rc=${RC}）：$(printf '%.300s' "$out")"
 [[ -d "$BASE/bin/alpha@1.0" || -d "$BASE/bin/alpha@2.0" ]] \
     && fail "连写版本没卸干净：$(ls "$BASE/bin")" || pass "两个版本都卸掉了"
 
@@ -224,7 +224,7 @@ wave install alpha >/dev/null 2>&1
 cp -R "$BASE/bin/alpha@1.0" "$BASE/bin/alpha@2.0"
 
 out=$(wave uninstall alpha@all 2>&1); RC=$?
-[[ "$RC" -eq 0 ]] && pass "alpha@all 卸掉全部版本" || fail "alpha@all 失败（rc=$RC）"
+[[ "$RC" -eq 0 ]] && pass "alpha@all 卸掉全部版本" || fail "alpha@all 失败（rc=${RC}）"
 [[ -d "$BASE/bin/alpha@1.0" || -d "$BASE/bin/alpha@2.0" ]] \
     && fail "@all 之后还有版本："$(ls "$BASE/bin") || pass "@all 之后一个版本不剩"
 
@@ -232,7 +232,7 @@ wave install alpha >/dev/null 2>&1
 cp -R "$BASE/bin/alpha@1.0" "$BASE/bin/alpha@2.0"
 
 out=$(wave uninstall alpha -a 2>&1); RC=$?
-[[ "$RC" -eq 0 ]] && pass "-a 等价于 @all" || fail "-a 失败（rc=$RC）"
+[[ "$RC" -eq 0 ]] && pass "-a 等价于 @all" || fail "-a 失败（rc=${RC}）"
 [[ -d "$BASE/bin/alpha@1.0" ]] && fail "-a 之后还有版本" || pass "-a 之后一个版本不剩"
 
 wave install alpha >/dev/null 2>&1

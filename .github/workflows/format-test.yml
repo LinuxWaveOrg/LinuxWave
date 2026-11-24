@@ -278,6 +278,24 @@ jobs:
         run: |
           bash scripts/linksafety_test.sh
 
+      # 整树软件包（索引 install: "tree"）：整棵树落地、bin/ 下每个命令都链、
+      # 缺主命令要失败且不留半成品、老记录仍是单文件形态
+      - name: Run tree package test
+        run: |
+          bash scripts/tree_package_test.sh
+
+      # 一次给多个包：逗号/空格、同一个包连写多个版本、@all / -a、全角逗号、
+      # 一个失败不拖垮其余（本地假索引 + 假产物，全程离线）
+      - name: Run multiple-package test
+        run: |
+          bash scripts/multi_package_test.sh
+
+      # downloads/tmp 里 7 天以上的 .partial 在 install / uninstall 时被清掉，
+      # 并且明说清掉了什么（无感但告知）
+      - name: Run downloads test
+        run: |
+          bash scripts/downloads_test.sh
+
       # -s 什么都不输出、-sS 只留错误且不带 🌊、只读命令上给 -s 要报错
       - name: Run quiet-mode test
         run: |
