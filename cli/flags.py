@@ -69,6 +69,7 @@ silent = {"-s", "--silent", "-S", "--show-error"}
 # 下做不同的事 —— 就像 -a 在 upgrade 与 link 上都是「所有」。
 install = {"-F", "--force", "--raw", "--ver"} | set(NO_LINK) | silent
 # -a/--all：「这个包的全部版本」，与 upgrade/link 上的 -a 同义
+transfer = {"-a", "--all", "-n", "--dry-run"} | silent
 reinstall = {"-a", "--all", "-F", "--force", "--raw"} | set(NO_LINK) | silent
 uninstall = set(NO_LINK) | {"-a", "--all"} | silent
 upgrade = {"-X", "--remove-old-version", "--remove-old-versions", "--rov",
@@ -95,6 +96,7 @@ manual = {"--color"}
 
 COMMAND_FLAGS = {
     "install": install,
+    "transfer": transfer,
     "reinstall": reinstall,
     "uninstall": uninstall,
     "upgrade": upgrade,

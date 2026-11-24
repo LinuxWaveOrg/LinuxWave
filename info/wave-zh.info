@@ -20,6 +20,9 @@ LinuxWave 把每个软件包装进安装根目录下、带版本号的独立目�
         空格分隔，同一个包可以用 @ 连写多个版本（ffmpeg@6.1@6.0）。
         不带版本号的链接会自动退到剩下的最高版本，并在最后一个版本被
         卸载时一起消失。
+* transfer::	改写已装 ELF 的 RPATH，让它们不再写死安装目录的绝对路径。已
+        经是相对形式的包会被认出来并跳过，所以可以反复跑；被点名的包
+        用到的依赖也会一起改写，否则整棵树还是搬不走。
 * list::	列出已安装的软件包及其版本，排成两竖列。
 * search::	在软件包索引（线上）里搜索。
 * info::	显示作者、简介、主页，以及已安装版本与索引里的可用版本。
@@ -243,7 +246,7 @@ Examples:
      wave reinstall --all
 
 
-File: wave-zh.info, Node: uninstall, Next: list, Prev: reinstall, Up: Top
+File: wave-zh.info, Node: uninstall, Next: transfer, Prev: reinstall, Up: Top
 
 
 卸载某个包的一个或多个版本，或它的全部版本。多个包可用逗号或空格分隔，同
@@ -265,7 +268,27 @@ Examples:
      wave uninstall ffmpeg -a
 
 
-File: wave-zh.info, Node: list, Next: search, Prev: uninstall, Up: Top
+File: wave-zh.info, Node: transfer, Next: list, Prev: uninstall, Up: Top
+
+
+改写已装 ELF 的 RPATH，让它们不再写死安装目录的绝对路径。已经是相对形式
+的包会被认出来并跳过，所以可以反复跑；被点名的包用到的依赖也会一起改写，
+否则整棵树还是搬不走。
+
+  -a, --all
+      改写所有已安装的软件包与依赖
+
+  -n, --dry-run
+      只报告哪些包会被改写，不动文件
+
+Examples:
+
+     wave transfer jq
+     wave transfer jq, yq
+     wave transfer --all --dry-run
+
+
+File: wave-zh.info, Node: list, Next: search, Prev: transfer, Up: Top
 
 
 列出已安装的软件包及其版本，排成两竖列。

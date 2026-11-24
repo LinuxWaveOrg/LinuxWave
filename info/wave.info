@@ -27,6 +27,12 @@ nothing is compiled on the user's machine.
         one package can name several versions (ffmpeg@6.1@6.0). The
         unversioned link falls back to the highest remaining
         version, and goes away with the last one.
+* transfer::	Rewrite the RPATH of already installed ELF files so they no
+        longer name an absolute install path, then leave them ready
+        to run from anywhere. Packages that are already relative are
+        detected and skipped, so the command is safe to repeat.
+        Dependencies used by the named packages are transferred too,
+        otherwise the tree still could not be moved.
 * list::	List the packages you have installed, with their versions,
         in two columns.
 * search::	Search the online package index.
@@ -287,7 +293,7 @@ Examples:
      wave reinstall --all
 
 
-File: wave.info, Node: uninstall, Next: list, Prev: reinstall, Up: Top
+File: wave.info, Node: uninstall, Next: transfer, Prev: reinstall, Up: Top
 
 
 Uninstall one package version, several of them, or every version.
@@ -312,7 +318,29 @@ Examples:
      wave uninstall ffmpeg -a
 
 
-File: wave.info, Node: list, Next: search, Prev: uninstall, Up: Top
+File: wave.info, Node: transfer, Next: list, Prev: uninstall, Up: Top
+
+
+Rewrite the RPATH of already installed ELF files so they no longer name
+an absolute install path, then leave them ready to run from anywhere.
+Packages that are already relative are detected and skipped, so the
+command is safe to repeat. Dependencies used by the named packages are
+transferred too, otherwise the tree still could not be moved.
+
+  -a, --all
+      Transfer every installed package and dependency
+
+  -n, --dry-run
+      Only report which packages would be transferred
+
+Examples:
+
+     wave transfer jq
+     wave transfer jq, yq
+     wave transfer --all --dry-run
+
+
+File: wave.info, Node: list, Next: search, Prev: transfer, Up: Top
 
 
 List the packages you have installed, with their versions, in two

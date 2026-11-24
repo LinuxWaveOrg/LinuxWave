@@ -311,6 +311,12 @@ jobs:
         run: |
           bash scripts/reinstall_test.sh
 
+      # wave transfer：给已装产物补一遍 ELF 重定位（目标选择、依赖闭包、幂等、
+      # --dry-run、判断不了时算失败）。真脚本要跑 patchelf，这里用假脚本验 Python 层。
+      - name: Run transfer test
+        run: |
+          bash scripts/transfer_test.sh
+
       # wave doctor：报得准（坏树逐条报出 + 给修复命令；好树全绿）、note 不计入
       # 退出码、--raw 可 grep、判断不了时不误报，以及「跑完一个字节都没改」
       - name: Run doctor test

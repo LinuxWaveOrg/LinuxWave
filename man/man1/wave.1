@@ -35,6 +35,13 @@ Packages can be listed with commas or spaces, and one package can name
 several versions (ffmpeg@6.1@6.0). The unversioned link falls back to
 the highest remaining version, and goes away with the last one.
 .TP
+.B transfer
+Rewrite the RPATH of already installed ELF files so they no longer name
+an absolute install path, then leave them ready to run from anywhere.
+Packages that are already relative are detected and skipped, so the
+command is safe to repeat. Dependencies used by the named packages are
+transferred too, otherwise the tree still could not be moved.
+.TP
 .B list
 List the packages you have installed, with their versions, in two
 columns.
@@ -149,6 +156,7 @@ wave install jq
 wave upgrade jq
 wave reinstall jq
 wave uninstall jq
+wave transfer jq
 wave list
 wave search json
 wave info jq

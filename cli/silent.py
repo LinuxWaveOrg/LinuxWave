@@ -50,7 +50,7 @@ import flags
 #
 # **这份名单是权威**，flags.COMMAND_FLAGS 里那份是给它做提示文案用的副本；
 # scripts/flags_test.sh 比对两边。加一条能静默的命令时，两处都要改。
-SILENT_COMMANDS = {"install", "reinstall", "upgrade", "uninstall", "link",
+SILENT_COMMANDS = {"install", "reinstall", "transfer", "upgrade", "uninstall", "link",
                    "unlink", "selfupdate"}
 
 # `--raw` 由本模块接管的命令（`--raw` 在别的命令上含义完全不同，见下面

@@ -1,0 +1,28 @@
+.TH WAVE-TRANSFER 1 "" "LinuxWave" "LinuxWave Manual"
+
+.SH NAME
+wave-transfer \- Rewrite the RPATH of already installed ELF files so they no longer name an absolute install path, then leave them ready to run from anywhere. Packages that are already relative are detected and skipped, so the command is safe to repeat. Dependencies used by the named packages are transferred too, otherwise the tree still could not be moved.
+.SH SYNOPSIS
+.B wave transfer <package>[@<version>] [, ...] | wave transfer \-\-all
+.SH DESCRIPTION
+Rewrite the RPATH of already installed ELF files so they no longer name
+an absolute install path, then leave them ready to run from anywhere.
+Packages that are already relative are detected and skipped, so the
+command is safe to repeat. Dependencies used by the named packages are
+transferred too, otherwise the tree still could not be moved.
+.SH OPTIONS
+.TP
+.B \-a, \-\-all
+Transfer every installed package and dependency
+.TP
+.B \-n, \-\-dry\-run
+Only report which packages would be transferred
+
+.SH EXAMPLES
+.nf
+wave transfer jq
+wave transfer jq, yq
+wave transfer --all --dry-run
+.fi
+.SH SEE ALSO
+wave(1)

@@ -177,6 +177,29 @@ COMMANDS = (
         ],
     ),
     Command(
+        name="transfer",
+        module="transferrer",
+        handler="handle_transfer",
+        takes_input=True,
+        listed=True,
+        summary="Make installed packages independent of the install directory",
+        usage="wave transfer <package>[@<version>] [, ...] | wave transfer --all",
+        desc="Rewrite the RPATH of already installed ELF files so they no longer name "
+             "an absolute install path, then leave them ready to run from anywhere. "
+             "Packages that are already relative are detected and skipped, so the command "
+             "is safe to repeat. Dependencies used by the named packages are transferred "
+             "too, otherwise the tree still could not be moved.",
+        flags=[
+            ("-a, --all", "Transfer every installed package and dependency"),
+            ("-n, --dry-run", "Only report which packages would be transferred"),
+        ],
+        examples=[
+            "wave transfer jq",
+            "wave transfer jq, yq",
+            "wave transfer --all --dry-run",
+        ],
+    ),
+    Command(
         name="uninstall",
         module="uninstaller",
         handler="handle_uninstall",

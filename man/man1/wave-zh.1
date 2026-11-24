@@ -29,6 +29,11 @@ LinuxWave 把每个软件包装进安装根目录下、带版本号的独立目�
 一个包可以用 @ 连写多个版本（ffmpeg@6.1@6.0）。不带版本号的链接会自动退
 到剩下的最高版本，并在最后一个版本被卸载时一起消失。
 .TP
+.B transfer
+改写已装 ELF 的 RPATH，让它们不再写死安装目录的绝对路径。已经是相对形式
+的包会被认出来并跳过，所以可以反复跑；被点名的包用到的依赖也会一起改写，
+否则整棵树还是搬不走。
+.TP
 .B list
 列出已安装的软件包及其版本，排成两竖列。
 .TP
@@ -129,6 +134,7 @@ wave install jq
 wave upgrade jq
 wave reinstall jq
 wave uninstall jq
+wave transfer jq
 wave list
 wave search json
 wave info jq

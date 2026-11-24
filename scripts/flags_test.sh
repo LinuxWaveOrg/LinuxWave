@@ -193,7 +193,7 @@ if owners != set(silent.SILENT_COMMANDS):
         f"清单={sorted(owners)} 代码={sorted(silent.SILENT_COMMANDS)}")
 
 expected = "-s only applies to wave install, wave link, wave reinstall, " \
-           "wave selfupdate, wave uninstall, wave unlink, wave upgrade"
+           "wave selfupdate, wave transfer, wave uninstall, wave unlink, wave upgrade"
 if flags.describe("-s") != expected:
     add(f"describe(-s) 变了: {flags.describe('-s')!r}")
 if flags.describe("-S") != expected.replace("-s only", "-S only", 1):
