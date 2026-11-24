@@ -37,7 +37,7 @@ from versioncompare import compare, newer_release
 #
 # 改协议内容时**必须**同时改 AGREEMENT_ID（用协议生效日期），否则已经同意旧协议
 # 的用户会被当成同意过新的。
-AGREEMENT_ID = "2026-11-19"
+AGREEMENT_ID = "2026-11-24"
 AGREEMENT_FILE_NAME = "AGREEMENT.json"
 
 # 协议全文就在官网底部，安装器打印的也是这一句。
@@ -45,7 +45,7 @@ AGREEMENT_URL = "https://linuxwave.org"
 
 # 协议是随哪个版本引入的。只有在「已装版本 ≤ 这个版本」时才需要问一次：
 # 那批用户当初同意的是旧协议，而比这个版本新的安装一定来自一个问过新协议的安装器。
-AGREEMENT_INTRODUCED_IN = "4.0.0"
+AGREEMENT_INTRODUCED_IN = "4.6.0"
 
 
 # 4.0 起的两级结构：latest.toml 说「装哪个版本」，该版本的 update_commands.sh 说「怎么装」。

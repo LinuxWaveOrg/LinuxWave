@@ -66,28 +66,28 @@ clear_agreement() {
 echo "========== 什么时候该再问一次协议 =========="
 
 clear_agreement
-check "记录缺失、已装 4.0.0（协议引入版）→ 问" "True" \
-    'print(selfupdate.agreement_needs_consent("4.0.0"))'
+check "记录缺失、已装 4.6.0（协议引入版）→ 问" "True" \
+    'print(selfupdate.agreement_needs_consent("4.6.0"))'
 
 clear_agreement
-check "记录缺失、已装 4.0.2（晚于引入版）→ 不问" "False" \
-    'print(selfupdate.agreement_needs_consent("4.0.2"))'
+check "记录缺失、已装 4.6.1（晚于引入版）→ 不问" "False" \
+    'print(selfupdate.agreement_needs_consent("4.6.1"))'
 
 clear_agreement
 check "全新安装（没有已装版本）→ 不问" "False" \
     'print(selfupdate.agreement_needs_consent(""))'
 
-write_agreement "2026-11-19"
+write_agreement "2026-11-24"
 check "记录是当前 AGREEMENT_ID → 不问" "False" \
-    'print(selfupdate.agreement_needs_consent("4.0.0"))'
+    'print(selfupdate.agreement_needs_consent("4.6.0"))'
 
 write_agreement "2020-01-01"
-check "记录是旧协议、已装 4.0.0 → 问" "True" \
-    'print(selfupdate.agreement_needs_consent("4.0.0"))'
+check "记录是旧协议、已装 4.6.0 → 问" "True" \
+    'print(selfupdate.agreement_needs_consent("4.6.0"))'
 
 printf 'not json\n' > "$CONFIG_DIR/AGREEMENT.json"
 check "记录文件坏了 → 当作没记录（问）" "True" \
-    'print(selfupdate.agreement_needs_consent("4.0.0"))'
+    'print(selfupdate.agreement_needs_consent("4.6.0"))'
 
 echo ""
 echo "========== 跨大版本不谈协议 =========="

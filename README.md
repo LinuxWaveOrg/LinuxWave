@@ -16,7 +16,7 @@ macOS? View [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 Latest Version
 
-4.5.2, Release on 2026-11-24
+4.6.0, Release on 2026-11-24
 
 ## 🌊 What is LinuxWave?
 
@@ -364,7 +364,18 @@ zoxide           by Ajeet D'Souza
 ```
 ## 🌊 License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE) file for the full text, and [NOTICE](NOTICE) for the attribution note. Packages that LinuxWave installs keep their own licenses.
+
+License by release:
+
+| Versions | License |
+| :--- | :--- |
+| `1.0.0` – `4.5.2` | MIT |
+| `4.6.0` and later | Apache License 2.0 |
+
+Everything up to and including `4.5.2` was published under the MIT License and stays under it:
+nothing is retroactively relicensed. `4.6.0` is where the Apache-2.0 terms begin, which is also
+why that release asks you to accept the agreement again.
 
 ## 🌊 Contact Us
 

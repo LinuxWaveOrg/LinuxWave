@@ -233,7 +233,7 @@ linuxwavedata/<版本>/update_commands.sh    那一版具体怎么装（发版�
 ### 许可证：1.0.0–4.5.2 是 MIT，4.6.0 起是 Apache-2.0
 
 与 MacWave 对齐：`1.0.0`–`4.5.2` 是按 MIT 发布并继续按 MIT 算，已经发出去的版本不会被
-追溯改协议；`4.6.0` 起换成 Apache License 2.0，随安装树下发 `LICENSE` 与 `NOTICE`
+追溯改协议；`4.6.0`（2026-11-24）换成 Apache License 2.0，随安装树下发 `LICENSE` 与 `NOTICE`
 （`info/` 里的副本）。**换协议算协议变更**：要同时换 `lib/selfupdate.py` 的
 `AGREEMENT_ID`（官网落款日期）与 `AGREEMENT_INTRODUCED_IN`，否则问的是新协议、
 记下的却是旧标识，下次再问一遍。三处口径必须一致：两份 README 的「许可证」一节、

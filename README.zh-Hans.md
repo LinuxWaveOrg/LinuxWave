@@ -16,7 +16,7 @@ macOS 用户？请看 [MacWave](https://github.com/MacWaveOrg/MacWave)
 Linux (x86_64 / arm64)
 ## 🌊 最新版本
 
-4.5.2，发布于 2026-11-24
+4.6.0，发布于 2026-11-24
 
 ## 🌊 LinuxWave 是什么？
 
@@ -332,7 +332,17 @@ zoxide           by Ajeet D'Souza
 ```
 ## 🌊 许可证
 
-本项目基于 **MIT 许可证** 发布 —— 详见 [LICENSE](LICENSE) 文件。
+本项目基于 **Apache License 2.0** 发布 —— 全文见 [LICENSE](LICENSE)，署名说明见 [NOTICE](NOTICE)。LinuxWave 安装的软件包各自保留自己的许可证。
+
+各版本的许可证：
+
+| 版本 | 许可证 |
+| :--- | :--- |
+| `1.0.0` – `4.5.2` | MIT |
+| `4.6.0` 及以后 | Apache License 2.0 |
+
+`4.5.2` 及更早的版本都是按 MIT 发布的，并且继续按 MIT 算 —— 已经发出去的版本不会被追溯
+改协议。Apache-2.0 从 `4.6.0` 开始生效，这一版会重新询问你是否同意协议，原因也在这里。
 
 ## 🌊 联系我们
 
