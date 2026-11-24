@@ -5,6 +5,7 @@
 
 | 版本 | 发布日期 | Build | 一句话 |
 | --- | --- | --- | --- |
+| [v4.5.2](v4.5.2.md) | 2026-11-24 | `328B1254` | 整树软件包（`install: "tree"`）与客户端下限、多包 install/uninstall（`@all` / `-a`）、`wave basedir`、整树重装修复、`downloads/tmp` 自动清理陈旧 `.partial` |
 | [v4.0.0](v4.0.0.md) | 2026-11-20 | `324E1459` | 安装清单换代（latest.toml + update_commands）、组件分层、命令表驱动、三档超时、自更新侧校验协议 |
 | [v3.2.0](v3.2.0.md) | 2026-10-29 | `302D1838` | `wave upgrade`（含 `-X` 四种写法）、`--max-time`、镜像真正生效（B 档） |
 | [v3.1.0](v3.1.0.md) | 2026-10-29 | `296E1439` | 自带 CPython 3.14.9 + 私有 venv + sh 启动器；顺手搬来 4.0 的地址层与 `wave mirror` |
