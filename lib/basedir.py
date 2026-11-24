@@ -20,6 +20,7 @@
 #
 # 移植自 MacWave 4.5.0。`--set`（搬整棵树）属于 4.6 的内容，本次不移植。
 
+import json
 import os
 import shutil
 import subprocess
