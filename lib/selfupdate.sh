@@ -160,6 +160,8 @@ resolve_config_dir() {
 
     CONFIG_FILE="$CONFIG_DIR/config.json"
     VERSION_FILE="$CONFIG_DIR/VERSION.json"
+    # 记下安装时定下的目录权限（共享安装是 2775），写完版本号要照原样恢复。
+    CONFIG_DIR_MODE="$(stat -c '%a' "$CONFIG_DIR" 2>/dev/null || true)"
 
     # 同样用写探测：共享安装的配置目录交给 linuxwave 组（2775），组员写得动，
     # 自更新就不该再要密码；真写不动（root:root 的老安装）才退回 sudo。
@@ -875,12 +877,24 @@ config_cmd tee "$VERSION_FILE" > /dev/null << EOF
 }
 EOF
 
-if [[ "$CONFIG_NEED_SUDO" == "true" ]]; then
-    sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
+# 配置目录的形态是安装时定的：用户级 755/644，系统级归安装者，共享安装
+# root:linuxwave 2775 + 文件 664。这里**照原样保留** —— 以前无条件写
+# `chown -R "$CURRENT_USER"` + `chmod 755/644`，任何人跑一次自更新都会把共享安装
+# 打回"只有他自己能写"，下一个组员又得去要 sudo。
+GROUP_WRITABLE_CONFIG=false
+if [[ -n "$(find "$CONFIG_DIR" -maxdepth 0 -perm -020 2>/dev/null)" ]]; then
+    GROUP_WRITABLE_CONFIG=true
 fi
-
-config_cmd chmod 755 "$CONFIG_DIR"
-config_cmd chmod 644 "$CONFIG_FILE" "$VERSION_FILE"
+if [[ -n "$CONFIG_DIR_MODE" ]]; then
+    config_cmd chmod "$CONFIG_DIR_MODE" "$CONFIG_DIR" 2>/dev/null || config_cmd chmod 755 "$CONFIG_DIR"
+else
+    config_cmd chmod 755 "$CONFIG_DIR"
+fi
+if [[ "$GROUP_WRITABLE_CONFIG" == "true" ]]; then
+    config_cmd chmod 664 "$CONFIG_FILE" "$VERSION_FILE"
+else
+    config_cmd chmod 644 "$CONFIG_FILE" "$VERSION_FILE"
+fi
 
 echo "🌊 Version saved to $VERSION_FILE"
 
