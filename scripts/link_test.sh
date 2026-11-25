@@ -193,6 +193,25 @@ python3 "$WAVE_BIN" unlink "$PKG" >/dev/null
 check "8.4 unlink 可以清掉悬空链接" "$(link_state "$UNV")" "no"
 
 echo ""
+echo "========== 9. 整树包（install: \"tree\"）的链接 =========="
+# 索引里写 install: "tree" 的包，命令在 bin/<名>@<版本号>/bin/<名>，
+# 而不是扁平的 bin/<名>@<版本号>/<名>。链接要能建到那个位置。
+TREE_PKG="test_tree_pkg"
+TREE_UNV="$LINKS_DIR/$TREE_PKG"
+mkdir -p "$BIN_DIR/$TREE_PKG@1.0/bin"
+printf '#!/bin/sh\necho "Test Successful! (tree)"\n' > "$BIN_DIR/$TREE_PKG@1.0/bin/$TREE_PKG"
+chmod +x "$BIN_DIR/$TREE_PKG@1.0/bin/$TREE_PKG"
+python3 "$WAVE_BIN" link "$TREE_PKG" >/dev/null
+check "9.1 整树包也能建不带版本号的链接" "$(link_state "$TREE_UNV")" "yes"
+check "9.2 链接指向树里的 bin/" "$(readlink "$TREE_UNV")" "../bin/$TREE_PKG@1.0/bin/$TREE_PKG"
+check "9.3 linkquery 能认出整树包" "$(python3 "$WAVE_BIN" linkquery "$TREE_PKG")" "🌊 $TREE_PKG@1.0"
+TREE_OUT=$("$TREE_UNV")
+check "9.4 整树包能直接跑起来" "$([[ "$TREE_OUT" == *"Test Successful! (tree)"* ]] && echo yes || echo no)" "yes"
+python3 "$WAVE_BIN" unlink "$TREE_PKG" >/dev/null
+check "9.5 整树包也能 unlink" "$(link_state "$TREE_UNV")" "no"
+rm -rf "$BIN_DIR/$TREE_PKG@1.0"
+
+echo ""
 echo "=========================================="
 echo "🌊 Passed: $PASSED"
 echo "🌊 Failed: $FAILED"

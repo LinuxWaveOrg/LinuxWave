@@ -71,6 +71,18 @@ def installed_packages():
     return sorted(names)
 
 
+def command_relpath(name, version):
+    # 命令在版本目录里的位置。两种安装形态都可能有：
+    #   binary：bin/<名>@<版本号>/<名>
+    #   tree  ：bin/<名>@<版本号>/bin/<名>（索引里写了 install: "tree" 的整树包）
+    # 先看扁平那个，不存在再看 bin/ 下面 —— 装着哪个就链哪个，不靠猜。
+    name = require_safe_token(name, "package name")
+    version = require_safe_token(version, "package version")
+    if (BIN_DIR / f"{name}@{version}" / name).exists():
+        return f"../bin/{name}@{version}/{name}"
+    return f"../bin/{name}@{version}/bin/{name}"
+
+
 def linked_version(name):
     # links/{名称} 当前指向哪个版本；没链接、或指向别的名字时返回 None
     name = require_safe_token(name, "package name")
@@ -79,13 +91,17 @@ def linked_version(name):
         return None
 
     target = os.readlink(link)
-    target_name = os.path.basename(target)
-    directory = os.path.basename(os.path.dirname(target))
-    if target_name != name or "@" not in directory:
+    parts = target.split("/")
+    # 只认 ../bin/... 这一种形状；最后一个路径段必须是同名命令
+    if len(parts) < 4 or parts[0] != ".." or parts[1] != "bin" or parts[-1] != name:
         return None
 
-    dir_name, _, version = directory.partition("@")
-    return version if dir_name == name else None
+    # 版本目录可能是 parts[2]（binary）或 parts[3]（tree），取第一个名字对得上的
+    for part in parts[2:-1]:
+        dir_name, sep, version = part.partition("@")
+        if sep and dir_name == name:
+            return version
+    return None
 
 
 def is_dangling(name):
@@ -119,7 +135,7 @@ def create_link(name, version):
     if link.is_symlink() or link.exists():
         link.unlink()
 
-    link.symlink_to(f"../bin/{name}@{version}/{name}")
+    link.symlink_to(command_relpath(name, version))
     return link
 
 
