@@ -76,7 +76,7 @@ def parse_pkg_from_bin(dirname):
 def fetch_remote_versions(pkg_name, arch):
     
     # 通过 GitHub API 遍历 infosource 中的版本文件，返回所有可安装版本号列表。
-    # 数据在 LinuxWaveOrg/infosource 仓库的 main 分支。
+    # 数据在 LinuxWaveOrg/infosource 仓库的默认分支（HEAD）。
     
     pkg_name = require_safe_token(pkg_name, "package name")
     api_url = domains.index_list_url(arch, pkg_name)
@@ -145,7 +145,7 @@ def handle_search(query):
     
     arch = get_arch()
 
-    # 数据在 LinuxWaveOrg/infosource 仓库的 main 分支
+    # 数据在 LinuxWaveOrg/infosource 仓库的默认分支（HEAD）
     api_url = domains.index_list_url(arch)
 
     try:

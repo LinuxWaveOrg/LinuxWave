@@ -31,11 +31,14 @@ source "$DEPSMANAGER_SCRIPT"
 
 INPUT_STR="$1"
 DEPS_STR="$2"
+INSTALL_MODE="${3:-binary}"
 
 # -------------------- 安装软件包本体 --------------------
 
-# 软件包只取一个可执行文件；依赖走 tree 模式（见 surfboard/depsinstaller.sh）
-mw_install_artifact "$INPUT_STR" "$DEPS_STR" "binary"
+# binary：只取一个可执行文件（绝大多数包）
+# tree  ：整棵目录原样落到 bin/{名称}@{版本号}/（wrapper 与真实二进制、数据目录
+#         要待在一起，拆开就装坏了）；与依赖用的同一套 tree 逻辑
+mw_install_artifact "$INPUT_STR" "$DEPS_STR" "$INSTALL_MODE"
 
 # -------------------- 写入 installed.json --------------------
 
@@ -78,7 +81,14 @@ PYEOF
 
 echo -e "${GREEN}🌊 Successfully installed ${MW_NAME}@${MW_VERSION}${RESET}"
 DISPLAY_DIR="${MW_TARGET_DIR/$HOME/~}"
-DISPLAY_LINK="${MW_LINK_PATH/$HOME/~}"
-echo "🌊 Binary installed to: $DISPLAY_DIR/$MW_BIN_NAME"
+if [[ "$INSTALL_MODE" == "tree" ]]; then
+    # 整树包里命令在解压目录的 bin/ 下面
+    echo "🌊 Binary installed to: $DISPLAY_DIR/bin/$MW_BIN_NAME"
+    DISPLAY_LINK="${MW_BASE_DIR}/links/${MW_BIN_NAME}@${MW_VERSION}"
+    DISPLAY_LINK="${DISPLAY_LINK/$HOME/~}"
+else
+    echo "🌊 Binary installed to: $DISPLAY_DIR/$MW_BIN_NAME"
+    DISPLAY_LINK="${MW_LINK_PATH/$HOME/~}"
+fi
 echo "🌊 Link created at: $DISPLAY_LINK"
 exit 0

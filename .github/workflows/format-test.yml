@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LinuxWaveOrg/infosource
-          ref: main
+          # 不写 ref：默认就是该仓库的默认分支，与客户端里的 HEAD 同一个意思
           path: infosource-data
 
       - name: Setup Python

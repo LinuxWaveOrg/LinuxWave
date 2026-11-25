@@ -32,7 +32,7 @@ RESET = '\033[0m'
 # -------------------- 常量 --------------------
 
 DATA_REPO = "LinuxWaveOrg/infosource"
-BRANCH = "main"
+BRANCH = "HEAD"   # HEAD = 默认分支，见 lib/domains.py 的 REF
 RAW_BASE = f"https://raw.githubusercontent.com/{DATA_REPO}/{BRANCH}"
 TREE_API = f"https://api.github.com/repos/{DATA_REPO}/git/trees/{BRANCH}?recursive=1"
 CONFIG_FILES = (

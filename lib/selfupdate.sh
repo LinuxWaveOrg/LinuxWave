@@ -75,10 +75,10 @@ mw_domain() {
 #
 # scripts/check_domain_defaults.py 会逐条比对 shell 与 Python，改一处就要改另一处。
 
-API_DOMAIN="$(mw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
+API_DOMAIN="$(mw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/HEAD}")"
 CORE_URL="$(mw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
-SELFUPDATE_URL="$(mw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
-PYTHON_DATA_URL="$(mw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+SELFUPDATE_URL="$(mw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD}")"
+PYTHON_DATA_URL="$(mw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD}")"
 # pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
 PIP_INDEX_URL="$(mw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
 
@@ -132,6 +132,17 @@ fi
 SYSTEM_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 USER_CONFIG_DIR="$HOME/.config/linuxwave_config"
 
+mw_write_probe() {
+    # mw_write_probe <目录>：真去写一个临时文件（权限位、ACL、只读挂载都会骗过 [[ -w ]]）
+    local probe="$1/.linuxwave-write-probe.$$"
+    if ( : > "$probe" ) 2>/dev/null; then
+        rm -f "$probe" 2>/dev/null
+        return 0
+    fi
+    rm -f "$probe" 2>/dev/null
+    return 1
+}
+
 resolve_config_dir() {
     CONFIG_DIR=""
     for candidate in "$SYSTEM_CONFIG_DIR" "$USER_CONFIG_DIR"; do
@@ -149,8 +160,12 @@ resolve_config_dir() {
 
     CONFIG_FILE="$CONFIG_DIR/config.json"
     VERSION_FILE="$CONFIG_DIR/VERSION.json"
+    # 记下安装时定下的目录权限（共享安装是 2775），写完版本号要照原样恢复。
+    CONFIG_DIR_MODE="$(stat -c '%a' "$CONFIG_DIR" 2>/dev/null || true)"
 
-    if [[ "$CONFIG_DIR" == "$HOME"* ]]; then
+    # 同样用写探测：共享安装的配置目录交给 linuxwave 组（2775），组员写得动，
+    # 自更新就不该再要密码；真写不动（root:root 的老安装）才退回 sudo。
+    if mw_write_probe "$CONFIG_DIR"; then
         CONFIG_NEED_SUDO=false
     else
         CONFIG_NEED_SUDO=true
@@ -188,7 +203,13 @@ TREE_GROUP="$(stat -c '%G' "$BASE_DIR" 2>/dev/null)"
 
 CURRENT_USER=$(whoami)
 
-if [[ "$BASE_DIR" == "$HOME"* ]]; then
+# 判据是「写不写得动」，不是「在不在 $HOME 下」。
+#
+# 共享安装（/home/linuxwave/.linuxwave）的树是 linuxwave 组可写的，组成员装包
+# 本来就不需要 sudo；可原来这条 HOME 判据一律把它当成要提权，于是每次
+# `wave selfupdate` 都要一次密码。同理，配置目录（/etc/linuxwave_config）现在也
+# 交给同一个组、组可写，写探测就能给出正确答案。
+if mw_write_probe "$BASE_DIR"; then
     NEED_SUDO=false
 else
     NEED_SUDO=true
@@ -856,12 +877,24 @@ config_cmd tee "$VERSION_FILE" > /dev/null << EOF
 }
 EOF
 
-if [[ "$CONFIG_NEED_SUDO" == "true" ]]; then
-    sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
+# 配置目录的形态是安装时定的：用户级 755/644，系统级归安装者，共享安装
+# root:linuxwave 2775 + 文件 664。这里**照原样保留** —— 以前无条件写
+# `chown -R "$CURRENT_USER"` + `chmod 755/644`，任何人跑一次自更新都会把共享安装
+# 打回"只有他自己能写"，下一个组员又得去要 sudo。
+GROUP_WRITABLE_CONFIG=false
+if [[ -n "$(find "$CONFIG_DIR" -maxdepth 0 -perm -020 2>/dev/null)" ]]; then
+    GROUP_WRITABLE_CONFIG=true
 fi
-
-config_cmd chmod 755 "$CONFIG_DIR"
-config_cmd chmod 644 "$CONFIG_FILE" "$VERSION_FILE"
+if [[ -n "$CONFIG_DIR_MODE" ]]; then
+    config_cmd chmod "$CONFIG_DIR_MODE" "$CONFIG_DIR" 2>/dev/null || config_cmd chmod 755 "$CONFIG_DIR"
+else
+    config_cmd chmod 755 "$CONFIG_DIR"
+fi
+if [[ "$GROUP_WRITABLE_CONFIG" == "true" ]]; then
+    config_cmd chmod 664 "$CONFIG_FILE" "$VERSION_FILE"
+else
+    config_cmd chmod 644 "$CONFIG_FILE" "$VERSION_FILE"
+fi
 
 echo "🌊 Version saved to $VERSION_FILE"
 

@@ -102,10 +102,10 @@ mw_domain() {
 #
 # scripts/check_domain_defaults.py 会逐条比对 shell 与 Python，改一处就要改另一处。
 
-API_DOMAIN="$(mw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/main}")"
+API_DOMAIN="$(mw_domain LINUXWAVE_API_DOMAIN "${LINUXWAVE_API_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/infosource/HEAD}")"
 CORE_URL="$(mw_domain LINUXWAVE_CORE_DOMAIN "${LINUXWAVE_CORE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/LinuxWave}")"
-SELFUPDATE_URL="$(mw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
-PYTHON_DATA_URL="$(mw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/main}")"
+SELFUPDATE_URL="$(mw_domain LINUXWAVE_SELFUPDATE_DOMAIN "${LINUXWAVE_SELFUPDATE_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD}")"
+PYTHON_DATA_URL="$(mw_domain LINUXWAVE_PYTHON_DOMAIN "${LINUXWAVE_PYTHON_DOMAIN:-https://raw.githubusercontent.com/LinuxWaveOrg/configdata/HEAD}")"
 # pip 的索引：只影响「装 requests/packaging/rich」这一次调用，不参与「从哪儿取文件」
 PIP_INDEX_URL="$(mw_domain LINUXWAVE_PIP_INDEX "${LINUXWAVE_PIP_INDEX:-https://pypi.org/simple}")"
 
@@ -257,8 +257,10 @@ Usage:
 Options:
   -S, --silent            No interaction at all: the directory menu and the
                           agreement are answered automatically. Without
-                          --dir-option the default (option 1) is used.
-                          Requires passwordless sudo when privilege is needed.
+                          --dir-option it installs into ~/.local/linuxwave
+                          (menu option 2) - unattended runs never ask for an
+                          administrator password. Use --dir-option=1 for the
+                          shared install; that needs passwordless sudo.
       --dir-option=N      Pick menu entry N without prompting (1-5).
       --dir-option=DIR    Use DIR as the installation directory (shorthand for
                           --dir-option=5=DIR).
@@ -274,8 +276,8 @@ Directory menu:
   5. other (enter custom directory)
 
 Examples:
-  install.sh --silent --dir-option=4
-  install.sh -S --dir-option=1
+  install.sh --silent --dir-option=1
+  install.sh -S --dir-option=2
   install.sh --silent --dir-option=5=/opt/mylw
   install.sh --silent --dir-option=/opt/mylw
 USAGE_EOF
@@ -369,11 +371,14 @@ SHARED_CONFIG_DIR="$SYS_ROOT/etc/linuxwave_config"
 # ==========================================
 
 print_dir_menu() {
+    # 顺序即推荐顺序：共享安装排第一 —— 它是唯一同时满足「依赖只存一份」与
+    # 「组成员装包不用 sudo」的选项（Homebrew on Linux 的 /home/linuxbrew/.linuxbrew
+    # 也是这个思路）。代价是装完必须重登录，菜单下面会提醒。
     echo -e "${YELLOW}Where do you want to install LinuxWave? (Enter the number)${RESET}"
-    echo "1. ~/.local/linuxwave"
-    echo "2. /opt/linuxwave"
-    echo "3. /usr/local/linuxwave"
-    echo "4. $SHARED_BASE_DIR (shared, all users)"
+    echo "1. $SHARED_BASE_DIR (shared, all users, recommended)"
+    echo "2. ~/.local/linuxwave (single user, no sudo)"
+    echo "3. /opt/linuxwave"
+    echo "4. /usr/local/linuxwave"
     echo "5. other (enter custom directory)"
     echo ""
     echo -e "${YELLOW}Enter your choice:${RESET}"
@@ -388,8 +393,13 @@ if [[ -n "$CLI_DIR_OPTION" ]]; then
 elif [[ "$CLI_SILENT" == "true" ]]; then
     # --silent 承诺「自动应答目录菜单」，那就明确地选默认项并说出来，
     # 而不是去读一个可能不存在的终端、再靠「无效输入」兜底。
-    choice="1"
-    echo "🌊 --silent without --dir-option: using the default, \$HOME/.local/linuxwave"
+    #
+    # 注意：菜单第一项是共享安装，但无人值守时不能替用户建系统账户、也不能去要
+    # 管理员密码，所以 --silent 的默认是第 2 项（用户级）。要共享安装就显式给
+    # --dir-option=1，并在那台机器上先准备好免密 sudo。
+    choice="2"
+    echo "🌊 --silent without --dir-option: using ~/.local/linuxwave (unattended: no admin password requested)"
+    echo "🌊   pass --dir-option=1 for the shared install ($SHARED_BASE_DIR)"
 else
     MENU_ATTEMPTS=3
     menu_try=0
@@ -421,17 +431,17 @@ fi
 
 case "$choice" in
     1)
-        BASE_DIR="$HOME/.local/linuxwave"
-        ;;
-    2)
-        BASE_DIR="$SYS_ROOT/opt/linuxwave"
-        ;;
-    3)
-        BASE_DIR="$SYS_ROOT/usr/local/linuxwave"
-        ;;
-    4)
         SHARED_INSTALL=true
         BASE_DIR="$SHARED_BASE_DIR"
+        ;;
+    2)
+        BASE_DIR="$HOME/.local/linuxwave"
+        ;;
+    3)
+        BASE_DIR="$SYS_ROOT/opt/linuxwave"
+        ;;
+    4)
+        BASE_DIR="$SYS_ROOT/usr/local/linuxwave"
         ;;
     5)
         if [[ -n "$CLI_CUSTOM_DIR" ]]; then
@@ -706,17 +716,30 @@ if [[ "$NEED_SUDO" == "true" ]]; then
     fi
 fi
 
-# 共享安装的配置保持 root:root 644：全体用户可读，但只有 root 能改
+# 共享安装的配置：属主 root、属组 linuxwave、目录 2775、文件 664。
+#
+# 以前是 root:root 644（"全体可读，只有 root 能改"）。可自更新要写的就是这个目录里的
+# VERSION.json —— 组员能把整棵树写穿，却写不了这份记录，于是 `wave selfupdate`
+# 每次都退回去要密码。把组写位打开不扩大权限面：组员本来就能改 lib/wave 本体。
 if [[ "$NEED_SUDO" == "true" ]]; then
     if [[ "$SHARED_INSTALL" == "true" ]]; then
-        sudo chown -R root:root "$CONFIG_DIR"
+        sudo chown -R "root:$SHARED_USER" "$CONFIG_DIR"
+        sudo chmod 2775 "$CONFIG_DIR"
     else
         sudo chown -R "$CURRENT_USER": "$CONFIG_DIR"
+        run_cmd chmod 755 "$CONFIG_DIR"
     fi
+else
+    run_cmd chmod 755 "$CONFIG_DIR"
 fi
-run_cmd chmod 755 "$CONFIG_DIR"
-run_cmd chmod 644 "$CONFIG_FILE"
-run_cmd chmod 644 "$VERSION_FILE"
+
+if [[ "$SHARED_INSTALL" == "true" ]]; then
+    run_cmd chmod 664 "$CONFIG_FILE"
+    run_cmd chmod 664 "$VERSION_FILE"
+else
+    run_cmd chmod 644 "$CONFIG_FILE"
+    run_cmd chmod 644 "$VERSION_FILE"
+fi
 
 echo "🌊 Configuration saved to $CONFIG_FILE"
 echo "🌊 Version saved to $VERSION_FILE"

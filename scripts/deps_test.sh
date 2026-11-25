@@ -189,8 +189,12 @@ for PKG in "${PKGS[@]}"; do
     #    能跑起来就算过——加载不到库时任何参数都会以退出码 127 失败，不会被这里放过。
     echo "---------- run $PKG ----------"
     RUN_FLAG=""
+    RUN_ERR=""
     for flag in --version -V -v version; do
-        if "$LINKS_DIR/$PKG" "$flag" > /dev/null 2>&1; then
+        # 只留 stderr：跑不起来的原因（ld.so 的 "cannot open shared object"、
+        # 解释器/包装脚本的报错）全在那一侧，丢了就只剩「不能报版本号」一句，
+        # 看不出是缺库、ABI 对不上，还是别的。
+        if RUN_ERR=$("$LINKS_DIR/$PKG" "$flag" 2>&1 >/dev/null); then
             RUN_FLAG="$flag"
             break
         fi
@@ -199,6 +203,9 @@ for PKG in "${PKGS[@]}"; do
         echo -e "${GREEN}🌊 OK: $PKG $RUN_FLAG${RESET}"
     else
         echo -e "${RED_BOLD}🌊 FAIL: $PKG cannot report its version (tried --version -V -v version)${RESET}"
+        if [[ -n "$RUN_ERR" ]]; then
+            printf '%s\n' "$RUN_ERR" | sed 's/^/    /' | head -5
+        fi
         FAILED=$((FAILED + 1))
     fi
 

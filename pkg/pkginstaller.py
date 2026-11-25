@@ -620,7 +620,19 @@ def handle_install(input_string):
         sys.exit(1)
 
     # 5.1 解析 deps 字段（写在版本文件里，可能多行），缺失视为无依赖
-    dep_refs = get_deps(parse_common_fields(resp.text))
+    version_fields = parse_common_fields(resp.text)
+    dep_refs = get_deps(version_fields)
+
+    # 5.2 安装形态：`install: "tree"` 表示整树软件包 —— 压缩包里是一整棵目录
+    #     （例如 wrapper 与真实二进制同处 bin/，数据目录在 share/），必须整棵
+    #     落地才行；只挑一个可执行文件会留下「wrapper 找不到同伴」的坏安装。
+    #     没写这一项就是老规矩：只取那一个可执行文件。
+    install_mode = (get_field(version_fields, "install") or "binary").strip()
+    if install_mode not in ("binary", "tree"):
+        print(f"{RED_BOLD}🌊 Error: Unknown install mode {install_mode!r} for {ParsePkgName}@{ParsePkgVersion}.{RESET}")
+        print(f"{RED_BOLD}🌊 \"install\" must be \"binary\" or \"tree\"; refusing to install.{RESET}")
+        print(f"{RED_BOLD}🌊 This is a data defect; please report it to the administrator.{RESET}")
+        sys.exit(1)
 
     # 6. 简单 URL 检查，避免低级错误
     if not ParsePkgURL.startswith("https://"):
@@ -667,7 +679,7 @@ def handle_install(input_string):
     try:
         script_path = os.path.join(os.path.dirname(__file__), 'pkginstaller.sh')
         result = subprocess.run(
-            ['bash', script_path, pkg_info_string, deps_string],
+            ['bash', script_path, pkg_info_string, deps_string, install_mode],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
         if result.stdout.strip():
