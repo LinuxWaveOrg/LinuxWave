@@ -503,3 +503,26 @@ BASE_DIR/links/                  wget@1.25.0，以及每个依赖 bin/ 下可执
 卸载时的逆向动作见「六、关键机制」第 3、4 条：先删自己的标记，某个依赖再无任何标记时才连同它的依赖一起级联删除。
 | `signature_test.sh` | 信任链回归（14 项）：`lw_check_integrity` 的空期望/一致/不一致/严格模式，`lw_verify_latest_signature` 的无公钥/.sig 缺失/签名正确/签名不对（含严格模式），以及 `install.sh` 内置公钥与 `Keys/` 是否同步。验签用临时 RSA 钥 + `file://` URL，全程不联网 |
 | `state_test.sh` | 状态文件与同意记录回归（16 项）：`read_toml_string` 的引号/空白/行尾注释/键名前缀，`agreement_id` 从 `selfupdate.py` 取值与文件缺失，`record_agreement` 的写出、读不到 id 时如实告知且不留空文件、试运行不写，`lw_can_write` 的可写/不可写/试运行不试写 |
+
+---
+
+## 九、`5.0` 分支：合并实验，**长期不发布**
+
+`5.0` 不是发布线，是「与 MacWave 收成同一个核心」的实验分支。它可以在上面随便推翻、
+随便重写，但**不对外**。
+
+具体约定：
+
+| 项 | 约定 |
+| --- | --- |
+| `Selfupdate` 仓库的 `linuxwavedata/latest.toml` | **不改**（`branch` 仍指发布线），所以自更新、镜像、官网都不会指向 `5.0` |
+| `.github/workflows/format-test.yml` / `random-test.yml` 的 `on.push.branches` | **不加入 `5.0`**（否则每个实验提交都跑满 CI 矩阵）；需要时用 `workflow_dispatch` 手动跑 |
+| tag / Release | **不打** |
+| `infosource` 的包数据 | 照常服务 4.x；`5.0` 不新增 `min_client_version` 门槛 |
+| 合并完成前 | 允许长期落后于发布线；需要时把发布线 merge 进来对齐 |
+
+判断能不能合、按什么顺序合（先让该相同的文件相同，再谈单仓库）另行记录，结论是
+**分阶段收敛，不做一次性大合并**。若最终放弃，直接删掉这个分支即可，不影响 4.x。
+
+⚠️ 与 MacWave 的 `5.0` 对照着改：任何「两边都该相同」的文件，先看
+`scripts/check_shared_blocks.py` 那套共享块闸门（MacWave 侧已有正本）。
